@@ -1,6 +1,6 @@
 # Development
 
-DeepSeek Harness Desktop is a **Tauri 2 + React 18** app: the UI lives in `src/`, the Rust backend in `src-tauri/`.
+MIR3 Studio AI is a **Tauri 2 + React 18** app: the UI lives in `src/`, the Rust backend in `src-tauri/`.
 
 ## Requirements
 

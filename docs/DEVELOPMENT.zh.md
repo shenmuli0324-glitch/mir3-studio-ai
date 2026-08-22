@@ -1,6 +1,6 @@
 # 开发
 
-DeepSeek Harness Desktop 是 **Tauri 2 + React 18** 应用：前端位于 `src/`，Rust 后端位于 `src-tauri/`。
+MIR3 Studio AI 是 **Tauri 2 + React 18** 应用：前端位于 `src/`，Rust 后端位于 `src-tauri/`。
 
 ## 环境要求
 

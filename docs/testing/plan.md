@@ -1,6 +1,6 @@
-# 测试计划（DeepSeek Harness 桌面版）
+# 测试计划（MIR3 Studio AI）
 
-> 目标产品：DeepSeek Harness 桌面版（Tauri 2 外壳 + React 18 前端 + Rust 后端）
+> 目标产品：MIR3 Studio AI（Tauri 2 外壳 + React 18 前端 + Rust 后端）
 > 测试范围：全部核心功能
 > 生成方式：基于等价类划分与边界值分析（见 `testcase-generator` skill），并融合 ISTQB 测试生命周期与 ISO 25010 质量模型（见 `quality-report.md`）
 > 输出目录：`docs/test-case/`

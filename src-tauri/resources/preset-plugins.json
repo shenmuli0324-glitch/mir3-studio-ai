@@ -14,7 +14,7 @@
     "id": "dsh-tauri",
     "spec": "github:hairyf/dsh-tauri",
     "name": "DSH Tauri",
-    "description": "Message bridge for the DeepSeek Harness desktop shell",
+    "description": "Message bridge for the MIR3 Studio AI shell",
     "repoUrl": "https://github.com/hairyf/dsh-tauri",
     "recommended": true
   },

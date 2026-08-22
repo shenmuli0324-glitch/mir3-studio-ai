@@ -2,7 +2,7 @@
 ;   https://github.com/tauri-apps/tauri/blob/tauri-bundler-v2.9.4/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi
 ;
 ; Keep it in sync with upstream tauri-bundler upgrades, but preserve the
-; Deepseek Harness Desktop customizations (marked with "Deepseek Harness Desktop:").
+; MIR3 Studio AI customizations (marked with "MIR3 Studio AI:").
 ; The single customization so far is in PageReinstall: a version UPGRADE defaults to
 ; "don't uninstall" (direct in-place update) instead of upstream's "uninstall before
 ; installing". This mirrors Clash Nyanpasu's installer behavior.
@@ -295,7 +295,7 @@ Function PageReinstall
     !endif
     ${NSD_OnClick} $R3 PageReinstallUpdateSelection
 
-    ; Deepseek Harness Desktop: on first entry, default to the second radio
+    ; MIR3 Studio AI: on first entry, default to the second radio
     ; "don't uninstall" (direct in-place update) for a cross-version UPGRADE
     ; ($R0 = 1), instead of upstream's default of "uninstall before installing".
     ; Same-version and downgrade keep the upstream default. The decision is still

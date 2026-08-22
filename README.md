@@ -1,23 +1,15 @@
 <p align="center">
-  <a href="https://github.com/hairyf/deepseek-harness-desktop">
-    <img src="public/favicon.svg" width="96" alt="DeepSeek Harness Desktop" />
-  </a>
+  <img src="public/brand/mir3-studio-ai.svg" width="96" alt="MIR3 Studio AI" />
 </p>
 
-<h1 align="center">DeepSeek Harness 桌面版</h1>
+<h1 align="center">MIR3 Studio AI</h1>
 
 <p align="center">
-  在桌面上一键运行 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> ——<br />
-  无需 Node.js、无需 pnpm、无需 Docker，下载即用。
+  面向 996 传奇3引擎开发者的 AI 桌面开发环境 ——<br />
+  基于 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>，保留完整 Harness、插件与更新能力。
 </p>
 
 <p align="center">
-  <a href="https://github.com/hairyf/deepseek-harness-desktop/releases">
-    <img src="https://img.shields.io/github/v/release/hairyf/deepseek-harness-desktop?style=flat-square&label=release&color=4D6BFE" alt="Release" />
-  </a>
-  <img src="https://img.shields.io/github/downloads/hairyf/deepseek-harness-desktop/total?style=flat-square&label=downloads&color=4D6BFE" alt="Downloads" />
-  <img src="https://img.shields.io/github/stars/hairyf/deepseek-harness-desktop?style=flat-square&label=stars&color=4D6BFE" alt="Stars" />
-  <img src="https://img.shields.io/github/license/hairyf/deepseek-harness-desktop?style=flat-square&label=license&color=4D6BFE" alt="MIT License" />
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-black?style=flat-square" alt="Windows | macOS | Linux" />
 </p>
 
@@ -26,10 +18,12 @@
 </p>
 
 <p align="center">
-  <img src="./docs/images/hero-zh.png" width="100%" alt="DSH Desktop 中文宣传横幅" />
+  <img src="./docs/images/hero-zh.png" width="100%" alt="MIR3 Studio AI 中文界面预览" />
 </p>
 
 > [更多浏览图片](/docs/PREVIEW.md)
+
+> 当前阶段仅完成品牌化改造，不包含新的 MIR3 专属功能；原有桌面端能力保持不变。
 
 ## 功能
 
@@ -58,7 +52,7 @@
 
 ## 快速开始
 
-从 [Releases](https://github.com/hairyf/deepseek-harness-desktop/releases) 下载对应平台安装包，安装后启动即可。
+从本项目发布页面下载对应平台的 MIR3 Studio AI 安装包，安装后启动即可。
 
 首次运行会下载 Node 运行时与 Harness 内核，随后直接进入 `http://127.0.0.1:3080` 的 Harness 界面；此后完全本地运行，无需联网。
 
@@ -115,8 +109,9 @@ Harness 发行版由 [deepseek-harness-pkg](https://github.com/hairyf/deepseek-h
 
 - [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) — 上游 `dsh` agent 平台
 - [deepseek-harness-pkg](https://github.com/hairyf/deepseek-harness-pkg) — 预打包 Harness 发行版（本应用下载源）
+- [deepseek-harness-desktop](https://github.com/hairyf/deepseek-harness-desktop) — MIR3 Studio AI 的上游桌面端基础
 - [n8n-desktop](https://github.com/tangtao646/n8n-desktop) — 参考实现
 
 ## License
 
-[MIT](./LICENSE)，附加[非商用条款](./LICENSE.details) © deepseek-harness-desktop contributors
+[MIT](./LICENSE)，附加[非商用条款](./LICENSE.details)。保留 deepseek-harness-desktop 上游版权声明。

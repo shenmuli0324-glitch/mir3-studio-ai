@@ -20,4 +20,4 @@
 [测试类型] 功能
 [前置条件] release 构建；桌面端处于安装过程中（内置 Node/dsh/pnpm 尚未全部安装成功）；`cli_link_enabled` 开关处于开启状态（true）
 [测试步骤] 1. 在网络异常导致安装中断（安装进度未到 100%）时调用 `get_cli_link_status` 查询链接状态。2. 在系统终端执行 `dsh`。
-[预期结果] 1. `get_cli_link_status` 正常返回且不抛错，`enabled` 为 true、`path_registered` 为 false（安装未完成、PATH 未注册），`shim_exists`、`user_dsh_preserved` 返回当前真实值。2. 因运行时尚未安装完成，终端输出「[dsh] Node.js runtime not found. Please run DeepSeek Harness Desktop to install it first.」、退出码为 1，而非静默成功或崩溃。
+[预期结果] 1. `get_cli_link_status` 正常返回且不抛错，`enabled` 为 true、`path_registered` 为 false（安装未完成、PATH 未注册），`shim_exists`、`user_dsh_preserved` 返回当前真实值。2. 因运行时尚未安装完成，终端输出「[dsh] Node.js runtime not found. Please run MIR3 Studio AI to install it first.」、退出码为 1，而非静默成功或崩溃。

@@ -1,4 +1,4 @@
-# 测试任务与质量检查清单：deepseek-harness-desktop
+# 测试任务与质量检查清单：MIR3 Studio AI
 
 > 面向 GitHub 项目管理（Issue / 任务拆分）与质量门禁检查。与 `plan.md`（测试计划）、
 > `quality-report.md`（质量报告与度量）配套使用。标签与优先级遵循本文第 8 节约定。
