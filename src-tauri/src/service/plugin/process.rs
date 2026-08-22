@@ -21,6 +21,12 @@ use std::process::{Command, Stdio};
 /// 前端监听的控制台事件名（进程输出行）
 pub(crate) const PREINSTALL_LOG_EVENT: &str = "preinstall-log";
 
+/// dsh 当前会在任意 git 插件命令失败后无条件输出这条 prepare/allowBuilds 提示，
+/// 即使真实错误是 workspace root、网络或其它 pnpm 校验。Desktop 已按完整输出
+/// 精确处理 allowBuilds，因此不把这条泛化且可能误导的提示推送到 UI。
+const DSH_GENERIC_GIT_BUILD_HINT: &str =
+    "git-hosted plugins build on install via their prepare script";
+
 /// 进程输出行事件载荷
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -135,12 +141,14 @@ fn spawn_line_emitter<R: Read + Send + 'static>(
         let buf = BufReader::new(reader);
         for line in buf.lines().map_while(Result::ok) {
             let trimmed = line.trim_end().to_string();
-            let _ = window.emit(
-                PREINSTALL_LOG_EVENT,
-                PreinstallLogPayload {
-                    line: trimmed.clone(),
-                },
-            );
+            if !trimmed.contains(DSH_GENERIC_GIT_BUILD_HINT) {
+                let _ = window.emit(
+                    PREINSTALL_LOG_EVENT,
+                    PreinstallLogPayload {
+                        line: trimmed.clone(),
+                    },
+                );
+            }
             if let Ok(mut acc) = captured.lock() {
                 acc.push_str(&trimmed);
                 acc.push('\n');

@@ -19,7 +19,7 @@ use crate::service::profile::active_profile;
 use crate::service::workflow;
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use serde_yaml::{Mapping, Value};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
@@ -37,9 +37,10 @@ const MAX_ALLOW_LIST_RETRIES: usize = 8;
 /// 可安全用于插件安装的用户 pnpm 最低主版本。
 ///
 /// pnpm 10+ 才从 `pnpm-workspace.yaml` 读取 `autoInstallPeers`（9 及更早只读
-/// `.npmrc`），且 10+ 移除了 workspace-root 安装门槛（`ERR_PNPM_ADDING_TO_ROOT`
-/// 是 8/9 行为）。低于此版本时插件安装必须改用捆绑版 pnpm，否则会出现
-/// 自动合成 peer 后 `No matching version found for @deepseek-ai/...` 的假失败。
+/// `.npmrc`）。低于此版本时插件安装必须改用捆绑版 pnpm，否则会出现自动合成
+/// peer 后 `No matching version found for @deepseek-ai/...` 的假失败。
+/// pnpm 9/10/11 都保留 workspace-root 安装保护；Profile 本身就是刻意的
+/// workspace 根，因此安装命令必须显式传 `--workspace-root`，不能依赖版本绕过。
 const MIN_TRUSTED_PNPM_MAJOR: u32 = 10;
 
 /// 校验并安装选中的预装插件：`dsh plugin --profile <当前档案> add <ids...>`
@@ -87,8 +88,9 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
     // 选定/补齐安装用的 pnpm：返回是否应强制使用捆绑版（版本感知，见 ensure_pnpm）
     let prefer_bundled_pnpm = ensure_pnpm(app_handle, &window).await?;
 
-    // 安装前停止运行中的服务，避免资源冲突
-    if workflow::has_owned_process() {
+    // 安装前停止运行中的服务，避免资源冲突。记录原状态，失败路径也必须恢复。
+    let harness_was_running = workflow::has_owned_process();
+    if harness_was_running {
         // 停服务会让用户感到"重启"，先在日志面板讲清缘由（issue #48）
         let _ = window.emit(
             PREINSTALL_LOG_EVENT,
@@ -104,15 +106,9 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
 
     let envs = build_plugin_envs(app_handle, prefer_bundled_pnpm);
 
-    // 拼装命令行参数
-    let mut args = vec![
-        dsh_bin.as_os_str().to_os_string(),
-        OsString::from("plugin"),
-        OsString::from("--profile"),
-        OsString::from(active_profile(app_handle)),
-        OsString::from("add"),
-    ];
-    args.extend(specs.iter().map(|s| OsString::from(s.as_str())));
+    // Profile 的 pnpm-workspace.yaml 把 `.` 声明为 workspace 根；pnpm 9/10/11
+    // 都要求添加依赖时显式确认根目标，否则报 ERR_PNPM_ADDING_TO_ROOT。
+    let args = build_install_args(&dsh_bin, &active_profile(app_handle), &specs);
 
     let cwd = config::get_dsh_install_path(app_handle);
     // 日志打印实际传给 dsh 的 spec（此前打印 id 会误导排查：安装用的是 spec）
@@ -165,7 +161,7 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
                 log::warn!("failed to record plugin error for {id}: {e}");
             }
         }
-        if let Some(hint) = hint {
+        let failure = if let Some(hint) = hint {
             log::warn!("git transport failure detected during plugin install: {hint}");
             let _ = window.emit(
                 PREINSTALL_LOG_EVENT,
@@ -173,13 +169,27 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
                     line: format!("[pnpm] {hint}"),
                 },
             );
-            return Err(format!(
+            format!(
                 "PREINSTALL_FAILED: dsh plugin exited with code {exit_code} ({hint})"
-            ));
+            )
+        } else {
+            format!("PREINSTALL_FAILED: dsh plugin exited with code {exit_code}")
+        };
+
+        // 成功路径由前端拉起服务；失败路径在返回错误前恢复安装前运行的 Harness。
+        if harness_was_running {
+            let _ = window.emit(
+                PREINSTALL_LOG_EVENT,
+                PreinstallLogPayload {
+                    line: "[harness] 插件安装失败，正在恢复服务…".to_string(),
+                },
+            );
+            if let Err(restart_error) = workflow::start(app_handle.clone()).await {
+                log::error!("failed to restore Harness after plugin install failure: {restart_error}");
+                return Err(format!("{failure}; HARNESS_RESTART_FAILED: {restart_error}"));
+            }
         }
-        return Err(format!(
-            "PREINSTALL_FAILED: dsh plugin exited with code {exit_code}"
-        ));
+        return Err(failure);
     }
 
     // 安装成功：清除这些插件的历史错误记录
@@ -208,6 +218,20 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
     Ok(())
 }
 
+/// Profile 是刻意设计的 pnpm workspace 根，因此 `add` 必须显式确认根目标。
+fn build_install_args(dsh_bin: &Path, profile: &str, specs: &[String]) -> Vec<OsString> {
+    let mut args = vec![
+        dsh_bin.as_os_str().to_os_string(),
+        OsString::from("plugin"),
+        OsString::from("--profile"),
+        OsString::from(profile),
+        OsString::from("add"),
+        OsString::from("--workspace-root"),
+    ];
+    args.extend(specs.iter().map(OsString::from));
+    args
+}
+
 /// 构建 `dsh plugin` 子进程的环境变量：隔离 $DSH_HOME、关闭遥测与颜色，
 /// PATH 前置 shim 目录与 node 目录；用户 pnpm 过旧时强制捆绑版（见 ensure_pnpm）。
 fn build_plugin_envs(app_handle: &AppHandle, prefer_bundled_pnpm: bool) -> HashMap<String, String> {
@@ -224,18 +248,22 @@ fn build_plugin_envs(app_handle: &AppHandle, prefer_bundled_pnpm: bool) -> HashM
         ("NO_COLOR".to_string(), "1".to_string()),
     ]);
     // 用户 pnpm 过旧/不可探测时强制 pnpm shim 优先捆绑版，避免 8/9 的
-    // autoInstallPeers 语义与 workspace-root gate 破坏插件安装（见 ensure_pnpm）
+    // autoInstallPeers 语义破坏插件安装（workspace-root 由参数显式确认）。
     if prefer_bundled_pnpm {
         envs.insert("DSH_PREFER_BUNDLED_PNPM".to_string(), "1".to_string());
     }
 
     let mut paths = vec![bin_dir];
-    if let Some(node_dir) = node.parent() {
-        paths.push(node_dir.to_path_buf());
-    }
+    // 保持 pnpm 候选顺序与版本探测一致，避免探测命中 Corepack pnpm 10，
+    // 实际 shim 却先命中 Node 安装目录旁的 pnpm 9。
     paths.extend(std::env::split_paths(
         &std::env::var_os("PATH").unwrap_or_default(),
     ));
+    if let Some(node_dir) = node.parent() {
+        if !paths.iter().any(|path| path == node_dir) {
+            paths.push(node_dir.to_path_buf());
+        }
+    }
 
     if let Ok(joined) = std::env::join_paths(paths) {
         envs.insert("PATH".to_string(), joined.to_string_lossy().into_owned());
@@ -427,9 +455,9 @@ fn strip_ansi(s: &str) -> String {
 /// - store 未知（全新档案/未装过依赖）或无可匹配版本 → 用户 pnpm ≥ 10 优先，
 ///   否则捆绑版已存在则用，再否则下载捆绑版并强制使用。
 ///
-/// 用户 pnpm 过旧（8/9：不读 pnpm-workspace.yaml 的 autoInstallPeers、有
-/// workspace-root gate；corepack shim 在 Node 24 上还会 ERR_INVALID_THIS 崩溃）
-/// 或版本不可探测 → 走捆绑版。
+/// 用户 pnpm 过旧（8/9：不按当前 Profile 需要的方式读取 autoInstallPeers；
+/// corepack shim 在 Node 24 上还可能 ERR_INVALID_THIS 崩溃）或版本不可探测
+/// → 走捆绑版。workspace-root 保护由安装参数显式确认。
 async fn ensure_pnpm(app_handle: &AppHandle, window: &WebviewWindow) -> Result<bool, String> {
     // 档案的 node_modules 由哪个 pnpm 主版本创建（.modules.yaml 的 storeDir 段）
     let store_major = profile_store_major(app_handle);
@@ -507,6 +535,9 @@ fn user_pnpm_major_version(app_handle: &AppHandle) -> Option<u32> {
     let pnpm = cli::find_user_pnpm(app_handle)?;
     let output = std::process::Command::new(&pnpm)
         .arg("--version")
+        // Corepack 会按 cwd 查找 packageManager；必须在真正执行 pnpm 的 Profile
+        // 目录探测，避免源码目录和 Profile 目录得到不同版本。
+        .current_dir(profile_dir(app_handle))
         .output()
         .ok()?;
     if !output.status.success() {
@@ -844,7 +875,38 @@ fn git_transport_hint(output: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_allow_build_keys, collapse_allow_builds_duplicates, extract_allow_line_key, git_transport_hint, normalize_git_spec, parse_allowlist_keys, parse_store_major_from_modules_yaml};
+    use super::build_install_args;
+    use super::{
+        apply_allow_build_keys, collapse_allow_builds_duplicates, extract_allow_line_key,
+        git_transport_hint, normalize_git_spec, parse_allowlist_keys,
+        parse_store_major_from_modules_yaml,
+    };
+    use std::path::Path;
+
+    #[test]
+    fn install_args_explicitly_target_profile_workspace_root() {
+        let args = build_install_args(
+            Path::new("/opt/dsh/bin.js"),
+            "web",
+            &["example-plugin".to_string()],
+        );
+        let rendered: Vec<String> = args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            rendered,
+            vec![
+                "/opt/dsh/bin.js",
+                "plugin",
+                "--profile",
+                "web",
+                "add",
+                "--workspace-root",
+                "example-plugin",
+            ]
+        );
+    }
 
     #[test]
     fn store_major_parsed_from_modules_yaml() {
