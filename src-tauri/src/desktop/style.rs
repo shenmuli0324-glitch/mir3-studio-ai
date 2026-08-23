@@ -16,8 +16,8 @@ pub(crate) const IFRAME_STYLES_JS: &str = r#"(function () {
   var STYLE_ID = 'dsh-desktop-injected-styles';
 
   var css = `
-    .nArs4W_toggleCluster {top:6px !important; right: 6px !important; gap: 2px !important;}
-    .nArs4W_toggleButton {border-radius: 8px !important;}
+    [data-dsh-toggle-cluster] {top:6px !important; right: 6px !important; gap: 2px !important;}
+    [data-dsh-toggle-cluster] button {border-radius: 8px !important;}
 
     [data-mir3-sidebar-brand],
     [data-mir3-sidebar-mark],
@@ -53,7 +53,8 @@ pub(crate) const IFRAME_STYLES_JS: &str = r#"(function () {
     }
 
     html[data-mir3-surface='settings'] [data-mir3-settings-mask],
-    html[data-mir3-surface='settings'] [data-mir3-settings-close] {
+    html[data-mir3-surface='settings'] [data-mir3-settings-close],
+    html[data-mir3-surface='settings'] [data-dsh-toggle-cluster] {
       display: none !important;
     }
 
@@ -111,5 +112,13 @@ mod tests {
         assert!(IFRAME_STYLES_JS.contains("[data-mir3-settings-panel]"));
         assert!(IFRAME_STYLES_JS.contains("width: 100% !important"));
         assert!(IFRAME_STYLES_JS.contains("height: 100% !important"));
+    }
+
+    #[test]
+    fn settings_surface_hides_only_the_workbench_toggle_cluster() {
+        assert!(IFRAME_STYLES_JS
+            .contains("html[data-mir3-surface='settings'] [data-dsh-toggle-cluster]"));
+        assert!(IFRAME_STYLES_JS.contains("[data-dsh-toggle-cluster] {top:6px"));
+        assert!(!IFRAME_STYLES_JS.contains(".nArs4W_toggleCluster"));
     }
 }

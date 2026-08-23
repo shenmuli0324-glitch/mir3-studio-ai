@@ -18,6 +18,8 @@ pub(crate) const IFRAME_BRAND_JS: &str = r#"(function () {
   var HERO_HEADLINES = ['探索未至之境', 'Into the Unknown'];
   var HERO_BADGES = ['预览版', 'Preview'];
   var SETTINGS_LABELS = ['设置', 'Settings'];
+  var WELCOME_TITLES = ['内测声明', 'Internal Testing Notice'];
+  var WELCOME_CONTINUE = ['继续', 'Continue'];
   var ONBOARDING_TITLES = ['添加一个 API Key 开始使用', 'Add an API key to get started'];
   var ONBOARDING_LATER = ['稍后配置', 'Configure later'];
   var LEGACY_CORE_NAME = ['DeepSeek', 'Harness'].join(' ');
@@ -168,6 +170,33 @@ pub(crate) const IFRAME_BRAND_JS: &str = r#"(function () {
     return panel;
   }
 
+  function hideOnboardingDialog(dialog) {
+    var layer = dialog;
+    var parent = dialog.parentElement;
+    while (parent && parent !== document.body) {
+      if (window.getComputedStyle(parent).position === 'fixed') layer = parent;
+      parent = parent.parentElement;
+    }
+    layer.setAttribute('data-mir3-onboarding-hidden', '');
+  }
+
+  // 首装欢迎声明使用 Core 自己的 acknowledge 回调落盘，只是不再向 MIR3 用户
+  // 展示旧产品的内测弹窗。精确匹配标题和按钮，避免影响其他确认对话框。
+  function acknowledgeWelcomeNotice() {
+    var dialogs = document.querySelectorAll('[role="dialog"]');
+    for (var i = 0; i < dialogs.length; i++) {
+      var dialog = dialogs[i];
+      if (dialog.hasAttribute('data-mir3-welcome-acknowledging')) continue;
+      var heading = dialog.querySelector('h2');
+      if (!heading || !hasExactText(heading, WELCOME_TITLES)) continue;
+      var continueButton = findButtonByText(dialog, WELCOME_CONTINUE);
+      if (!continueButton) continue;
+      dialog.setAttribute('data-mir3-welcome-acknowledging', '');
+      hideOnboardingDialog(dialog);
+      continueButton.click();
+    }
+  }
+
   // 精确匹配首次 API Key 步骤并走插件自己的“稍后配置”回调；不隐藏或误点
   // 其他对话框，也不伪造模型配置状态。
   function dismissModelOnboarding() {
@@ -178,13 +207,7 @@ pub(crate) const IFRAME_BRAND_JS: &str = r#"(function () {
       if (!heading || !hasExactText(heading, ONBOARDING_TITLES)) continue;
       var later = findButtonByText(dialog, ONBOARDING_LATER);
       if (!later) continue;
-      var layer = dialog;
-      var parent = dialog.parentElement;
-      while (parent && parent !== document.body) {
-        if (window.getComputedStyle(parent).position === 'fixed') layer = parent;
-        parent = parent.parentElement;
-      }
-      layer.setAttribute('data-mir3-onboarding-hidden', '');
+      hideOnboardingDialog(dialog);
       later.click();
     }
   }
@@ -220,6 +243,7 @@ pub(crate) const IFRAME_BRAND_JS: &str = r#"(function () {
     annotateSidebarBrand();
     annotateHeroBrand();
     annotateSettings();
+    acknowledgeWelcomeNotice();
     dismissModelOnboarding();
     syncSurface();
   }
@@ -286,6 +310,15 @@ mod tests {
         assert!(IFRAME_BRAND_JS.contains("ONBOARDING_LATER"));
         assert!(IFRAME_BRAND_JS.contains("hasExactText(heading, ONBOARDING_TITLES)"));
         assert!(IFRAME_BRAND_JS.contains("findButtonByText(dialog, ONBOARDING_LATER)"));
+    }
+
+    #[test]
+    fn bridge_acknowledges_only_the_exact_welcome_notice() {
+        assert!(IFRAME_BRAND_JS.contains("WELCOME_TITLES = ['内测声明'"));
+        assert!(IFRAME_BRAND_JS.contains("WELCOME_CONTINUE = ['继续'"));
+        assert!(IFRAME_BRAND_JS.contains("hasExactText(heading, WELCOME_TITLES)"));
+        assert!(IFRAME_BRAND_JS.contains("findButtonByText(dialog, WELCOME_CONTINUE)"));
+        assert!(IFRAME_BRAND_JS.contains("continueButton.click()"));
     }
 
     #[test]
