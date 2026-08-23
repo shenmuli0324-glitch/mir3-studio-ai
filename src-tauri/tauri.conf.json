@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MIR3 Studio AI",
+  "version": "0.1.0",
+  "identifier": "ai.mir3.studio",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; frame-src http://127.0.0.1:*",
+      "devCsp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1421; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; frame-src http://127.0.0.1:*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/mir3-studio-ai/32x32.png",
+      "icons/mir3-studio-ai/128x128.png",
+      "icons/mir3-studio-ai/128x128@2x.png",
+      "icons/mir3-studio-ai/icon.icns",
+      "icons/mir3-studio-ai/icon.ico",
+      "icons/mir3-studio-ai/icon.png"
+    ],
+    "resources": ["resources/**/*"],
+    "licenseFile": "licenses/INSTALLER-LICENSE.txt",
+    "category": "DeveloperTool",
+    "copyright": "Copyright © 2026 MIR3 Studio AI contributors",
+    "windows": {
+      "nsis": {
+        "template": "templates/installer.nsi",
+        "languages": ["English", "SimpChinese"],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/mir3-studio-ai/icon.ico",
+        "uninstallerIcon": "icons/mir3-studio-ai/icon.ico"
+      },
+      "wix": {
+        "language": ["en-US", "zh-CN"]
+      }
+    },
+    "shortDescription": "AI development workspace for MIR3 engine projects",
+    "longDescription": "MIR3 Studio AI is a native desktop workspace for MIR3 engine development, project analysis, automation, and AI-assisted workflows."
+  }
+}
