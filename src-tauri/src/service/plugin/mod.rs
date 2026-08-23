@@ -1,7 +1,7 @@
 //! 预装插件：首次启动引导安装官方推荐插件（当前为 DSH Market）。
 //!
 //! 安装通过 `dsh plugin --profile <当前档案> add <pkg>` 完成：该子命令是 pnpm
-//! 转发器，会在 `$DSH_HOME/profiles/<当前档案>` 初始化 profile 并执行 `pnpm add`，
+//! 转发器，会在 `$MIR3_STUDIO_HOME/profiles/<当前档案>` 初始化 profile 并执行 `pnpm add`，
 //! 随后把声明了 `dsh.bundle` 的依赖写入 profile 的 bundles 层，使插件在下次
 //! 启动时加载。进程输出逐行通过 `preinstall-log` 事件实时推送给前端日志面板。
 //! 调用 dsh 前会先按需补齐捆绑 pnpm（老版本升级后可能缺失，安装流程内自愈）。

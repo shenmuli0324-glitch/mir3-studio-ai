@@ -30,9 +30,8 @@ pub(crate) const RECOVERY_REQUIRED_EVENT: &str = "plugin-recovery-required";
 /// 核心 bundle / 官方包：无论如何不可被「修复卸载」删除。
 fn is_core_package(name: &str) -> bool {
     name == "dshmarket"
-        || name == "@deepseek-ai/dsh-base"
-        || name == "@deepseek-ai/dsh-web-app"
-        || name.starts_with("@deepseek-ai/")
+        || crate::config::core_compat::WEB_PROFILE_BUNDLES.contains(&name)
+        || crate::config::core_compat::is_official_package(name)
 }
 
 /// 是否为合法的 npm 包名（可带 scope）。用于过滤日志里提取到的候选引用。
@@ -50,7 +49,7 @@ fn is_package_name(s: &str) -> bool {
         .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == '/')
 }
 
-/// 是否是可行动的第三方插件引用（排除核心包与 @deepseek-ai 官方包）。
+/// 是否是可行动的第三方插件引用（排除核心包与 @deepseek核心官方包）。
 pub(crate) fn is_actionable_plugin_ref(s: &str) -> bool {
     is_package_name(s) && !is_core_package(s.trim())
 }
@@ -314,7 +313,9 @@ fn plugin_matches_slot(profile: &Path, plugin: &str, slot: &str) -> bool {
 
 /// 提供某槽位的官方 UI 客户端包（用于槽位冲突归属）。
 fn packages_providing_slot(profile: &Path, slot: &str) -> Vec<String> {
-    let scope = profile.join("node_modules").join("@deepseek-ai");
+    let scope = profile
+        .join("node_modules")
+        .join(crate::config::core_compat::CORE_SCOPE);
     let Ok(entries) = fs::read_dir(&scope) else {
         return Vec::new();
     };
@@ -324,7 +325,7 @@ fn packages_providing_slot(profile: &Path, slot: &str) -> Vec<String> {
         if !name.starts_with("dsh-client-ui-") {
             continue;
         }
-        let package = format!("@deepseek-ai/{name}");
+        let package = format!("{}/{name}", crate::config::core_compat::CORE_SCOPE);
         let dir = entry.path();
         for file in ["client.js", "lib/client.js", "dist/client.js"] {
             if let Ok(content) = fs::read_to_string(dir.join(file)) {
@@ -604,7 +605,9 @@ mod tests {
         assert!(!is_package_name("has space"));
         assert!(!is_package_name("with:colon"));
         assert!(!is_package_name("@bare"));
-        assert!(!is_actionable_plugin_ref("@deepseek-ai/dsh-base"));
+        assert!(!is_actionable_plugin_ref(
+            crate::config::core_compat::WEB_PROFILE_BUNDLES[0]
+        ));
         assert!(!is_actionable_plugin_ref("dshmarket"));
         assert!(is_actionable_plugin_ref("dsh-better-sidebar"));
     }
@@ -642,11 +645,12 @@ mod tests {
 
     #[test]
     fn remove_plugin_from_manifest_edits_deps_and_bundles() {
+        let base_bundle = crate::config::core_compat::WEB_PROFILE_BUNDLES[0];
         let mut manifest = serde_json::json!({
             "name": "dsh-profile-web",
             "private": true,
             "dependencies": { "dshmarker": "1.0.0", "dsh-better-sidebar": "1.0.0" },
-            "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "dsh-better-sidebar"] } }
+            "dsh": { "profile": { "bundles": [base_bundle, "dsh-better-sidebar"] } }
         });
         let modified = remove_plugin_from_manifest(&mut manifest, "dsh-better-sidebar");
         assert!(modified);

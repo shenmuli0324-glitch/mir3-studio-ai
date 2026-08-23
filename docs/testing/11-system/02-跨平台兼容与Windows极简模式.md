@@ -2,7 +2,7 @@
 [测试类型] 兼容性
 [前置条件] Windows 10/11 x64；已安装 WebView2 运行时；执行全新安装
 [测试步骤] 1. 在 Windows x64 双击安装包完成安装。2. 启动桌面端并等待首次依赖安装与服务拉起。3. 观察主界面渲染与 dsh 服务状态
-[预期结果] 1. 安装过程无报错，安装目录与启动项创建成功。2. 首次启动自动装配内置 Node 运行时与 Harness 内核，状态机由 Installing 到达 Running。3. WebView2 正常渲染主界面（无白屏、无崩溃），http://127.0.0.1:3080 健康检查返回 HTTP 200
+[预期结果] 1. 安装过程无报错，安装目录与启动项创建成功。2. 首次启动自动装配内置 Node 运行时与 MIR3 AI Core，状态机由 Installing 到达 Running。3. WebView2 正常渲染主界面（无白屏、无崩溃），http://127.0.0.1:3080 健康检查返回 HTTP 200
 
 ## [P2] 验证 macOS 首次启动触发 Gatekeeper 放行提示
 [测试类型] 兼容性
@@ -18,12 +18,12 @@
 
 ## [P1] 验证 Windows 极简模式向导生成 cordis.patch.yml 挂载行与 minimal-win 极简 preset
 [测试类型] 功能
-[前置条件] Windows；预装插件流程已安装 dsh-win-terminal-inspector 插件（dsh plugin add github:clearkurt/dsh-win-terminal-inspector）；本机已安装 Git Bash（C:\Program Files\Git\bin\bash.exe）；$DSH_HOME 为 ~/.dsh
-[测试步骤] 1. 在预装插件列表确认勾选「修复」项 dsh-win-terminal-inspector 并完成安装。2. 查看当前档案 profile 目录下的 cordis.patch.yml。3. 查看 $DSH_HOME/.agent-presets/minimal-win/ 目录内容
-[预期结果] 1. 插件安装成功后 win_inspector::apply 被调用且返回 Ok。2. cordis.patch.yml 顶层数组新增一个 `- insert:` 挂载块，含 id=win-terminal-inspector 与 name=dsh-win-terminal-inspector。3. 生成 ~/.dsh/.agent-presets/minimal-win/，内含 agent.cordis.yml（terminal-bash 的 shellPath 指向 C:\Program Files\Git\bin\bash.exe、persistent-shell 组含 sandbox-policy 且 mode=danger-full-access）与 preset.yml（name 为 极简模式 (Windows)）
+[前置条件] Windows；预装插件流程已安装 dsh-win-terminal-inspector 插件（dsh plugin add github:clearkurt/dsh-win-terminal-inspector）；本机已安装 Git Bash（C:\Program Files\Git\bin\bash.exe）；$MIR3_STUDIO_HOME 为 ~/.mir3-studio-ai
+[测试步骤] 1. 在预装插件列表确认勾选「修复」项 dsh-win-terminal-inspector 并完成安装。2. 查看当前档案 profile 目录下的 cordis.patch.yml。3. 查看 $MIR3_STUDIO_HOME/.agent-presets/minimal-win/ 目录内容
+[预期结果] 1. 插件安装成功后 win_inspector::apply 被调用且返回 Ok。2. cordis.patch.yml 顶层数组新增一个 `- insert:` 挂载块，含 id=win-terminal-inspector 与 name=dsh-win-terminal-inspector。3. 生成 ~/.mir3-studio-ai/.agent-presets/minimal-win/，内含 agent.cordis.yml（terminal-bash 的 shellPath 指向 C:\Program Files\Git\bin\bash.exe、persistent-shell 组含 sandbox-policy 且 mode=danger-full-access）与 preset.yml（name 为 极简模式 (Windows)）
 
 ## [P3][反向] 验证极简模式仅在 Windows 触发且重复执行保持幂等
 [测试类型] 可移植性
-[前置条件] 分别具备 Windows 与 macOS/Linux 环境；Windows 已安装插件与 Git Bash；$DSH_HOME 为 ~/.dsh
+[前置条件] 分别具备 Windows 与 macOS/Linux 环境；Windows 已安装插件与 Git Bash；$MIR3_STUDIO_HOME 为 ~/.mir3-studio-ai
 [测试步骤] 1. 在 macOS/Linux 环境调用 win_inspector::apply（非 Windows 分支）。2. 在 Windows 环境连续两次调用 win_inspector::apply。3. 检查 cordis.patch.yml 与 minimal-win preset 目录
-[预期结果] 1. 非 Windows 平台 apply 返回 Ok 且无任何副作用，不创建 cordis.patch.yml 挂载行、不生成 ~/.dsh/.agent-presets/minimal-win/。2. 第二次调用不重复追加，cordis.patch.yml 中 dsh-win-terminal-inspector 挂载块仍仅出现一次、内容不变。3. ~/.dsh/.agent-presets/minimal-win/agent.cordis.yml 与 preset.yml 保持首次生成内容，未被覆盖或重写
+[预期结果] 1. 非 Windows 平台 apply 返回 Ok 且无任何副作用，不创建 cordis.patch.yml 挂载行、不生成 ~/.mir3-studio-ai/.agent-presets/minimal-win/。2. 第二次调用不重复追加，cordis.patch.yml 中 dsh-win-terminal-inspector 挂载块仍仅出现一次、内容不变。3. ~/.mir3-studio-ai/.agent-presets/minimal-win/agent.cordis.yml 与 preset.yml 保持首次生成内容，未被覆盖或重写

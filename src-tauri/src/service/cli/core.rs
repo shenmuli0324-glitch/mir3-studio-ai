@@ -5,8 +5,11 @@ use serde::Serialize;
 use std::fs;
 use tauri::AppHandle;
 
-use super::path::{get_bin_dir, get_shim_path, path_registered, register_path, unregister_path};
-use super::shim::{user_dsh_preserved, write_shims};
+use super::path::{
+    get_bin_dir, get_internal_bin_dir, get_shim_path, path_registered, register_path,
+    unregister_path,
+};
+use super::shim::{user_core_preserved, write_private_pnpm_shims, write_user_shims};
 
 /// 命令行集成状态（设置页展示）
 #[derive(Debug, Clone, Serialize)]
@@ -17,8 +20,8 @@ pub struct CliLinkStatus {
     pub shim_exists: bool,
     /// bin 目录是否已在用户 PATH 中注册
     pub path_registered: bool,
-    /// 检测到用户自行安装的同名 `dsh`（未被覆盖，已保留）
-    pub user_dsh_preserved: bool,
+    /// 检测到用户自行放置的同名 `mir3`（未被覆盖，已保留）
+    pub user_core_preserved: bool,
     /// bin 目录绝对路径
     pub bin_dir: String,
     /// 主 shim 文件绝对路径
@@ -34,8 +37,7 @@ pub fn get_status(app_handle: &AppHandle) -> CliLinkStatus {
         enabled: setting.cli_link_enabled,
         shim_exists: shim_path.is_file(),
         path_registered: path_registered(app_handle),
-        // 安装集成时若在 shim 路径检测到用户自装的同名 dsh，则已被保留、未被覆盖
-        user_dsh_preserved: user_dsh_preserved(&bin_dir),
+        user_core_preserved: user_core_preserved(&bin_dir),
         bin_dir: bin_dir.to_string_lossy().into_owned(),
         shim_path: shim_path.to_string_lossy().into_owned(),
     }
@@ -43,39 +45,40 @@ pub fn get_status(app_handle: &AppHandle) -> CliLinkStatus {
 
 /// 启用并确保命令行集成完整（幂等，可随时重跑自愈）
 ///
-/// 只做 shim 生成与 PATH 注册，不要求 node/dsh/pnpm 已安装——运行时缺失时
+/// 只做公开 `mir3` shim 生成与 PATH 注册，不要求核心已安装——运行时缺失时
 /// shim 会给出友好报错，因此安装前后调用都是安全的。
 pub fn ensure(app_handle: &AppHandle) -> Result<CliLinkStatus, String> {
-    // 保证 DSH_HOME 目录存在（shim 会写入该路径）
+    // 保证 MIR3 数据目录存在（shim 会映射给内部核心）。
     let dsh_home = config::get_dsh_data_path(app_handle);
     fs::create_dir_all(&dsh_home).map_err(|e| format!("create dsh home failed: {e}"))?;
 
     let bin_dir = get_bin_dir(app_handle);
-    write_shims(app_handle, &bin_dir)?;
+    write_private_pnpm_shims(app_handle, &get_internal_bin_dir(app_handle))?;
     // 开发（debug）构建不注册用户 PATH：bin 目录与 PATH 是共享的用户级状态，
     // 由生产版维护；开发版只写 shim（debug 下仅 pnpm shim，见 write_shims），
     // 既不增删 PATH 条目、也不覆盖生产的 dsh shim，避免干扰生产命令行集成。
     if cfg!(debug_assertions) {
         log::info!(
-            "dsh/pnpm CLI shims ensured at {} (debug build: PATH registration skipped)",
+            "MIR3 CLI shim ensured at {} (debug build: PATH registration skipped)",
             bin_dir.display()
         );
         return Ok(get_status(app_handle));
     }
+    write_user_shims(app_handle, &bin_dir)?;
     register_path(app_handle)?;
 
-    log::info!("dsh/pnpm CLI links ensured at {}", bin_dir.display());
+    log::info!("MIR3 CLI link ensured at {}", bin_dir.display());
     Ok(get_status(app_handle))
 }
 
-/// 仅确保 shim 文件存在（写入 bin 目录，不注册用户 PATH）。
+/// 仅确保私有 pnpm shim 存在，不注册用户 PATH。
 ///
 /// 供预装插件等应用内部流程使用：需要 `pnpm`/`dsh` 可被子进程解析，
 /// 但不希望改动用户的 PATH 注册（避免与"命令行集成"开关状态不一致）。
 pub fn ensure_shims(app_handle: &AppHandle) -> Result<(), String> {
-    let bin_dir = get_bin_dir(app_handle);
-    write_shims(app_handle, &bin_dir)?;
-    log::info!("dsh/pnpm shims ensured at {}", bin_dir.display());
+    let bin_dir = get_internal_bin_dir(app_handle);
+    write_private_pnpm_shims(app_handle, &bin_dir)?;
+    log::info!("private pnpm shim ensured at {}", bin_dir.display());
     Ok(())
 }
 
@@ -91,21 +94,18 @@ pub fn remove(app_handle: &AppHandle) -> Result<CliLinkStatus, String> {
 
     #[cfg(windows)]
     {
-        use super::shim::{PNPM_SHIM_CMD_NAME, PNPM_SHIM_PS1_NAME, SHIM_CMD_NAME, SHIM_PS1_NAME};
+        use super::shim::{SHIM_CMD_NAME, SHIM_PS1_NAME};
         let _ = fs::remove_file(bin_dir.join(SHIM_CMD_NAME));
         let _ = fs::remove_file(bin_dir.join(SHIM_PS1_NAME));
-        let _ = fs::remove_file(bin_dir.join(PNPM_SHIM_CMD_NAME));
-        let _ = fs::remove_file(bin_dir.join(PNPM_SHIM_PS1_NAME));
     }
     #[cfg(not(windows))]
     {
-        use super::shim::{PNPM_SHIM_SH_NAME, SHIM_SH_NAME};
+        use super::shim::SHIM_SH_NAME;
         let _ = fs::remove_file(bin_dir.join(SHIM_SH_NAME));
-        let _ = fs::remove_file(bin_dir.join(PNPM_SHIM_SH_NAME));
     }
 
     unregister_path(app_handle)?;
 
-    log::info!("dsh/pnpm CLI links removed");
+    log::info!("MIR3 CLI link removed");
     Ok(get_status(app_handle))
 }

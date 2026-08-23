@@ -1,74 +1,24 @@
-# Resources
+# Bundled resources
 
-This directory is bundled into the installer as `resources/**`.
+This directory is bundled into MIR3 Studio AI as `resources/**`.
 
-At runtime, the application downloads everything it needs into the OS user-data
-directory (the Tauri app-data dir for identifier
-`io.github.hairyf.deepseek-harness-desktop`, e.g. `%APPDATA%/io.github.hairyf.deepseek-harness-desktop/` on Windows):
+Runtime data uses the Tauri application identifier `ai.mir3.studio`:
 
-- `runtime/` — the bundled Node.js runtime (downloaded on first run)
-- `dependencies/dsh/` — the packaged DeepSeek Harness distribution (downloaded from the
-  `hairyf/deepseek-harness-pkg` release feed)
-- `data/dsh/` — **legacy** `$DSH_HOME` location (pre-migration builds only; see below)
-- `logs/` — application and `dsh` service logs
-- `.store.dat` — desktop settings (port, auto-start, language, etc.)
+- `runtime/` — managed Node.js runtime
+- `dependencies/dsh/` — managed MIR3 AI Core compatibility bundle
+- `dependencies/pnpm/` — application-private package manager
+- `internal-tools/bin/` — private shims used by core and plugin subprocesses
+- `logs/` — desktop and core service logs
+- `.store.dat` / `.store.dev.dat` — release and development settings
 
-No manual Node.js or pnpm installation is required.
+User projects, profiles, sessions, settings, and plugin state are stored under
+`${MIR3_STUDIO_HOME:-$HOME/.mir3-studio-ai}`. Debug builds default to
+`$HOME/.mir3-studio-ai.dev`. The desktop does not migrate or delete data from
+another application.
 
-## `$DSH_HOME` — shared with the official Node.js install
+## Preset plugins
 
-The user data directory (`$DSH_HOME`) used by the running `dsh` process follows
-the **official dsh convention** (`${DSH_HOME:-$HOME/.dsh}`): the `DSH_HOME`
-environment variable when set, otherwise `~/.dsh`
-(`C:\Users\<you>\.dsh` on Windows). This way the desktop app and a
-`npm i -g @deepseek-ai/dsh` install share the same profiles, sessions, settings
-and credentials — no data switching needed.
-
-On the first launch of a build that introduced this change, the app
-**migrates** any existing legacy data from `%APPDATA%/.../data/dsh` into the
-new `$DSH_HOME` (recursive merge, newer mtime wins; `node_modules` trees are
-skipped — they are regenerated on boot). The legacy directory is removed after
-a successful migration, and the one-shot migration is recorded in `.store.dat`
-(`dsh_home_migrated`). Migration failures are non-fatal: legacy data stays in
-place and the migration retries on the next launch.
-
-## Preset plugins — `preset-plugins.json`
-
-The first-run wizard / sidebar preset list is driven by `preset-plugins.json`
-(loaded at runtime by `src-tauri/src/service/plugin/mod.rs` — **no Rust code
-change needed to add a preset**). To propose a new preset plugin, open a PR
-that adds one entry to the JSON array:
-
-> **Note on "new preset" detection**: the file ships with the installer and is
-> force-overwritten on every install, so the app records a fingerprint of its
-> content into the user-data settings after the wizard ends (install or skip)
-> and re-opens the wizard on the next launch when the content differs. No extra
-> action is needed when adding an entry.
-
-```json
-{
-  "id": "npm-package-name",
-  "spec": "npm-package-name | github:owner/repo",
-  "name": "Display name",
-  "description": "English description. · 中文描述",
-  "repoUrl": "https://github.com/owner/repo",
-  "recommended": true,
-  "fix": false,
-  "winOnly": false
-}
-```
-
-| Field         | Required | Meaning                                                                 |
-| ------------- | -------- | ----------------------------------------------------------------------- |
-| `id`          | yes      | Unique front-end key; must be a legal npm dependency name               |
-| `spec`        | yes      | Dependency form passed to `dsh plugin add` (npm name or `github:owner/repo`) |
-| `name`        | yes      | Display name                                                            |
-| `description` | yes      | Shown in the wizard; bilingual (`en. · 中文`) is encouraged             |
-| `repoUrl`     | yes      | Repository page, opened via the "open repo" button                      |
-| `recommended` | no       | Green "recommended" chip, checked by default (defaults to `false`)      |
-| `fix`         | no       | Yellow "fix" chip, checked by default — reserved for Windows minimal-mode fixes (defaults to `false`) |
-| `winOnly`     | no       | Only listed on Windows (defaults to `false`)                            |
-
-`id` must be unique across the file. The plugin itself is **not** vendored into
-this repository — it is installed on the user's machine from `spec` at setup
-time, so the PR only needs to add the JSON entry.
+`preset-plugins.json` drives the first-run and sidebar preset list. Each entry
+contains a unique package `id`, install `spec`, display `name`, bilingual
+`description`, `repoUrl`, and optional `recommended`, `fix`, and `winOnly`
+flags. Plugin source code is not vendored into this repository.

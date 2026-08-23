@@ -82,7 +82,7 @@ async fn download_with_retry<'a, R: Runtime>(
 
     // 创建具备 User-Agent 的客户端
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (deepseek-harness-desktop)")
+        .user_agent(format!("Mozilla/5.0 ({})", config::brand::get().user_agent))
         .connect_timeout(std::time::Duration::from_secs(20))
         .build()
         .map_err(|e| {
@@ -272,7 +272,7 @@ pub async fn fetch_node_sha256(download_url: &str) -> Result<String, String> {
     })?;
     let checksums_url = format!("{base}/SHASUMS256.txt");
     let checksums = reqwest::Client::builder()
-        .user_agent("deepseek-harness-desktop")
+        .user_agent(&config::brand::get().user_agent)
         .timeout(Duration::from_secs(20))
         .build()
         .map_err(|e| format!("INTEGRITY_METADATA_FAILED: {e}"))?
@@ -531,11 +531,7 @@ pub async fn ensure_extract<'a, R: Runtime>(
 }
 
 /// GitHub API 地址（未认证限流 60 次/小时/IP，仅供每次启动检查一次）
-const DSH_PKG_GITHUB_API: &str = "https://api.github.com/repos/hairyf/deepseek-harness-pkg";
-/// pkg 仓库 HTML 来源；`releases.atom` 走 github.com 而非 api.github.com，不受未认证限流约束。
-const DSH_PKG_REPO: &str = "https://github.com/hairyf/deepseek-harness-pkg";
-
-/// 最新 Harness 发行版信息（版本 tag + 对应 commit hash）
+/// 最新 MIR3 AI Core 发行版信息（版本 tag + 对应 commit hash）
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct LatestDshPkg {
     pub tag: String,
@@ -550,7 +546,7 @@ pub struct LatestDshPkg {
 /// 构造带 User-Agent 与超时的 GitHub 请求客户端。
 fn github_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent("deepseek-harness-desktop")
+        .user_agent(&config::brand::get().user_agent)
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))
@@ -578,7 +574,10 @@ async fn github_api_get(
 
 /// 拉取最新 release 的 JSON（含 tag、资产、摘要）。
 async fn fetch_releases_latest(client: &reqwest::Client) -> Result<serde_json::Value, String> {
-    github_api_get(client, &format!("{DSH_PKG_GITHUB_API}/releases/latest"))
+    github_api_get(
+        client,
+        &format!("{}/releases/latest", config::core_compat::CORE_RELEASE_API),
+    )
         .await
         .map_err(|e| format!("Latest release request failed: {e}"))?
         .json()
@@ -588,7 +587,10 @@ async fn fetch_releases_latest(client: &reqwest::Client) -> Result<serde_json::V
 
 /// 通过 commits 端点把 release tag 解析为完整 commit hash。
 async fn fetch_tag_commit(client: &reqwest::Client, tag: &str) -> Result<String, String> {
-    let commit: serde_json::Value = github_api_get(client, &format!("{DSH_PKG_GITHUB_API}/commits/{tag}"))
+    let commit: serde_json::Value = github_api_get(
+        client,
+        &format!("{}/commits/{tag}", config::core_compat::CORE_RELEASE_API),
+    )
         .await
         .map_err(|e| format!("Release commit request failed: {e}"))?
         .json()
@@ -615,7 +617,7 @@ fn commit_fallback_from_tag(tag: &str) -> String {
 async fn fetch_latest_dsh_tag_from_atom() -> Result<String, String> {
     let client = github_client()?;
     let body = client
-        .get(format!("{DSH_PKG_REPO}/releases.atom"))
+        .get(format!("{}/releases.atom", config::core_compat::CORE_RELEASE_REPO))
         .send()
         .await
         .map_err(|e| format!("DSH_ATOM: {e}"))?
@@ -670,7 +672,10 @@ async fn fetch_dsh_digest_from_expanded_assets(
     expected_name: &str,
 ) -> Result<Option<String>, String> {
     let body = client
-        .get(format!("{DSH_PKG_REPO}/releases/expanded_assets/{tag}"))
+        .get(format!(
+            "{}/releases/expanded_assets/{tag}",
+            config::core_compat::CORE_RELEASE_REPO
+        ))
         .send()
         .await
         .map_err(|e| format!("DSH_EXPANDED: {e}"))?
@@ -682,7 +687,7 @@ async fn fetch_dsh_digest_from_expanded_assets(
     Ok(parse_digest_from_expanded_assets(&body, expected_name))
 }
 
-/// 查询 GitHub 上最新 Harness 发行版信息。
+/// 查询 GitHub 上最新 MIR3 AI Core 发行版信息。
 ///
 /// 优先走 api.github.com（`/releases/latest` + `/commits/{tag}`），拿到可用的 tag、
 /// 资产地址与可信 SHA-256 摘要。API 限流/网络失败时**不整体中断**：
@@ -698,7 +703,7 @@ pub async fn fetch_latest_dsh_pkg_info() -> Result<LatestDshPkg, String> {
     let expected_name = config::get_dsh_download_url()?
         .rsplit('/')
         .next()
-        .ok_or_else(|| "Missing DSH asset filename".to_string())?
+        .ok_or_else(|| "Missing MIR3 AI Core asset filename".to_string())?
         .to_string();
 
     // 1. 首选 GitHub API 拉最新 release（含 tag + 资产 + 可信摘要）
@@ -817,11 +822,14 @@ pub async fn fetch_dsh_pkg_asset(tag: &str) -> Result<LatestDshPkg, String> {
     let expected_name = config::get_dsh_download_url()?
         .rsplit('/')
         .next()
-        .ok_or_else(|| "Missing DSH asset filename".to_string())?
+        .ok_or_else(|| "Missing MIR3 AI Core asset filename".to_string())?
         .to_string();
 
     // 1. 优先 API 拉该 tag 的 release（含资产 + 可信摘要）
-    let release = github_api_get(&client, &format!("{DSH_PKG_GITHUB_API}/releases/tags/{tag}"))
+    let release = github_api_get(
+        &client,
+        &format!("{}/releases/tags/{tag}", config::core_compat::CORE_RELEASE_API),
+    )
         .await
         .map_err(|e| format!("Release {tag} request failed: {e}"))?;
     let json: serde_json::Value = release
@@ -897,11 +905,11 @@ pub enum UpdateCheck {
     UpdateAvailable,
 }
 
-/// 结合本地记录与实际安装文件判定是否有新版 Harness 可用。
+/// 结合本地记录与实际安装文件判定是否有新版 MIR3 AI Core 可用。
 ///
 /// 本地记录（release commit + tag）由安装流程写入；但当安装文件被外围途径
 /// 更新、或安装时 GitHub API 失败未落盘，记录会滞后于文件，造成每次都误报
-/// 更新。这里以磁盘上实际的 `@deepseek-ai/dsh` 版本为准核对：
+/// 更新。这里以磁盘上实际的兼容核心主包版本为准核对：
 /// - 最新 release 版本号与已装版本不同 → 有更新（不论 commit）；
 /// - 版本号相同且 commit 一致 → 无更新；
 /// - 版本号相同：记录 tag 版本也相同 → 同版本热修 → 有更新；
@@ -971,7 +979,7 @@ pub async fn fetch_dsh_pkg_tags() -> Result<Vec<(String, String)>, String> {
     let client = github_client()?;
     let tags: serde_json::Value = github_api_get(
         &client,
-        &format!("{}/tags?per_page=100", DSH_PKG_GITHUB_API),
+        &format!("{}/tags?per_page=100", config::core_compat::CORE_RELEASE_API),
     )
     .await
     .map_err(|e| format!("Release tags request failed: {e}"))?
@@ -1013,10 +1021,12 @@ mod tests {
         assert!(validate_download_url("https://npmmirror.com/mirrors/node/v22/file.zip").is_ok());
         assert!(validate_download_url("https://cdn.npmmirror.com/binaries/node/v22/file.zip").is_ok());
         assert!(validate_download_url("https://registry.npmmirror.com/pnpm/-/pnpm.tgz").is_ok());
-        assert!(validate_download_url(
-            "https://ghfast.top/https://github.com/hairyf/deepseek-harness-pkg/releases/latest/download/deepseek-harness-pkg-windows.zip"
-        )
-        .is_ok());
+        let mirrored_core = format!(
+            "{}{}",
+            config::core_compat::CORE_RELEASE_MIRROR_BASE,
+            config::core_compat::asset_filename("windows", "x86_64").unwrap()
+        );
+        assert!(validate_download_url(&mirrored_core).is_ok());
     }
 
     #[tokio::test]
@@ -1077,23 +1087,24 @@ mod tests {
     fn parses_digest_from_expanded_assets_html() {
         // 模拟 expanded_assets 片段：资产文件名之后紧跟作者填写的 sha256:<64hex>。
         // 来自真实 rc.8 页面：windows 资产摘要为 4d541676...
-        let html = concat!(
-            "…/deepseek-harness-pkg-windows.zip…<span>sha256:4d5416766eb4a66e81b83532abeea64de7e7e2e0bac69a4f0c0508e1d91936c0</span>",
+        let windows_asset = config::core_compat::asset_filename("windows", "x86_64").unwrap();
+        let linux_asset = config::core_compat::asset_filename("linux", "x86_64").unwrap();
+        let html = format!(
+            "…/{windows_asset}…<span>sha256:4d5416766eb4a66e81b83532abeea64de7e7e2e0bac69a4f0c0508e1d91936c0</span>",
         );
-        let got =
-            parse_digest_from_expanded_assets(html, "deepseek-harness-pkg-windows.zip");
+        let got = parse_digest_from_expanded_assets(&html, windows_asset);
         assert_eq!(
             got.as_deref(),
             Some("sha256:4d5416766eb4a66e81b83532abeea64de7e7e2e0bac69a4f0c0508e1d91936c0")
         );
         // 文件名不存在 → None
         assert_eq!(
-            parse_digest_from_expanded_assets(html, "deepseek-harness-pkg-linux.zip"),
+            parse_digest_from_expanded_assets(&html, linux_asset),
             None
         );
         // 摘要缺失 → None
         assert_eq!(
-            parse_digest_from_expanded_assets("<p>no digest here</p>", "deepseek-harness-pkg-windows.zip"),
+            parse_digest_from_expanded_assets("<p>no digest here</p>", windows_asset),
             None
         );
     }

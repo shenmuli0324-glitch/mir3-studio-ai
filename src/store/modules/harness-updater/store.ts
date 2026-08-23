@@ -18,7 +18,7 @@ export const harnessUpdater = defineStore({
     updating: false,
   }),
   actions: {
-    /** 后台静默检查是否有新版 Harness（网络失败/API 限流时静默跳过） */
+    /** 后台静默检查是否有新版 MIR3 AI Core（网络失败/API 限流时静默跳过） */
     async checkForUpdate() {
       try {
         const info = await invoke<DshUpdateInfo | null>('check_dsh_update')
@@ -27,7 +27,7 @@ export const harnessUpdater = defineStore({
         }
       }
       catch (err) {
-        console.warn('[Harness] update check skipped:', err)
+        console.warn('[MIR3 AI Core] update check skipped:', err)
       }
     },
 
@@ -65,7 +65,7 @@ export const harnessUpdater = defineStore({
         this.updateInfo = null
       }
       catch (err) {
-        console.error('[Harness] update failed:', err)
+        console.error('[MIR3 AI Core] update failed:', err)
         harness.fail(String(err))
       }
       finally {

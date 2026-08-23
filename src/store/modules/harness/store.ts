@@ -82,10 +82,10 @@ async function checkHealthViaProxy(): Promise<HealthCheckResult> {
       || result.includes('201')
       || lower.includes('ok')
     ) {
-      console.warn('[Harness] health check passed:', result)
+      console.warn('[MIR3 AI Core] health check passed:', result)
       return { healthy: true, notOwned: false }
     }
-    console.warn('[Harness] health check returned:', result)
+    console.warn('[MIR3 AI Core] health check returned:', result)
     return { healthy: false, notOwned: false }
   }
   catch (err) {
@@ -93,14 +93,14 @@ async function checkHealthViaProxy(): Promise<HealthCheckResult> {
     if (message.includes('HARNESS_NOT_OWNED')) {
       // dsh 进程已退出（典型如插件冲突导致启动即崩溃），继续等只会白白耗完
       // 8 轮超时，让调用方立刻结束重试并展示日志里的真实错误。
-      console.warn('[Harness] dsh process exited during startup, failing fast')
+      console.warn('[MIR3 AI Core] dsh process exited during startup, failing fast')
       return { healthy: false, notOwned: true }
     }
     if (message.includes('502') || message.includes('Bad Gateway')) {
-      console.warn('[Harness] transient 502 during health check, retrying')
+      console.warn('[MIR3 AI Core] transient 502 during health check, retrying')
     }
     else {
-      console.error('[Harness] health check failed:', err)
+      console.error('[MIR3 AI Core] health check failed:', err)
     }
     return { healthy: false, notOwned: false }
   }
@@ -116,7 +116,7 @@ async function readServiceLogTail(): Promise<string[]> {
       .filter(Boolean)
   }
   catch (err) {
-    console.error('[Harness] failed to read service logs:', err)
+    console.error('[MIR3 AI Core] failed to read service logs:', err)
     return []
   }
 }
@@ -204,7 +204,7 @@ export const harness = defineStore({
         })
       }
       catch (err) {
-        console.error('[Harness] failed to listen plugin-recovery-required:', err)
+        console.error('[MIR3 AI Core] failed to listen plugin-recovery-required:', err)
       }
     },
 
@@ -287,7 +287,7 @@ export const harness = defineStore({
         this.recovery = { required: false, info: null, attempts: 0, busy: false }
         this.dismissedRecoveryIds = []
         // 服务（重）启动成功后，dsh 版本/端口/CLI 链接状态等运行时信息可能已变化
-        // （典型：Harness 更新后旧版本缓存仍在，调试侧边栏需刷新页面才显示新版本）。
+        // （典型：MIR3 AI Core 更新后旧版本缓存仍在，调试侧边栏需刷新页面才显示新版本）。
         // 使侧边栏相关查询缓存失效，重新打开/已挂载时自动拉取最新值。
         void queryClient.invalidateQueries({ queryKey: ['info'] })
         void queryClient.invalidateQueries({ queryKey: ['config'] })
@@ -327,7 +327,7 @@ export const harness = defineStore({
           unlistenInstall = await this.listenInstallProgress()
         }
         catch (err) {
-          console.error('[Harness] failed to listen install-progress:', err)
+          console.error('[MIR3 AI Core] failed to listen install-progress:', err)
         }
         const runtimeInfo = await invoke<{ service_url: string }>('get_runtime_info')
         this.serviceUrl = runtimeInfo.service_url
@@ -373,7 +373,7 @@ export const harness = defineStore({
       catch (err) {
         if (token !== bootToken)
           return
-        console.error('[Harness] startup failed:', err)
+        console.error('[MIR3 AI Core] startup failed:', err)
         const startupError = await attachStartupDiagnostics(err)
         // 尝试从日志定位问题插件：能定位则弹出修复界面（全屏恢复页）
         await this.reviewStartupRecovery(startupError.logLines ?? startupError.logs ?? [])
@@ -418,7 +418,7 @@ export const harness = defineStore({
         }
       }
       catch (err) {
-        console.error('[Harness] detect_plugin_recovery failed:', err)
+        console.error('[MIR3 AI Core] detect_plugin_recovery failed:', err)
       }
     },
 
@@ -452,7 +452,7 @@ export const harness = defineStore({
         await this.restart()
       }
       catch (err) {
-        console.error('[Harness] recover_plugin failed:', err)
+        console.error('[MIR3 AI Core] recover_plugin failed:', err)
         this.recovery = { ...this.recovery, busy: false, attempts: this.recovery.attempts + 1 }
       }
     },
@@ -472,7 +472,7 @@ export const harness = defineStore({
       if (this.busyAction)
         return
       this.busyAction = 'restart'
-      // 手动重启（含修复界面上的「重启 Harness」）：先退出恢复态，
+      // 手动重启（含修复界面上的「重启 MIR3 AI Core」）：先退出恢复态，
       // 若重启仍失败，boot 的 catch 会重新定位问题插件并再次弹出。
       this.recovery = { ...this.recovery, required: false, busy: false }
       try {
@@ -480,7 +480,7 @@ export const harness = defineStore({
         await invoke('shutdown_harness')
       }
       catch (err) {
-        console.error('[Harness] shutdown during restart failed:', err)
+        console.error('[MIR3 AI Core] shutdown during restart failed:', err)
       }
       this.serviceRunning = false
       this.iframeLoaded = false
@@ -503,7 +503,7 @@ export const harness = defineStore({
         await invoke('shutdown_harness')
       }
       catch (err) {
-        console.error('[Harness] shutdown failed:', err)
+        console.error('[MIR3 AI Core] shutdown failed:', err)
       }
       finally {
         this.busyAction = null
@@ -539,7 +539,7 @@ export const harness = defineStore({
         await invoke('open_in_browser')
       }
       catch (err) {
-        console.error('[Harness] open in browser failed:', err)
+        console.error('[MIR3 AI Core] open in browser failed:', err)
       }
       finally {
         this.busyAction = null
@@ -555,7 +555,7 @@ export const harness = defineStore({
         this.preinstall.plugins = await invoke<PreinstallPlugin[]>('get_preinstall_plugins')
       }
       catch (err) {
-        console.error('[Harness] failed to load preinstall plugins:', err)
+        console.error('[MIR3 AI Core] failed to load preinstall plugins:', err)
       }
       finally {
         this.preinstall.loading = false
@@ -587,7 +587,7 @@ export const harness = defineStore({
         await this.continueAfterPreinstall()
       }
       catch (err) {
-        console.error('[Harness] preinstall failed:', err)
+        console.error('[MIR3 AI Core] preinstall failed:', err)
         this.preinstall.error = String(err)
       }
       finally {
@@ -615,7 +615,7 @@ export const harness = defineStore({
         })
       }
       catch (err) {
-        console.error('[Harness] cancel preinstall failed:', err)
+        console.error('[MIR3 AI Core] cancel preinstall failed:', err)
         this.preinstall.cancelling = false
       }
     },
@@ -629,7 +629,7 @@ export const harness = defineStore({
         await this.continueAfterPreinstall()
       }
       catch (err) {
-        console.error('[Harness] skip preinstall failed:', err)
+        console.error('[MIR3 AI Core] skip preinstall failed:', err)
         this.preinstall.error = String(err)
       }
     },

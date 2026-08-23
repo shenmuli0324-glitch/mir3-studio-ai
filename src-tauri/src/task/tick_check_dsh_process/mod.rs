@@ -6,13 +6,13 @@ use tauri::AppHandle;
 
 /// 检测 dsh 进程状态并更新
 ///
-/// 使用 HTTP 请求检测 Harness 服务是否真正就绪，就绪后更新全局状态
+/// 使用 HTTP 请求检测 MIR3 AI Core 服务是否真正就绪，就绪后更新全局状态
 pub async fn trigger(app_handle: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let current_status = status::get_status();
 
     let port = crate::config::get_store_dat_setting(&app_handle).port;
     // 只有本应用仍持有启动 PID 时才接受 HTTP 健康结果，避免把同端口的
-    // 其他本地 Web 服务误识别成 Harness。
+    // 其他本地 Web 服务误识别成 MIR3 AI Core。
     let is_dsh_running =
         crate::service::workflow::has_owned_process() && utils::is_dsh_running(port).await;
     log::trace!("DSH status check: dsh_running={}", is_dsh_running);

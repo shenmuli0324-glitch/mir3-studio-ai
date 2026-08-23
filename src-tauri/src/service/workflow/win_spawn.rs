@@ -50,7 +50,7 @@ pub fn spawn_with_hidden_console(
     Ok((stdout, stderr))
 }
 
-/// 启动由桌面端持有的 Harness 进程，同时返回 PID 与进程句柄。
+/// 启动由桌面端持有的 MIR3 AI Core 进程，同时返回 PID 与进程句柄。
 ///
 /// PID 用于只结束本应用创建的进程树；句柄由调用方等待并关闭，避免进程退出后
 /// PID 被系统复用时误伤其他程序。

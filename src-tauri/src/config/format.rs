@@ -1,6 +1,6 @@
 use crate::config::DSH_HOST;
 
-/// 获取指定端口的 Harness 服务地址
+/// 获取指定端口的 MIR3 AI Core 服务地址
 pub fn get_dsh_service_url(port: u16) -> String {
     format!("{}:{}", DSH_HOST, port)
 }

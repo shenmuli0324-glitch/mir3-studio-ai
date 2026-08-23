@@ -1,7 +1,7 @@
 //! 统一日志底座 — `log` 外观代理 `tracing` 栈
 //!
 //! 目标：
-//! - 后端：`log::*`（业务，`dsh` target 表示 Harness 输出）→ `tracing` 经 `tracing_log::LogTracer` → `tracing-subscriber` + `tracing-appender`（non-blocking）+ `EnvFilter`
+//! - 后端：`log::*`（业务，`dsh` target 表示 MIR3 AI Core 输出）→ `tracing` 经 `tracing_log::LogTracer` → `tracing-subscriber` + `tracing-appender`（non-blocking）+ `EnvFilter`
 //! - 前端：`console.*` 劫持 → `log_frontend`（`target: "frontend"`）→ 独立 `desktop.frontdesk.log`（标识 `frontend`，同格式）；文件层对 `frontend` target 直接跳过，后端 `desktop.log` 不混入前端日志（前端日志仅终端 / `desktop.frontdesk.log` 可见）
 //! - 格式：`[YYYY-MM-DD HH:MM:SS.mmmZ] LEVEL target: message`（例 `INFO dsh:` / `INFO frontend:`）
 //! - 轮转：`desktop.log` + `desktop.frontdesk.log` 各 5MiB，保留 `.1 ~ .3`
@@ -17,7 +17,6 @@ use tracing_subscriber::fmt::time::OffsetTime;
 use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::layer::{Layer, SubscriberExt};
 use tracing_subscriber::{fmt, util::SubscriberInitExt, EnvFilter};
-const APP_IDENTIFIER: &str = "io.github.hairyf.deepseek-harness-desktop";
 const LOG_FILE_NAME: &str = "desktop.log";
 const FRONTDESK_LOG_FILE_NAME: &str = "desktop.frontdesk.log";
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
@@ -30,7 +29,7 @@ fn app_data_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let appdata = std::env::var("APPDATA").ok()?;
-        return Some(PathBuf::from(appdata).join(APP_IDENTIFIER));
+        return Some(PathBuf::from(appdata).join(crate::config::brand::get().identifier.as_str()));
     }
     #[cfg(target_os = "macos")]
     {
@@ -39,7 +38,7 @@ fn app_data_dir() -> Option<PathBuf> {
             PathBuf::from(home)
                 .join("Library")
                 .join("Application Support")
-                .join(APP_IDENTIFIER),
+                .join(crate::config::brand::get().identifier.as_str()),
         );
     }
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -53,7 +52,7 @@ fn app_data_dir() -> Option<PathBuf> {
                     .ok()
                     .map(|h| PathBuf::from(h).join(".local/share"))
             })?;
-        return Some(base.join(APP_IDENTIFIER));
+        return Some(base.join(crate::config::brand::get().identifier.as_str()));
     }
     #[allow(unreachable_code)]
     None

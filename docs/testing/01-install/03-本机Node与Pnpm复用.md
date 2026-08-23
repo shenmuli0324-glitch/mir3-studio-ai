@@ -6,14 +6,14 @@
 
 ## [P1] 验证本机已有兼容 Node v22.22.0 时复用不下载
 [测试类型] 兼容性
-[前置条件] 本机 PATH 中存在 node v22.22.0（`node --version` 输出 v22.22.0）；`%APPDATA%\io.github.hairyf.deepseek-harness-desktop\runtime` 不存在；网络可达
+[前置条件] 本机 PATH 中存在 node v22.22.0（`node --version` 输出 v22.22.0）；`%APPDATA%\ai.mir3.studio\runtime` 不存在；网络可达
 [测试步骤] 1. 在本机安装 Node v22.22.0 并加入 PATH，确认 `node --version` 输出 v22.22.0。2. 清空 `runtime` 目录后启动桌面端触发安装，观察日志与 `runtime` 目录变化。3. 安装完成后读取 get_active_node_version 并确认服务启动
 [预期结果] 1. 日志出现 "Detected compatible local Node.js (C:\...\node.exe), skipping bundled runtime"，Node 任务被跳过。2. `runtime` 目录未被创建，仅 dsh 与 pnpm 任务执行下载/解压。3. get_active_node_version 返回 22.22.0，服务正常启动进入 Running
 
 ## [P2] 验证本机 Node 版本过期时回退内置 Node
 [测试类型] 兼容性
 [前置条件] 本机 PATH 中存在 node v22.14.0（低于 v22.15.0 下限）；捆绑 `runtime\node.exe` 已是 v22.22.0；网络可达
-[测试步骤] 1. 在本机安装 Node v22.14.0 并加入 PATH，确认 `node --version` 输出 v22.14.0。2. 确保 `%APPDATA%\io.github.hairyf.deepseek-harness-desktop\runtime\node.exe` 位于 v22.22.0。3. 启动安装，观察 Node 任务是否走捆绑运行时（is_runtime_compatible 判定）与安装结果
+[测试步骤] 1. 在本机安装 Node v22.14.0 并加入 PATH，确认 `node --version` 输出 v22.14.0。2. 确保 `%APPDATA%\ai.mir3.studio\runtime\node.exe` 位于 v22.22.0。3. 启动安装，观察 Node 任务是否走捆绑运行时（is_runtime_compatible 判定）与安装结果
 [预期结果] 1. 本机 v22.14.0 不满足 v22.15.0 门槛，get_local_node_path 返回 None，不使用本机 node。2. 捆绑 `runtime\node.exe`（v22.22.0）被复用，Node 任务 check_installed 通过兼容判定、不重新下载。3. get_active_node_version 返回 22.22.0，安装成功并进入 Running
 
 ## [P2] 验证本机已有 pnpm 时优先用用户 pnpm
@@ -30,6 +30,6 @@
 
 ## [P4] 验证复用过程不修改系统 PATH/环境
 [测试类型] 安全性
-[前置条件] 本机已有兼容 node v22.22.0 与用户 pnpm 11.7.0；命令行集成开关 cli_link_enabled 为 false；`$DSH_HOME` 指向 `%USERPROFILE%\.dsh`
-[测试步骤] 1. 记录安装前 `$env:PATH` 完整值、用户级环境变量与 `%LOCALAPPDATA%\deepseek-harness\bin` 目录是否存在。2. 触发 install_dependencies 并等待完成。3. 安装后再读取 `$env:PATH`、用户级环境变量与 `bin` 目录
-[预期结果] 1. 安装后 `$env:PATH` 与安装前完全一致（未追加 `%LOCALAPPDATA%\deepseek-harness\bin`）。2. `%LOCALAPPDATA%\deepseek-harness\bin` 未因本次复用而新建或写入 shim（sync_cli_link 走 cli::remove）。3. 用户环境变量中未新增 `dsh` 相关 PATH 项，本机 node/pnpm 未被改写或重装
+[前置条件] 本机已有兼容 node v22.22.0 与用户 pnpm 11.7.0；命令行集成开关 cli_link_enabled 为 false；`$MIR3_STUDIO_HOME` 指向 `%USERPROFILE%\.mir3-studio-ai`
+[测试步骤] 1. 记录安装前 `$env:PATH` 完整值、用户级环境变量与 `%LOCALAPPDATA%\mir3-studio-ai\bin` 目录是否存在。2. 触发 install_dependencies 并等待完成。3. 安装后再读取 `$env:PATH`、用户级环境变量与 `bin` 目录
+[预期结果] 1. 安装后 `$env:PATH` 与安装前完全一致（未追加 `%LOCALAPPDATA%\mir3-studio-ai\bin`）。2. `%LOCALAPPDATA%\mir3-studio-ai\bin` 未因本次复用而新建或写入 shim（sync_cli_link 走 cli::remove）。3. 用户环境变量中未新增 `dsh` 相关 PATH 项，本机 node/pnpm 未被改写或重装

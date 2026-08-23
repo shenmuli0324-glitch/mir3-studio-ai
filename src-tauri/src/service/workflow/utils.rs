@@ -12,7 +12,7 @@ fn dsh_log_lock() -> &'static Mutex<()> {
     DSH_LOG_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-/// 检查 Harness 是否真正在运行（探测指定端口，随配置端口联动）
+/// 检查 MIR3 AI Core 是否真正在运行（探测指定端口，随配置端口联动）
 pub async fn is_dsh_running(port: u16) -> bool {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))

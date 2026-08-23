@@ -22,7 +22,7 @@ pub fn run() {
             tauri::RunEvent::Reopen { .. } => {
                 crate::utils::show_main_window(&app_handle);
             }
-            // 退出时回收 Harness 进程：不回收的话，node 进程会在应用退出后
+            // 退出时回收 MIR3 AI Core 进程：不回收的话，node 进程会在应用退出后
             // 残留并把原生模块 DLL（如 sharp 的 libvips-42.dll）锁在内存，
             // 下次启动重新解压时会失败（Windows os error 32）
             tauri::RunEvent::Exit => {

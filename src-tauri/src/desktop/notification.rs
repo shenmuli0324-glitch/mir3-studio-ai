@@ -179,7 +179,7 @@ pub fn enable_notification_permissions(
         MessageDialog::new()
             .set_parent(parent)
             .set_title("允许发送通知？")
-            .set_description("DSH 页面请求发送桌面通知。是否允许？")
+            .set_description("MIR3 AI Core 请求发送桌面通知。是否允许？")
             .set_buttons(MessageButtons::YesNo)
             .show()
             == MessageDialogResult::Yes
@@ -275,6 +275,7 @@ pub fn enable_notification_permissions(
                 for script in [
                     crate::desktop::notification::NOTIFICATION_SHIM_JS,
                     crate::desktop::nav::NAV_SHIM_JS,
+                    crate::desktop::brand::IFRAME_BRAND_JS,
                     crate::desktop::style::IFRAME_STYLES_JS,
                     crate::desktop::paste::PASTE_SHIM_JS,
                 ] {

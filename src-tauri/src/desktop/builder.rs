@@ -17,17 +17,9 @@ use crate::desktop::window::on_page_load;
 
 /// setup app
 pub fn setup(app_handle: tauri::AppHandle) {
-    // 启动前清扫上次崩溃残留的孤儿 Harness（端口/PID 双重确认，见
-    // workflow::sweep_orphan_harness），避免新实例一路漂移端口
-    crate::service::workflow::sweep_orphan_harness(&app_handle);
-
-    // 旧版 AppData data/dsh → 官方 $DSH_HOME（~/.dsh）数据迁移。
-    // 必须在 sweep 之后（先杀掉占用文件句柄的残留 dsh 进程）、scheduler/
-    // auto_start 之前（迁移完成前不启动 dsh）。失败仅告警不阻断：旧数据
-    // 原地保留，下次启动重试。
-    if let Err(e) = crate::service::migrate::migrate(&app_handle) {
-        log::warn!("dsh home migration deferred (old data kept): {e}");
-    }
+    // 启动前清扫上次崩溃残留的孤儿 MIR3 AI Core（端口/PID 双重确认，见
+    // workflow::sweep_orphan_core），避免新实例一路漂移端口
+    crate::service::workflow::sweep_orphan_core(&app_handle);
 
     // 启动进程监控（tick 检测 dsh 服务状态）
     crate::service::scheduler::start(&app_handle);
@@ -97,7 +89,7 @@ pub fn tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("MIR3 Studio AI")
+        .tooltip(crate::config::brand::get().product_name.as_str())
         .on_menu_event(move |app, event| handle_menu_event(app, &event))
         .on_tray_icon_event(move |tray, event| handle_tray_icon_event(tray, &event))
         .build(app)?;
@@ -120,7 +112,7 @@ pub fn build_main_window(app: &tauri::AppHandle<Wry>) -> tauri::Result<tauri::We
 
     let webview_builder =
         WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-            .title("MIR3 Studio AI")
+            .title(crate::config::brand::get().product_name.as_str())
             .inner_size(1280.0, 840.0)
             .min_inner_size(860.0, 620.0)
             .resizable(true)
@@ -159,6 +151,7 @@ pub fn build_main_window(app: &tauri::AppHandle<Wry>) -> tauri::Result<tauri::We
         .initialization_script_for_all_frames(crate::desktop::compat::ABORT_SIGNAL_ANY_SHIM_JS)
         .initialization_script_for_all_frames(crate::desktop::notification::NOTIFICATION_SHIM_JS)
         .initialization_script_for_all_frames(crate::desktop::nav::NAV_SHIM_JS)
+        .initialization_script_for_all_frames(crate::desktop::brand::IFRAME_BRAND_JS)
         .initialization_script_for_all_frames(crate::desktop::style::IFRAME_STYLES_JS)
         .initialization_script_for_all_frames(crate::desktop::paste::PASTE_SHIM_JS);
 

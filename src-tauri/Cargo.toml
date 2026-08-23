@@ -1,7 +1,7 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.7.3"
-description = "MIR3 developer desktop powered by DeepSeek Harness (dsh)"
+version = "0.1.0"
+description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"
 

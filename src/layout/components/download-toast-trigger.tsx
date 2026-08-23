@@ -35,7 +35,7 @@ export function DownloadToast() {
               if (toastKey.current)
                 toast.close(toastKey.current)
               void invoke('reveal_in_folder', { path }).catch((err) => {
-                console.error('[Harness] reveal_in_folder failed:', err)
+                console.error('[MIR3 AI Core] reveal_in_folder failed:', err)
               })
             },
           }

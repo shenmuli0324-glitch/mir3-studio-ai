@@ -24,7 +24,7 @@ pub async fn get_runtime_info(app_handle: AppHandle) -> Result<config::RuntimeIn
     Ok(config::runtime_info(&app_handle, port))
 }
 
-/// 在系统浏览器中打开 Harness 界面
+/// 在系统浏览器中打开 MIR3 AI Core 界面
 #[tauri::command]
 pub async fn open_in_browser(app_handle: AppHandle) -> Result<(), String> {
     let url = config::get_dsh_service_url(config::get_store_dat_setting(&app_handle).port);
@@ -34,7 +34,7 @@ pub async fn open_in_browser(app_handle: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// 复制 Harness 服务地址到剪贴板
+/// 复制 MIR3 AI Core 服务地址到剪贴板
 #[tauri::command]
 pub async fn copy_service_url(app_handle: AppHandle) -> Result<(), String> {
     let url = config::get_dsh_service_url(config::get_store_dat_setting(&app_handle).port);
@@ -59,7 +59,7 @@ pub fn open_dir(path: String) -> Result<(), String> {
         .map_err(|e| format!("OPEN_DIR_FAILED: {e}"))
 }
 
-/// 在系统文件管理器中打开数据目录（官方 $DSH_HOME，即 ~/.dsh）
+/// 在系统文件管理器中打开数据目录（官方 $MIR3_STUDIO_HOME，即 ~/.mir3-studio-ai）
 #[tauri::command]
 pub async fn reveal_data_dir(app_handle: AppHandle) -> Result<(), String> {
     let dsh_home = config::get_dsh_data_path(&app_handle);
@@ -173,7 +173,7 @@ pub async fn read_run_logs(app_handle: AppHandle) -> Result<String, String> {
 
     // 环境信息：桌面端应用版本、dsh 发行版本、Node 版本与系统平台/架构，便于报障时快速定位环境差异
     let dsh_version = config::get_dsh_version(&app_handle)
-        .map(|v| format!("dsh: {v}\n"))
+        .map(|v| format!("MIR3 AI Core: {v}\n"))
         .unwrap_or_default();
     let env_text = format!(
         "app: {}\n{}node: {}\nos: {} ({})",

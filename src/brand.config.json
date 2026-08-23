@@ -1,0 +1,13 @@
+{
+  "productName": "MIR3 Studio AI",
+  "coreDisplayName": "MIR3 AI Core",
+  "identifier": "ai.mir3.studio",
+  "version": "0.1.0",
+  "userAgent": "mir3-studio-ai",
+  "updateRepo": "https://github.com/shenmuli0324-glitch/mir3-studio-ai",
+  "cliCommand": "mir3",
+  "windowsCliDir": "mir3-studio-ai",
+  "dataDir": ".mir3-studio-ai",
+  "devDataDir": ".mir3-studio-ai.dev",
+  "homeEnv": "MIR3_STUDIO_HOME"
+}

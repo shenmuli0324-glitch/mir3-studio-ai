@@ -1,4 +1,6 @@
+pub mod brand;
 mod constants;
+pub mod core_compat;
 mod format;
 pub mod i18n;
 mod region;

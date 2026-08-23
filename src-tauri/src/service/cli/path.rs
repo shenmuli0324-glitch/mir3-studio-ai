@@ -12,17 +12,15 @@ use super::shim::SHIM_CMD_NAME;
 use super::shim::SHIM_SH_NAME;
 
 /// Windows 下 shim 根目录名（`%LOCALAPPDATA%\<此目录>\bin`）
-const CLI_ROOT_DIR_NAME: &str = "deepseek-harness";
-
 /// Unix 下 shim 所在目录（XDG 约定）
 #[cfg(unix)]
 const UNIX_BIN_DIR: &str = ".local/bin";
 
 /// shell rc 注入标记（用于幂等增删；Windows 无 rc 逻辑，仅测试引用）
 #[cfg_attr(windows, allow(dead_code))]
-const RC_MARK_START: &str = "# >>> deepseek-harness dsh >>>";
+const RC_MARK_START: &str = "# >>> MIR3 Studio AI mir3 >>>";
 #[cfg_attr(windows, allow(dead_code))]
-const RC_MARK_END: &str = "# <<< deepseek-harness dsh <<<";
+const RC_MARK_END: &str = "# <<< MIR3 Studio AI mir3 <<<";
 
 /// Unix 下需要写入 PATH 导出的 rc 文件（按顺序处理；同上，Windows 仅测试引用）
 #[cfg_attr(windows, allow(dead_code))]
@@ -33,7 +31,7 @@ const RC_FILES: [&str; 2] = [".zshrc", ".bashrc"];
 // ---------------------------------------------------------------------------
 
 /// bin 目录：
-/// - Windows：`%LOCALAPPDATA%\deepseek-harness\bin`（用户级、不随应用数据目录变动）
+/// - Windows：`%LOCALAPPDATA%\mir3-studio-ai\bin`（用户级、不随应用数据目录变动）
 /// - Unix：`~/.local/bin`（XDG 约定，通常已在 PATH 中）
 pub fn get_bin_dir(app_handle: &AppHandle) -> PathBuf {
     #[cfg(windows)]
@@ -48,7 +46,7 @@ pub fn get_bin_dir(app_handle: &AppHandle) -> PathBuf {
                     .and_then(|d| d.parent().map(|p| p.to_path_buf()))
             })
             .unwrap_or_else(std::env::temp_dir)
-            .join(CLI_ROOT_DIR_NAME)
+            .join(&crate::config::brand::get().windows_cli_dir)
             .join("bin")
     }
     #[cfg(not(windows))]
@@ -59,6 +57,13 @@ pub fn get_bin_dir(app_handle: &AppHandle) -> PathBuf {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(UNIX_BIN_DIR)
     }
+}
+
+/// 应用私有工具目录，只注入核心/插件子进程，不注册到用户 PATH。
+pub fn get_internal_bin_dir(app_handle: &AppHandle) -> PathBuf {
+    crate::config::get_base_dir(app_handle)
+        .join("internal-tools")
+        .join("bin")
 }
 
 /// 主 shim 文件路径（状态展示用）
@@ -114,7 +119,8 @@ pub fn path_registered(app_handle: &AppHandle) -> bool {
 /// "用户优先"策略：安装时（`Pnpm::check_installed`）用户已有 pnpm 则跳过
 /// 捆绑安装；`pnpm` shim 运行时也会优先转发到用户的 pnpm。
 pub fn find_user_pnpm(app_handle: &AppHandle) -> Option<PathBuf> {
-    let bin_dir = get_bin_dir(app_handle);
+    let user_bin_dir = get_bin_dir(app_handle);
+    let internal_bin_dir = get_internal_bin_dir(app_handle);
     let candidates: &[&str] = if cfg!(windows) {
         // npm 全局安装的是 pnpm.cmd，standalone 安装的是 pnpm.exe
         &["pnpm.cmd", "pnpm.exe", "pnpm.bat"]
@@ -122,7 +128,7 @@ pub fn find_user_pnpm(app_handle: &AppHandle) -> Option<PathBuf> {
         &["pnpm"]
     };
     for dir in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
-        if dir == bin_dir || dir.as_os_str().is_empty() {
+        if dir == user_bin_dir || dir == internal_bin_dir || dir.as_os_str().is_empty() {
             continue;
         }
         for name in candidates {
@@ -158,7 +164,7 @@ pub fn register_path(app_handle: &AppHandle) -> Result<(), String> {
         };
         write_user_path(&new_value)?;
         notify_environment_change();
-        log::info!("Registered dsh bin dir in user PATH: {bin_str}");
+        log::info!("Registered MIR3 CLI bin dir in user PATH: {bin_str}");
     }
     #[cfg(not(windows))]
     {
@@ -182,7 +188,7 @@ pub fn unregister_path(app_handle: &AppHandle) -> Result<(), String> {
             let new_value = remove_path_token(&current, bin_str);
             write_user_path(&new_value)?;
             notify_environment_change();
-            log::info!("Removed dsh bin dir from user PATH");
+            log::info!("Removed MIR3 CLI bin dir from user PATH");
         }
     }
     #[cfg(not(windows))]
@@ -471,14 +477,14 @@ fn upsert_rc_block(content: &str, block: &str) -> String {
     out
 }
 
-/// 原子写回 rc 文件：写入前先备份为 `<file>.dsh-backup`，再通过同目录
+/// 原子写回 rc 文件：写入前先备份为 `<file>.mir3-backup`，再通过同目录
 /// 临时文件 + rename 原子替换；写失败时删除临时文件并回滚备份内容，
 /// 保证任何异常路径下用户原文件都不会被半写/被清空。
 #[cfg_attr(windows, allow(dead_code))]
 fn write_rc_with_backup(rc_path: &std::path::Path, new_content: &str) -> Result<(), String> {
     use std::fs;
 
-    let backup_path = rc_path.with_extension("dsh-backup");
+    let backup_path = rc_path.with_extension("mir3-backup");
     let had_original = rc_path.exists();
     if had_original {
         fs::copy(rc_path, &backup_path).map_err(|e| {
@@ -490,7 +496,7 @@ fn write_rc_with_backup(rc_path: &std::path::Path, new_content: &str) -> Result<
         })?;
     }
 
-    let tmp_path = rc_path.with_extension("dsh-rc-tmp");
+    let tmp_path = rc_path.with_extension("mir3-rc-tmp");
     fs::write(&tmp_path, new_content)
         .map_err(|e| format!("WRITE_RC_FAILED: write {} failed: {e}", tmp_path.display()))?;
     let rename_res = match fs::rename(&tmp_path, rc_path) {
@@ -543,12 +549,12 @@ mod tests {
     use super::*;
 
     const RC_BLOCK: &str =
-        "# >>> deepseek-harness dsh >>>\nexport PATH=\"$HOME/.local/bin:$PATH\"\n# <<< deepseek-harness dsh <<<\n";
+        "# >>> MIR3 Studio AI mir3 >>>\nexport PATH=\"$HOME/.local/bin:$PATH\"\n# <<< MIR3 Studio AI mir3 <<<\n";
 
     /// 独立的临时目录，避免测试间互相干扰
     fn temp_dir(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "dsh-rc-{tag}-{}-{}",
+            "mir3-rc-{tag}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -625,7 +631,7 @@ mod tests {
             "original\n# block\n"
         );
         assert_eq!(
-            std::fs::read_to_string(rc_path.with_extension("dsh-backup")).unwrap(),
+            std::fs::read_to_string(rc_path.with_extension("mir3-backup")).unwrap(),
             "original\n"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -638,7 +644,7 @@ mod tests {
         let rc_path = dir.join(".bashrc");
         write_rc_with_backup(&rc_path, "# block\n").unwrap();
         assert_eq!(std::fs::read_to_string(&rc_path).unwrap(), "# block\n");
-        assert!(!rc_path.with_extension("dsh-backup").exists());
+        assert!(!rc_path.with_extension("mir3-backup").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

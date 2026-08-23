@@ -1,18 +1,17 @@
-//! 命令行集成：安装后在用户 PATH 中注册 `dsh` / `pnpm` 命令。
+//! 命令行集成：安装后只在用户 PATH 中注册 `mir3` 命令。
 //!
-//! `dsh` 与捆绑的 `pnpm` 都是 Node 脚本（`lib/bin.js` / `bin/pnpm.cjs`），并非原生
-//! 可执行文件，因此生成包装脚本（shim）并注册到用户 PATH：
+//! MIR3 AI Core 与捆绑的 pnpm 都是 Node 脚本，因此由包装脚本启动：
 //!
-//! - Windows：`%LOCALAPPDATA%\deepseek-harness\bin\dsh.cmd` / `dsh.ps1` 与
-//!   `pnpm.cmd` / `pnpm.ps1`，通过 `HKCU\Environment\Path` 注册并广播
+//! - Windows：`%LOCALAPPDATA%\mir3-studio-ai\bin\mir3.cmd` / `mir3.ps1`，
+//!   通过 `HKCU\Environment\Path` 注册并广播
 //!   `WM_SETTINGCHANGE`；
-//! - macOS/Linux：`~/.local/bin/dsh` 与 `~/.local/bin/pnpm`，必要时向
+//! - macOS/Linux：`~/.local/bin/mir3`，必要时向
 //!   `~/.zshrc` / `~/.bashrc` 幂等更新 PATH 导出块（只动自身标记块、保留
 //!   用户其余配置；写入前备份临时文件 + rename，失败自动回滚）。
 //!
 //! shim 运行时优先使用本地版本兼容的 node（校验规则与
 //! [`crate::config::is_supported_node_version`] 一致），否则回退到捆绑运行时；
-//! `pnpm` shim 还额外优先转发用户自己安装的 pnpm（PATH 中排除本 shim 目录）。
+//! 插件安装使用的 pnpm shim 放在应用私有目录，仅对子进程 PATH 可见。
 //! shim 不重定向 stdin/stdout、不修改工作目录，保证交互式命令可用，
 //! 并透传全部参数与退出码。
 //!
@@ -26,4 +25,4 @@ mod path;
 mod shim;
 
 pub use core::{ensure, ensure_shims, get_status, remove, CliLinkStatus};
-pub use path::{find_user_pnpm, get_bin_dir};
+pub use path::{find_user_pnpm, get_bin_dir, get_internal_bin_dir};

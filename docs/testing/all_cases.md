@@ -10,18 +10,18 @@
 
 > 测试项：安装与首次启动（ITEM 01）
 > 风险：高
-> 覆盖：首次启动自动下载内置 Node 运行时与 Harness 内核；安装状态机（Initial→Installing→Running）；`install_dependencies` 返回 bool；重复触发；中断清理
+> 覆盖：首次启动自动下载内置 Node 运行时与 MIR3 AI Core；安装状态机（Initial→Installing→Running）；`install_dependencies` 返回 bool；重复触发；中断清理
 
-## [P1] 验证首次启动自动下载内置 Node 运行时与 Harness 内核
+## [P1] 验证首次启动自动下载内置 Node 运行时与 MIR3 AI Core
 [测试类型] 功能
-[前置条件] 全新安装环境，`%APPDATA%\io.github.hairyf.deepseek-harness-desktop` 下无 `runtime`、`dependencies`，且 `.store.dat` 不存在；网络可达 nodejs.org 与 github.com；Windows x64
-[测试步骤] 1. 删除 `%APPDATA%\io.github.hairyf.deepseek-harness-desktop` 下的 `runtime`、`dependencies` 目录与 `.store.dat` 文件，确认应用数据已被清空。2. 首次启动桌面端，进入「安装依赖」界面，等待状态机由 Initial 变为 Installing 并观察 install-progress 事件。3. 安装完成后执行 `runtime\node.exe --version`，并查看 `dependencies\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js` 是否存在。4. 读取本次 install_dependencies 的返回结果与 store 中 installed 字段
+[前置条件] 全新安装环境，`%APPDATA%\ai.mir3.studio` 下无 `runtime`、`dependencies`，且 `.store.dat` 不存在；网络可达 nodejs.org 与 github.com；Windows x64
+[测试步骤] 1. 删除 `%APPDATA%\ai.mir3.studio` 下的 `runtime`、`dependencies` 目录与 `.store.dat` 文件，确认应用数据已被清空。2. 首次启动桌面端，进入「安装依赖」界面，等待状态机由 Initial 变为 Installing 并观察 install-progress 事件。3. 安装完成后执行 `runtime\node.exe --version`，并查看 `dependencies\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js` 是否存在。4. 读取本次 install_dependencies 的返回结果与 store 中 installed 字段
 [预期结果] 1. 界面显示安装进度从 0% 递增，状态机由 Initial 变为 Installing，并持续推送 install-progress 事件。2. 安装进度百分比单调递增直至 100%，`runtime\node.exe` 已落盘。3. `runtime\node.exe --version` 输出 v22.22.0，`dependencies\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js` 与 `dependencies\pnpm\bin\pnpm.cjs` 均存在。4. install_dependencies 返回 true，store 中 installed 为 true
 
 ## [P1] 验证安装完成后状态机由 Installing 进入 Running
 [测试类型] 可靠性
 [前置条件] runtime 与 dependencies 三件套已完整安装；服务端口 3080 空闲；网络可用
-[测试步骤] 1. 在安装完成、install_dependencies 返回 true 后，点击「启动 Harness」调用 launch_harness。2. 等待服务启动，读取 get_dsh_status 并监听 dsh-status-updated 事件。3. 访问 `http://127.0.0.1:3080/healthz` 校验健康状态
+[测试步骤] 1. 在安装完成、install_dependencies 返回 true 后，点击「启动 MIR3 AI Core」调用 launch_harness。2. 等待服务启动，读取 get_dsh_status 并监听 dsh-status-updated 事件。3. 访问 `http://127.0.0.1:3080/healthz` 校验健康状态
 [预期结果] 1. 状态机由 Installing 变为 Starting 后再变为 Running，并推送 dsh-status-updated 事件。2. 服务进程存在且监听 127.0.0.1:3080，状态面板显示 Running。3. `http://127.0.0.1:3080/healthz` 返回成功（200），`proxy_health_check` 返回 healthy 与 body 前 80 字符
 
 ## [P2] 验证本机已有内核时跳过下载并复用本地文件
@@ -45,7 +45,7 @@
 ## [P3][反向] 验证安装被中断后清理干净且不破坏正式安装
 [测试类型] 稳定性
 [前置条件] 已存在一次完整安装（`dependencies\dsh` 可用）；随后触发一次真更新安装（新版 dsh 的 digest 可用）；网络可中途断流以制造中断
-[测试步骤] 1. 在解压阶段或切目录前强制结束桌面进程，制造中断。2. 重新启动桌面端，观察安装流程与 `dependencies` 下的残留目录。3. 检查 `%APPDATA%\io.github.hairyf.deepseek-harness-desktop\dependencies` 下是否存在 `.dsh.installing-*` 临时目录与 `.dsh.backup` 备份目录
+[测试步骤] 1. 在解压阶段或切目录前强制结束桌面进程，制造中断。2. 重新启动桌面端，观察安装流程与 `dependencies` 下的残留目录。3. 检查 `%APPDATA%\ai.mir3.studio\dependencies` 下是否存在 `.dsh.installing-*` 临时目录与 `.dsh.backup` 备份目录
 [预期结果] 1. 正式目录 `dependencies\dsh` 仍完整可用（未被清空或残留半成品），启动不受影响。2. 下次启动时 `.dsh.installing-*` 临时目录被清理（ensure_extract 开头 remove_path_if_exists(staging)）。3. 若 `.dsh.backup` 存在且正式目录缺失，则恢复旧版本（INSTALL_RECOVERY）；最终安装能正常完成并进入 Running
 
 
@@ -58,7 +58,7 @@
 ## [P1] 验证正常下载进度事件递增且到达 100%
 [测试类型] 功能
 [前置条件] 全新安装环境；网络可达 GitHub 官方直连；订阅 install-progress 事件并监听日志
-[测试步骤] 1. 删除 `%APPDATA%\io.github.hairyf.deepseek-harness-desktop` 下的 `runtime`、`dependencies` 与 `.store.dat`，启动桌面端进入安装。2. 订阅 install-progress 事件（或观察界面进度条），连续记录 type=download 阶段的百分比序列。3. 等待安装完成，记录最终百分比与 install-progress 事件总数
+[测试步骤] 1. 删除 `%APPDATA%\ai.mir3.studio` 下的 `runtime`、`dependencies` 与 `.store.dat`，启动桌面端进入安装。2. 订阅 install-progress 事件（或观察界面进度条），连续记录 type=download 阶段的百分比序列。3. 等待安装完成，记录最终百分比与 install-progress 事件总数
 [预期结果] 1. 下载阶段百分比从 0% 单调递增，事件实时推送（相邻事件间隔不超过 50ms 节流上限），type 为 download。2. 同一下载任务只产生一条 `Download <url>` 日志，进度阶段随 detail 更新而不重复写入同 URL 日志行。3. 最终 percentage 到达 100%，detail 为安装完成文案，日志出现 "All tasks completed"
 
 ## [P2] 验证官方直连失败时自动切换镜像兜底下载成功
@@ -69,8 +69,8 @@
 
 ## [P4] 验证下载进度 0-50、解压 50-100 两阶段
 [测试类型] 功能
-[前置条件] 仅 Harness 内核需要下载与解压（Node 运行时与 pnpm 已就绪被跳过）；订阅 install-progress 事件
-[测试步骤] 1. 触发 Harness 内核（index=1）的安装，订阅 install-progress 事件。2. 分别记录下载阶段（type=download）与解压阶段（type=extract）的百分比序列。3. 比对两阶段的百分比范围与整体进度是否单调递增且不超过 100%
+[前置条件] 仅 MIR3 AI Core需要下载与解压（Node 运行时与 pnpm 已就绪被跳过）；订阅 install-progress 事件
+[测试步骤] 1. 触发 MIR3 AI Core（index=1）的安装，订阅 install-progress 事件。2. 分别记录下载阶段（type=download）与解压阶段（type=extract）的百分比序列。3. 比对两阶段的百分比范围与整体进度是否单调递增且不超过 100%
 [预期结果] 1. 下载阶段百分比从 0 递增，且进入解压前不越过 50% 阈值。2. 解压阶段从约 50% 继续递增至 100%，两阶段百分比无重叠。3. 全程百分比单调递增且不超过 100%，末尾 detail 为安装完成文案
 
 ## [P3] 验证下载中网络中断提示并可重试
@@ -82,7 +82,7 @@
 ## [P3][反向] 验证解压失败提示且不产生残留安装
 [测试类型] 稳定性
 [前置条件] 已将 dsh 安装包字节破坏（如改坏 zip central directory）或使解压目标不可写；已装入 dsh 内核可作对照
-[测试步骤] 1. 把下载到的 dsh 安装包内容替换为内容损坏的 zip，或只读化 `%APPDATA%\io.github.hairyf.deepseek-harness-desktop\dependencies`。2. 触发安装，观察解压阶段的报错与 install_dependencies 返回。3. 解除限制后检查 `dependencies` 下的残留目录与安装结果
+[测试步骤] 1. 把下载到的 dsh 安装包内容替换为内容损坏的 zip，或只读化 `%APPDATA%\ai.mir3.studio\dependencies`。2. 触发安装，观察解压阶段的报错与 install_dependencies 返回。3. 解除限制后检查 `dependencies` 下的残留目录与安装结果
 [预期结果] 1. 解压阶段报错并提示（如 Invalid ZIP format 或 INSTALL_PATH_LOCKED），install_dependencies 以错误结束。2. `.dsh.installing-*` 临时目录被清理，`.dsh.backup` 不残留垃圾。3. 既有安装未被破坏，解除限制后重试可成功
 
 
@@ -94,14 +94,14 @@
 
 ## [P1] 验证本机已有兼容 Node v22.22.0 时复用不下载
 [测试类型] 兼容性
-[前置条件] 本机 PATH 中存在 node v22.22.0（`node --version` 输出 v22.22.0）；`%APPDATA%\io.github.hairyf.deepseek-harness-desktop\runtime` 不存在；网络可达
+[前置条件] 本机 PATH 中存在 node v22.22.0（`node --version` 输出 v22.22.0）；`%APPDATA%\ai.mir3.studio\runtime` 不存在；网络可达
 [测试步骤] 1. 在本机安装 Node v22.22.0 并加入 PATH，确认 `node --version` 输出 v22.22.0。2. 清空 `runtime` 目录后启动桌面端触发安装，观察日志与 `runtime` 目录变化。3. 安装完成后读取 get_active_node_version 并确认服务启动
 [预期结果] 1. 日志出现 "Detected compatible local Node.js (C:\...\node.exe), skipping bundled runtime"，Node 任务被跳过。2. `runtime` 目录未被创建，仅 dsh 与 pnpm 任务执行下载/解压。3. get_active_node_version 返回 22.22.0，服务正常启动进入 Running
 
 ## [P2] 验证本机 Node 版本过期时回退内置 Node
 [测试类型] 兼容性
 [前置条件] 本机 PATH 中存在 node v22.14.0（低于 v22.15.0 下限）；捆绑 `runtime\node.exe` 已是 v22.22.0；网络可达
-[测试步骤] 1. 在本机安装 Node v22.14.0 并加入 PATH，确认 `node --version` 输出 v22.14.0。2. 确保 `%APPDATA%\io.github.hairyf.deepseek-harness-desktop\runtime\node.exe` 位于 v22.22.0。3. 启动安装，观察 Node 任务是否走捆绑运行时（is_runtime_compatible 判定）与安装结果
+[测试步骤] 1. 在本机安装 Node v22.14.0 并加入 PATH，确认 `node --version` 输出 v22.14.0。2. 确保 `%APPDATA%\ai.mir3.studio\runtime\node.exe` 位于 v22.22.0。3. 启动安装，观察 Node 任务是否走捆绑运行时（is_runtime_compatible 判定）与安装结果
 [预期结果] 1. 本机 v22.14.0 不满足 v22.15.0 门槛，get_local_node_path 返回 None，不使用本机 node。2. 捆绑 `runtime\node.exe`（v22.22.0）被复用，Node 任务 check_installed 通过兼容判定、不重新下载。3. get_active_node_version 返回 22.22.0，安装成功并进入 Running
 
 ## [P2] 验证本机已有 pnpm 时优先用用户 pnpm
@@ -118,9 +118,9 @@
 
 ## [P4] 验证复用过程不修改系统 PATH/环境
 [测试类型] 安全性
-[前置条件] 本机已有兼容 node v22.22.0 与用户 pnpm 11.7.0；命令行集成开关 cli_link_enabled 为 false；`$DSH_HOME` 指向 `%USERPROFILE%\.dsh`
-[测试步骤] 1. 记录安装前 `$env:PATH` 完整值、用户级环境变量与 `%LOCALAPPDATA%\deepseek-harness\bin` 目录是否存在。2. 触发 install_dependencies 并等待完成。3. 安装后再读取 `$env:PATH`、用户级环境变量与 `bin` 目录
-[预期结果] 1. 安装后 `$env:PATH` 与安装前完全一致（未追加 `%LOCALAPPDATA%\deepseek-harness\bin`）。2. `%LOCALAPPDATA%\deepseek-harness\bin` 未因本次复用而新建或写入 shim（sync_cli_link 走 cli::remove）。3. 用户环境变量中未新增 `dsh` 相关 PATH 项，本机 node/pnpm 未被改写或重装
+[前置条件] 本机已有兼容 node v22.22.0 与用户 pnpm 11.7.0；命令行集成开关 cli_link_enabled 为 false；`$MIR3_STUDIO_HOME` 指向 `%USERPROFILE%\.mir3-studio-ai`
+[测试步骤] 1. 记录安装前 `$env:PATH` 完整值、用户级环境变量与 `%LOCALAPPDATA%\mir3-studio-ai\bin` 目录是否存在。2. 触发 install_dependencies 并等待完成。3. 安装后再读取 `$env:PATH`、用户级环境变量与 `bin` 目录
+[预期结果] 1. 安装后 `$env:PATH` 与安装前完全一致（未追加 `%LOCALAPPDATA%\mir3-studio-ai\bin`）。2. `%LOCALAPPDATA%\mir3-studio-ai\bin` 未因本次复用而新建或写入 shim（sync_cli_link 走 cli::remove）。3. 用户环境变量中未新增 `dsh` 相关 PATH 项，本机 node/pnpm 未被改写或重装
 
 
 ## 首次启动预设插件引导
@@ -139,7 +139,7 @@
 [测试类型] 功能
 [前置条件] 引导页勾选 `dshmarket` 与 `dsh-notification`；活动档案为默认 web；网络可达；dsh CLI 与 node 就绪
 [测试步骤] 1. 在引导页选中 `dshmarket`、`dsh-notification`，点击「安装」。2. 观察 preinstall-log 事件与后端实际执行命令。3. 等待安装完成，读取 store 中 preinstall_done 与 preset_hash
-[预期结果] 1. 后端执行 `dsh plugin --profile web add dshmarket git+https://github.com/omdsh-dev/dsh-notification.git`，日志显示 normalize_git_spec 后的实际 spec。2. preinstall-log 实时回流构建日志，成功日志显示 "[harness] 已安装 2 个插件"。3. 安装成功后 store 中 preinstall_done 置为 true，preset_hash 记录当前 preset-plugins.json 的 FNV-1a 指纹
+[预期结果] 1. 后端执行 `mir3 plugin --profile web add dshmarket git+https://github.com/omdsh-dev/dsh-notification.git`，日志显示 normalize_git_spec 后的实际 spec。2. preinstall-log 实时回流构建日志，成功日志显示 "[harness] 已安装 2 个插件"。3. 安装成功后 store 中 preinstall_done 置为 true，preset_hash 记录当前 preset-plugins.json 的 FNV-1a 指纹
 
 ## [P2] 验证跳过则记录 preinstall_done 完成不再弹出
 [测试类型] 功能
@@ -175,7 +175,7 @@
 ## [P1] 验证 GitHub 不可达时保留本地已装内核继续使用
 [测试类型] 可靠性
 [前置条件] 本地已装入 dsh 内核且记录与最新一致；阻断对 `api.github.com`、`github.com`、`release-assets.githubusercontent.com` 的访问；网络其余可达
-[测试步骤] 1. 阻断上述 GitHub 域名访问后启动桌面端，触发 install_dependencies。2. 观察日志、返回值与既有 `dependencies\dsh` 目录是否被改动。3. 启动 Harness 服务并访问 `http://127.0.0.1:3080/healthz`
+[测试步骤] 1. 阻断上述 GitHub 域名访问后启动桌面端，触发 install_dependencies。2. 观察日志、返回值与既有 `dependencies\dsh` 目录是否被改动。3. 启动 MIR3 AI Core 服务并访问 `http://127.0.0.1:3080/healthz`
 [预期结果] 1. 日志出现 "Failed to check latest dsh release info, keeping local install"，dsh_need_install 判定为 false。2. install_dependencies 返回 false，不重新下载/解压 dsh，既有内核文件保持不变。3. 服务正常进入 Running，`http://127.0.0.1:3080/healthz` 返回成功（200），本地内核继续使用
 
 ## [P3] 验证下载/校验/解压任一失败给出明确错误提示且不影响已有安装
@@ -205,7 +205,7 @@
 
 ---
 
-# Harness 核心管理
+# MIR3 AI Core管理
 
 ## 核心列表展示
 
@@ -387,8 +387,8 @@
 ## [P1] 验证服务使用当前激活档案启动而非固定写死 web
 [测试类型] 功能
 [前置条件] release 构建；已创建档案 beta 且目录存在；把激活档案切换为 beta；服务未运行；依赖已安装
-[测试步骤] 1. 在「档案」面板把激活档案切换为 beta，确认 set_active_profile 返回的 active 为 beta。2. 点击「启动」。3. 查看服务进程命令行与 $DSH_HOME/profiles 下的目录
-[预期结果] 1. 激活档案持久化为 beta。2. 状态进入 Starting 后转为 Running。3. 进程命令行含 --profile beta（而非 --profile web），服务以 $DSH_HOME/profiles/beta 为工作档案，dsh-web.log 无固定 web 关键字
+[测试步骤] 1. 在「档案」面板把激活档案切换为 beta，确认 set_active_profile 返回的 active 为 beta。2. 点击「启动」。3. 查看服务进程命令行与 $MIR3_STUDIO_HOME/profiles 下的目录
+[预期结果] 1. 激活档案持久化为 beta。2. 状态进入 Starting 后转为 Running。3. 进程命令行含 --profile beta（而非 --profile web），服务以 $MIR3_STUDIO_HOME/profiles/beta 为工作档案，dsh-web.log 无固定 web 关键字
 
 ## [P2] 验证服务使用当前活动核心的 bin.js 入口启动
 [测试类型] 功能
@@ -420,14 +420,14 @@
 ## [P1] 验证停止服务后状态进入 Stopped 且端口释放
 [测试类型] 功能
 [前置条件] 服务正在 Running（端口 3080）；依赖已安装
-[测试步骤] 1. 点击「停止」，触发 shutdown_harness。2. 观察状态变化。3. 检查 3080 端口监听与 .harness.pid 标记文件
-[预期结果] 1. 状态转为 Stopped 并推送 dsh-status-updated=Stopped。2. 停止约 800ms 后 3080 端口已释放（netstat 无 LISTENING）。3. .harness.pid 标记文件被删除，dsh 服务根进程已退出
+[测试步骤] 1. 点击「停止」，触发 shutdown_harness。2. 观察状态变化。3. 检查 3080 端口监听与 .mir3-core.pid 标记文件
+[预期结果] 1. 状态转为 Stopped 并推送 dsh-status-updated=Stopped。2. 停止约 800ms 后 3080 端口已释放（netstat 无 LISTENING）。3. .mir3-core.pid 标记文件被删除，dsh 服务根进程已退出
 
 ## [P1] 验证重启服务成功并重新进入 Running
 [测试类型] 功能
 [前置条件] 服务正在 Running（端口 3080）；依赖已安装
 [测试步骤] 1. 点击「重启」，触发 restart_harness。2. 观察状态流转与进程 PID 变化。3. 访问 http://127.0.0.1:3080/ 并调用 get_dsh_status
-[预期结果] 1. 状态先转 Stopped 再转 Starting，最终进入 Running。2. 旧的 dsh 服务进程树被结束，重建新的 dsh 服务进程（新 PID 写入新的 .harness.pid）。3. http://127.0.0.1:3080/ 返回 HTTP 200，get_dsh_status 返回 Running
+[预期结果] 1. 状态先转 Stopped 再转 Starting，最终进入 Running。2. 旧的 dsh 服务进程树被结束，重建新的 dsh 服务进程（新 PID 写入新的 .mir3-core.pid）。3. http://127.0.0.1:3080/ 返回 HTTP 200，get_dsh_status 返回 Running
 
 ## [P2] 验证停止时 Windows 杀掉整个进程树并释放 DLL 句柄
 [测试类型] 兼容性
@@ -439,13 +439,13 @@
 [测试类型] 功能
 [前置条件] 服务已停止（Stopped），3080 端口已释放；依赖已安装
 [测试步骤] 1. 再次点击「启动」。2. 观察状态变化。3. 检查服务进程命令行与端口
-[预期结果] 1. 状态由 Stopped 转为 Starting 后进入 Running。2. 新 dsh 进程以 --profile web --port 3080 拉起，创建新的 .harness.pid。3. http://127.0.0.1:3080/ 返回 HTTP 200
+[预期结果] 1. 状态由 Stopped 转为 Starting 后进入 Running。2. 新 dsh 进程以 --profile web --port 3080 拉起，创建新的 .mir3-core.pid。3. http://127.0.0.1:3080/ 返回 HTTP 200
 
 ## [P3][反向] 验证应用被强杀后残留孤儿进程可在下次启动前被清扫
 [测试类型] 功能
-[前置条件] 服务 Running（端口 3080）；依赖已安装；.harness.pid 记录当前 PID+端口
+[前置条件] 服务 Running（端口 3080）；依赖已安装；.mir3-core.pid 记录当前 PID+端口
 [测试步骤] 1. 用任务管理器强杀应用主进程（跳过退出清理），保留 dsh 子进程占用 3080。2. 重新启动应用。3. 观察启动前清扫与端口选择
-[预期结果] 1. 启动时 sweep_orphan_harness 依据 .harness.pid 的 PID+端口双重确认，识别并结束残留在 3080 的 dsh 进程树。2. 清理后服务仍以默认 3080 起步（端口未漂移到 3081），未提示 already running。3. 应用正常进入 Running，无孤儿 dsh 进程残留
+[预期结果] 1. 启动时 sweep_orphan_core 依据 .mir3-core.pid 的 PID+端口双重确认，识别并结束残留在 3080 的 dsh 进程树。2. 清理后服务仍以默认 3080 起步（端口未漂移到 3081），未提示 already running。3. 应用正常进入 Running，无孤儿 dsh 进程残留
 
 
 ## 状态流转与健康检查
@@ -466,7 +466,7 @@
 [测试类型] 功能
 [前置条件] 服务 Running（端口 3080）；健康检查每 1 秒轮询
 [测试步骤] 1. 用 taskkill /PID <dsh-pid> /T /F 强杀 dsh 服务进程树。2. 等待 2 秒（≥2 个轮询周期）。3. 检查 get_dsh_status、owned 进程判定与端口
-[预期结果] 1. watcher 线程记录日志 Owned Harness process <pid> exited with code <code>，OWNED_PROCESS_ID 清空。2. has_owned_process() 返回 false，健康检查不再将 http://127.0.0.1:3080/ 视为 Harness。3. http://127.0.0.1:3080/ 请求连接失败（连接拒绝），端口无监听
+[预期结果] 1. watcher 线程记录日志 Owned MIR3 AI Core process <pid> exited with code <code>，OWNED_PROCESS_ID 清空。2. has_owned_process() 返回 false，健康检查不再将 http://127.0.0.1:3080/ 视为 MIR3 AI Core。3. http://127.0.0.1:3080/ 请求连接失败（连接拒绝），端口无监听
 
 ## [P4] 验证健康检查按 1 秒周期轮询
 [测试类型] 功能
@@ -540,7 +540,7 @@
 
 ## [P1] 验证切换主题为暗色后界面配色实时更新
 [测试类型] 功能
-[前置条件] `$DSH_HOME/settings.yaml` 中 ui-theme.preference 为 light，界面当前为浅色
+[前置条件] `$MIR3_STUDIO_HOME/settings.yaml` 中 ui-theme.preference 为 light，界面当前为浅色
 [测试步骤] 1. 将 settings.yaml 中 ui-theme.preference 修改为 dark。2. 重启应用使主题偏好重新加载。3. 调用 get_dsh_theme 并观察界面
 [预期结果] 1. get_dsh_theme 返回 Dark。2. 界面配色由浅色实时更新为暗色。3. 触发 dsh-theme-updated 事件
 
@@ -552,7 +552,7 @@
 
 ## [P4][反向] 验证主题值为未知时回退默认
 [测试类型] 可靠性
-[前置条件] 将 `$DSH_HOME/settings.yaml` 中 ui-theme.preference 修改为非法值「blue」
+[前置条件] 将 `$MIR3_STUDIO_HOME/settings.yaml` 中 ui-theme.preference 修改为非法值「blue」
 [测试步骤] 1. 将 settings.yaml 中 ui-theme.preference 改为「blue」。2. 调用 get_dsh_theme 并观察界面
 [预期结果] 1. get_dsh_theme 返回 Dark（默认主题）。2. 界面以暗色显示，应用不崩溃
 
@@ -568,26 +568,26 @@
 ## [P2] 验证 auto_start 开启后启动应用自动拉起服务
 [测试类型] 功能
 [前置条件] 配置中 auto_start 设为 true 并已保存，服务当前为停止状态
-[测试步骤] 1. 退出应用后重新启动。2. 观察 Harness 服务是否自动启动
-[预期结果] 1. 应用启动后自动拉起 Harness 服务并从 Stopped 变为 Running。2. 服务监听配置端口，无需手动点击启动按钮
+[测试步骤] 1. 退出应用后重新启动。2. 观察 MIR3 AI Core 服务是否自动启动
+[预期结果] 1. 应用启动后自动拉起 MIR3 AI Core 服务并从 Stopped 变为 Running。2. 服务监听配置端口，无需手动点击启动按钮
 
 ## [P2] 验证 auto_start 关闭后启动应用不自动拉起服务
 [测试类型] 功能
 [前置条件] 配置中 auto_start 设为 false 并已保存，服务当前为停止状态
-[测试步骤] 1. 退出应用后重新启动。2. 观察 Harness 服务状态
+[测试步骤] 1. 退出应用后重新启动。2. 观察 MIR3 AI Core 服务状态
 [预期结果] 1. 应用启动后服务保持 Stopped，不自动拉起。2. 需手动点击「启动」按钮才能拉起服务
 
-## [P3] 验证启用 cli_link_enabled 后 dsh 命令链接生效
+## [P3] 验证启用 cli_link_enabled 后 mir3 命令链接生效
 [测试类型] 功能
-[前置条件] 配置中 cli_link_enabled 当前为 false，`dsh` 命令不可用
-[测试步骤] 1. 将 cli_link_enabled 设为 true 并保存。2. 打开新终端执行 dsh 命令。3. 检查状态
-[预期结果] 1. 保存后触发 cli::ensure，生成 shim 并注册 PATH。2. 命令行 `dsh` 命令可正常执行。3. store 中 cli_link_enabled 为 true
+[前置条件] 配置中 cli_link_enabled 当前为 false，`mir3` 命令不可用
+[测试步骤] 1. 将 cli_link_enabled 设为 true 并保存。2. 打开新终端执行 mir3 命令。3. 检查状态
+[预期结果] 1. 保存后触发 cli::ensure，生成 shim 并注册 PATH。2. 命令行 `mir3` 命令可正常执行。3. store 中 cli_link_enabled 为 true
 
-## [P3][反向] 验证停用 cli_link_enabled 后 dsh 命令链接失效
+## [P3][反向] 验证停用 cli_link_enabled 后 mir3 命令链接失效
 [测试类型] 功能
-[前置条件] 配置中 cli_link_enabled 当前为 true，`dsh` 命令可用
-[测试步骤] 1. 将 cli_link_enabled 设为 false 并保存。2. 打开新终端执行 dsh 命令。3. 检查 store 中 cli_link_enabled 值
-[预期结果] 1. 保存后触发 cli::remove，移除 shim 并注销 PATH。2. 命令行 `dsh` 命令不可用。3. store 中 cli_link_enabled 为 false
+[前置条件] 配置中 cli_link_enabled 当前为 true，`mir3` 命令可用
+[测试步骤] 1. 将 cli_link_enabled 设为 false 并保存。2. 打开新终端执行 mir3 命令。3. 检查 store 中 cli_link_enabled 值
+[预期结果] 1. 保存后触发 cli::remove，移除 shim 并注销 PATH。2. 命令行 `mir3` 命令不可用。3. store 中 cli_link_enabled 为 false
 
 
 ## 设置持久化
@@ -620,7 +620,7 @@
 [测试类型] 功能
 [前置条件] 服务为停止状态，当前端口为默认值 3080/3081
 [测试步骤] 1. 将端口修改为 3090 并保存。2. 启动服务。3. 访问 http://127.0.0.1:3090
-[预期结果] 1. 服务以 --port 3090 启动。2. 在 http://127.0.0.1:3090 可访问 Harness 界面。3. 原端口 3080 不再监听
+[预期结果] 1. 服务以 --port 3090 启动。2. 在 http://127.0.0.1:3090 可访问 MIR3 AI Core 界面。3. 原端口 3080 不再监听
 
 
 ---
@@ -629,7 +629,7 @@
 
 ## 档案列表与展示
 
-> 测试点：档案列表与展示（`get_profiles`）。档案 = `$DSH_HOME/profiles/<id>`，列表含 default/active 标记；默认档案 web 置顶、其余按 id 字典序稳定排序；未初始化或空目录时回退补一个 web 默认行。
+> 测试点：档案列表与展示（`get_profiles`）。档案 = `$MIR3_STUDIO_HOME/profiles/<id>`，列表含 default/active 标记；默认档案 web 置顶、其余按 id 字典序稳定排序；未初始化或空目录时回退补一个 web 默认行。
 
 ## [P1] 验证列表包含默认档案 web 并标记 default 与 active
 [测试类型] 功能
@@ -639,20 +639,20 @@
 
 ## [P2] 验证全新机器 profiles 未初始化时仍展示默认档案 web
 [测试类型] 功能
-[前置条件] 全新机器，$DSH_HOME/profiles 目录不存在或为空；store 中 active_profile 为默认值 web
+[前置条件] 全新机器，$MIR3_STUDIO_HOME/profiles 目录不存在或为空；store 中 active_profile 为默认值 web
 [测试步骤] 1. 调用 get_profiles 获取档案列表
 [预期结果] 1. 列表仍返回 id=web、name=Web、default=true、active=true 的默认档案，而非空列表
 
 ## [P2] 验证新建多个档案后均出现在列表且展示名去除 dsh-profile- 前缀
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 目录初始为空
+[前置条件] $MIR3_STUDIO_HOME/profiles 目录初始为空
 [测试步骤] 1. 调用 create_profile 分别创建 beta 与 gamma
 [预期结果] 1. 列表同时包含 id=beta（name=Beta）与 id=gamma（name=Gamma），展示名已去除 dsh-profile- 前缀并以首字母大写显示
 
 ## [P2] 验证档案目录无 package.json 时展示名回落为 id 首字母大写
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 下已存在 beta 目录但其中没有 package.json
-[测试步骤] 1. 在 $DSH_HOME/profiles 下手动创建 beta 目录且不写入 package.json。2. 调用 get_profiles 获取档案列表
+[前置条件] $MIR3_STUDIO_HOME/profiles 下已存在 beta 目录但其中没有 package.json
+[测试步骤] 1. 在 $MIR3_STUDIO_HOME/profiles 下手动创建 beta 目录且不写入 package.json。2. 调用 get_profiles 获取档案列表
 [预期结果] 1. beta 目录创建成功且不含 package.json。2. 列表 id=beta 的 name= Beta，即回落为原始 id 并首字母大写
 
 ## [P4] 验证默认档案 web 置顶且其余档案按 id 字典序稳定排序
@@ -668,37 +668,37 @@
 
 ## [P1] 验证合法名称创建档案成功并初始化官方形态文件
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 目录初始为空
+[前置条件] $MIR3_STUDIO_HOME/profiles 目录初始为空
 [测试步骤] 1. 调用 create_profile 传入名称 beta
-[预期结果] 1. 创建成功返回 id=beta、default=false、active=false；$DSH_HOME/profiles/beta 下生成 package.json、cordis.patch.yml、pnpm-workspace.yaml 三个文件，package.json 的 name 为 dsh-profile-beta、dsh.profile.bundles 含 @deepseek-ai/dsh-base 与 @deepseek-ai/dsh-web-app，.npmrc 含 confirmModulesPurge=false
+[预期结果] 1. 创建成功返回 id=beta、default=false、active=false；$MIR3_STUDIO_HOME/profiles/beta 下生成 package.json、cordis.patch.yml、pnpm-workspace.yaml 三个文件，package.json 的 name 为 dsh-profile-beta、dsh.profile.bundles 含 @deepseek-ai/dsh-base 与 @deepseek-ai/dsh-web-app，.npmrc 含 confirmModulesPurge=false
 
 ## [P2] 验证名称自动规范化为合法档案 id
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 目录初始为空
+[前置条件] $MIR3_STUDIO_HOME/profiles 目录初始为空
 [测试步骤] 1. 调用 create_profile 传入名称 My Work Space
-[预期结果] 1. 创建成功返回 id=my-work-space；档案目录为 $DSH_HOME/profiles/my-work-space，package.json 的 name 为 dsh-profile-my-work-space
+[预期结果] 1. 创建成功返回 id=my-work-space；档案目录为 $MIR3_STUDIO_HOME/profiles/my-work-space，package.json 的 name 为 dsh-profile-my-work-space
 
 ## [P2] 验证档案目录重复初始化幂等且不覆盖已有文件
 [测试类型] 可靠性
 [前置条件] 已存在档案 beta，且已由 create_profile 完成初始化
-[测试步骤] 1. 手工修改 beta/cordis.patch.yml 追加一行自定义补丁内容。2. 手工修改 beta/.npmrc 追加一行自定义配置 keep=true。3. 切换到 beta 并重启 Harness 服务，使服务启动对已存在档案按需 initProfile
+[测试步骤] 1. 手工修改 beta/cordis.patch.yml 追加一行自定义补丁内容。2. 手工修改 beta/.npmrc 追加一行自定义配置 keep=true。3. 切换到 beta 并重启 MIR3 AI Core 服务，使服务启动对已存在档案按需 initProfile
 [预期结果] 1. beta/cordis.patch.yml 仍保留自定义补丁内容，未被覆盖。2. beta/.npmrc 保留 keep=true 且 confirmModulesPurge=false 仅出现一次，无重复追加行。3. 服务正常启动，档案数据完整无误
 
 ## [P3][反向] 验证空名称与纯无效字符名称均被拒绝
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 目录初始为空
+[前置条件] $MIR3_STUDIO_HOME/profiles 目录初始为空
 [测试步骤] 1. 调用 create_profile 传入空字符串。2. 调用 create_profile 传入纯中文名称 中文档案
 [预期结果] 1. 返回 PROFILE_EMPTY_NAME，未创建任何档案目录。2. 返回 PROFILE_INVALID_NAME，未创建任何档案目录
 
 ## [P3][反向] 验证名称规范化后长度超过 64 字符被拒绝
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 目录初始为空
+[前置条件] $MIR3_STUDIO_HOME/profiles 目录初始为空
 [测试步骤] 1. 调用 create_profile 传入由 65 个小写字母 a 组成的名称 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa（规范化后仍为 65 个字符）
 [预期结果] 1. 返回 PROFILE_NAME_TOO_LONG，未创建任何档案目录
 
 ## [P3][反向] 验证保留名称 web 与已存在名称均被拒绝
 [测试类型] 功能
-[前置条件] $DSH_HOME/profiles 目录初始为空
+[前置条件] $MIR3_STUDIO_HOME/profiles 目录初始为空
 [测试步骤] 1. 调用 create_profile 传入名称 web。2. 调用 create_profile 传入名称 beta，随后再次调用 create_profile 传入名称 beta
 [预期结果] 1. 返回 PROFILE_RESERVED，未创建任何档案目录。2. 第一次创建 beta 成功；第二次创建 beta 返回 PROFILE_EXISTS，已存在 beta 目录内容不受影响
 
@@ -716,7 +716,7 @@
 ## [P1] 验证切换后重启服务使用新档案作为 profile
 [测试类型] 功能
 [前置条件] 当前档案为 web；已存在档案 beta
-[测试步骤] 1. 调用 set_active_profile 传入 beta。2. 重启 Harness 服务
+[测试步骤] 1. 调用 set_active_profile 传入 beta。2. 重启 MIR3 AI Core 服务
 [预期结果] 1. 切换成功，store 中 active_profile=beta。2. 服务以 dsh --profile beta 启动，服务进程参数与运行状态均基于 beta 档案
 
 ## [P2] 验证切换回默认档案 web 成功
@@ -733,7 +733,7 @@
 
 ## [P3][反向] 验证切换到不存在的档案被拒绝
 [测试类型] 功能
-[前置条件] 当前档案为 web；$DSH_HOME/profiles 下不存在 notexist
+[前置条件] 当前档案为 web；$MIR3_STUDIO_HOME/profiles 下不存在 notexist
 [测试步骤] 1. 调用 set_active_profile 传入 notexist
 [预期结果] 1. 返回 PROFILE_NOT_FOUND，store 中 active_profile 保持原值 web，不发生任何变更
 
@@ -746,7 +746,7 @@
 [测试类型] 功能
 [前置条件] 当前档案为 web；已存在档案 beta 与 gamma
 [测试步骤] 1. 调用 remove_profile 传入 beta
-[预期结果] 1. 调用成功未报错；$DSH_HOME/profiles/beta 目录被完整移除，磁盘上不再存在该目录
+[预期结果] 1. 调用成功未报错；$MIR3_STUDIO_HOME/profiles/beta 目录被完整移除，磁盘上不再存在该目录
 
 ## [P2] 验证删除后列表不再显示该档案
 [测试类型] 功能
@@ -758,17 +758,17 @@
 [测试类型] 功能
 [前置条件] 当前档案为 web
 [测试步骤] 1. 调用 remove_profile 传入 web
-[预期结果] 1. 返回 PROFILE_DEFAULT_NOT_REMOVABLE；$DSH_HOME/profiles/web 目录仍存在，未被删除
+[预期结果] 1. 返回 PROFILE_DEFAULT_NOT_REMOVABLE；$MIR3_STUDIO_HOME/profiles/web 目录仍存在，未被删除
 
 ## [P3][反向] 验证删除当前使用中的档案被拒绝
 [测试类型] 功能
 [前置条件] 当前档案为 beta；已存在档案 beta 与 gamma
 [测试步骤] 1. 调用 remove_profile 传入 beta
-[预期结果] 1. 返回 PROFILE_ACTIVE_NOT_REMOVABLE；$DSH_HOME/profiles/beta 目录仍存在，未被删除
+[预期结果] 1. 返回 PROFILE_ACTIVE_NOT_REMOVABLE；$MIR3_STUDIO_HOME/profiles/beta 目录仍存在，未被删除
 
 ## [P3][反向] 验证删除不存在的档案报 PROFILE_NOT_FOUND
 [测试类型] 功能
-[前置条件] 当前档案为 web；$DSH_HOME/profiles 下不存在 notexist
+[前置条件] 当前档案为 web；$MIR3_STUDIO_HOME/profiles 下不存在 notexist
 [测试步骤] 1. 调用 remove_profile 传入 notexist
 [预期结果] 1. 返回 PROFILE_NOT_FOUND，未发生任何删除操作
 
@@ -792,7 +792,7 @@
 ## [P1] 验证切换档案后服务以新档案启动且旧档案数据完整保留
 [测试类型] 功能
 [前置条件] 当前档案为 web；已存在档案 beta，beta 已安装插件并写入自定义设置
-[测试步骤] 1. 记录 beta 现有插件清单与设置内容。2. 调用 set_active_profile 传入 beta 并重启 Harness 服务。3. 核对服务进程参数与 beta 的数据完整性
+[测试步骤] 1. 记录 beta 现有插件清单与设置内容。2. 调用 set_active_profile 传入 beta 并重启 MIR3 AI Core 服务。3. 核对服务进程参数与 beta 的数据完整性
 [预期结果] 1. 已记录 beta 的插件清单与设置。2. 服务以 dsh --profile beta 启动并正常运行。3. beta 的插件与设置完整保留并作为当前档案生效，同时 web 档案数据未受影响
 
 ## [P2] 验证对档案 A 的修改不影响档案 B
@@ -819,20 +819,20 @@
 [测试类型] 功能
 [前置条件] 桌面应用已启动；当前档案为 web；profile 已安装 dshmarket、dsh-tauri 两个插件
 [测试步骤] 1. 打开「插件管理」页面，调用 get_dsh_plugins 读取已安装插件列表。2. 检查列表是否存在新增或重命名插件名的编辑入口。3. 核对列表项数量与 profile 直接依赖是否一致
-[预期结果] 1. 列表只读展示 dshmarket、dsh-tauri 两项。2. 列表无新增或重命名插件的编辑控件，仅提供升级、卸载、打开仓库操作。3. 列表项与 $DSH_HOME/profiles/web/package.json 的 dependencies 直接依赖一致，不展示 node_modules 中的传递依赖（如 clsx、zod）
+[预期结果] 1. 列表只读展示 dshmarket、dsh-tauri 两项。2. 列表无新增或重命名插件的编辑控件，仅提供升级、卸载、打开仓库操作。3. 列表项与 $MIR3_STUDIO_HOME/profiles/web/package.json 的 dependencies 直接依赖一致，不展示 node_modules 中的传递依赖（如 clsx、zod）
 
 ## [P1] 验证列表展示插件名与版本等关键信息
 
 [测试类型] 功能
 [前置条件] 已安装 dshmarket（版本 1.13.1）与 dsh-tauri；dshmarket 位于 dsh.profile.bundles 列表
 [测试步骤] 1. 打开插件管理页，查看 dshmarket、dsh-tauri 两项的展示信息。2. 检查 dshmarket 的推荐标记与启动加载状态。3. 核对 dshmarket 版本号与 node_modules/dshmarket/package.json 的 version 字段
-[预期结果] 1. 两项均展示插件名与版本号，dshmarket 展示为「DSH Market」且版本为 1.13.1。2. dshmarket 显示推荐标记（绿色 chip）且 bundled 为 true。3. dshmarket 版本与 $DSH_HOME/profiles/web/node_modules/dshmarket/package.json 的 version 字段（1.13.1）一致
+[预期结果] 1. 两项均展示插件名与版本号，dshmarket 展示为「DSH Market」且版本为 1.13.1。2. dshmarket 显示推荐标记（绿色 chip）且 bundled 为 true。3. dshmarket 版本与 $MIR3_STUDIO_HOME/profiles/web/node_modules/dshmarket/package.json 的 version 字段（1.13.1）一致
 
 ## [P2] 验证插件文件变化后轮询检测并推送 dsh-plugins-updated 事件
 
 [测试类型] 功能
 [前置条件] 桌面应用运行中；插件管理页已打开；当前仅安装 dshmarket
-[测试步骤] 1. 记录当前列表，并监听 dsh-plugins-updated 事件。2. 在 $DSH_HOME/profiles/web/package.json 的 dependencies 中新增 dsh-tauri（模拟外部安装并写盘）。3. 等待 2 秒防抖窗口与下一次秒级轮询
+[测试步骤] 1. 记录当前列表，并监听 dsh-plugins-updated 事件。2. 在 $MIR3_STUDIO_HOME/profiles/web/package.json 的 dependencies 中新增 dsh-tauri（模拟外部安装并写盘）。3. 等待 2 秒防抖窗口与下一次秒级轮询
 [预期结果] 1. 列表当前展示 dshmarket 项，事件监听就绪。2. 指纹变化被检测到，dsh-plugins-updated 事件被推送一次，列表新增 dsh-tauri 项。3. 防抖窗口内连续写盘只推送一次最终状态，界面无事件风暴
 
 ## [P2] 验证插件被移除后列表能反应
@@ -940,7 +940,7 @@
 [测试类型] 功能
 [前置条件] 当前档案为 web；引导中已勾选 dshmarket 与 dsh-better-sidebar
 [测试步骤] 1. 在引导勾选插件并点击安装。2. 监控 dsh 子进程实际命令行与工作目录。3. 核对安装落点
-[预期结果] 1. 实际执行 `dsh plugin --profile web add dshmarket`（github: 简写已规范为显式 git+https 形式）。2. 子进程工作目录为 profile 相关安装目录，profile 被正确初始化。3. $DSH_HOME/profiles/web/package.json 出现 dshmarket 与 dsh-better-sidebar（dependencies 与 bundles），无需用户手动创建 profile
+[预期结果] 1. 实际执行 `mir3 plugin --profile web add dshmarket`（github: 简写已规范为显式 git+https 形式）。2. 子进程工作目录为 profile 相关安装目录，profile 被正确初始化。3. $MIR3_STUDIO_HOME/profiles/web/package.json 出现 dshmarket 与 dsh-better-sidebar（dependencies 与 bundles），无需用户手动创建 profile
 
 ## [P2] 验证跳过引导后记录完成不再弹出
 
@@ -975,58 +975,58 @@
 
 # 命令行集成
 
-## dsh命令链接状态
+## mir3 命令链接状态
 
 ## [P1] 验证安装完成后命令行集成状态为已链接
 [测试类型] 功能
 [前置条件] release 构建；内置 Node、dsh、pnpm 均已安装成功；`cli_link_enabled` 开关处于开启状态（默认 true）；安装完成后已重新打开终端
-[测试步骤] 1. 打开桌面端「设置」页，调用 `get_cli_link_status` 查询命令行集成状态。2. 在系统终端执行 `dsh --version`。
-[预期结果] 1. `get_cli_link_status` 返回 `enabled: true`、`shim_exists: true`、`path_registered: true`、`user_dsh_preserved: false`，`bin_dir` 为 `%LOCALAPPDATA%\deepseek-harness\bin`、`shim_path` 为 `%LOCALAPPDATA%\deepseek-harness\bin\dsh.cmd`。2. 终端输出 dsh 版本号（如 `0.1.0`），命令退出码为 0，确认 `dsh` 命令已在 PATH 注册并可用。
+[测试步骤] 1. 打开桌面端「设置」页，调用 `get_cli_link_status` 查询命令行集成状态。2. 在系统终端执行 `mir3 --version`。
+[预期结果] 1. `get_cli_link_status` 返回 `enabled: true`、`shim_exists: true`、`path_registered: true`、`user_core_preserved: false`，`bin_dir` 为 `%LOCALAPPDATA%\mir3-studio-ai\bin`、`shim_path` 为 `%LOCALAPPDATA%\mir3-studio-ai\bin\mir3.cmd`。2. 终端输出 dsh 版本号（如 `0.1.0`），命令退出码为 0，确认 `mir3` 命令已在 PATH 注册并可用。
 
 ## [P2] 验证关闭命令行集成后链接状态为未启用
 [测试类型] 功能
 [前置条件] release 构建；已完成安装且命令行集成为已链接状态（`get_cli_link_status` 返回 `enabled: true`）
-[测试步骤] 1. 在「设置」页将「命令行集成」开关关闭，使 `cli_link_enabled` 置为 false。2. 调用 `get_cli_link_status` 查询链接状态，并重新打开系统终端执行 `dsh --version`。
-[预期结果] 1. `get_cli_link_status` 返回 `enabled: false`、`shim_exists: false`、`path_registered: false`（shim 文件已删除、PATH 条目已移除）。2. 重新打开的系统终端执行 `dsh` 提示「'dsh' 不是内部或外部命令，也不是可运行的程序或批处理文件」、退出码为 1，确认命令已不再可用。
+[测试步骤] 1. 在「设置」页将「命令行集成」开关关闭，使 `cli_link_enabled` 置为 false。2. 调用 `get_cli_link_status` 查询链接状态，并重新打开系统终端执行 `mir3 --version`。
+[预期结果] 1. `get_cli_link_status` 返回 `enabled: false`、`shim_exists: false`、`path_registered: false`（shim 文件已删除、PATH 条目已移除）。2. 重新打开的系统终端执行 `mir3` 提示「'mir3' 不是内部或外部命令，也不是可运行的程序或批处理文件」、退出码为 1，确认命令已不再可用。
 
 ## [P2] 验证重新开启命令行集成后重新注册并恢复可用
 [测试类型] 功能
 [前置条件] release 构建；上一操作已将 `cli_link_enabled` 置为 false；内置 Node、dsh、pnpm 均已安装成功
-[测试步骤] 1. 在「设置」页重新开启「命令行集成」开关，使 `cli_link_enabled` 置为 true。2. 调用 `get_cli_link_status` 查询链接状态。3. 重新打开系统终端执行 `dsh --version`。
-[预期结果] 1. `get_cli_link_status` 返回 `enabled: true`、`shim_exists: true`、`path_registered: true`。2. `%LOCALAPPDATA%\deepseek-harness\bin\dsh.cmd` 与 `dsh.ps1` 已重新生成。3. 终端输出 dsh 版本号、退出码为 0，`dsh` 命令恢复可用。
+[测试步骤] 1. 在「设置」页重新开启「命令行集成」开关，使 `cli_link_enabled` 置为 true。2. 调用 `get_cli_link_status` 查询链接状态。3. 重新打开系统终端执行 `mir3 --version`。
+[预期结果] 1. `get_cli_link_status` 返回 `enabled: true`、`shim_exists: true`、`path_registered: true`。2. `%LOCALAPPDATA%\mir3-studio-ai\bin\mir3.cmd` 与 `mir3.ps1` 已重新生成。3. 终端输出 dsh 版本号、退出码为 0，`mir3` 命令恢复可用。
 
 ## [P3] 验证安装过程未完成时命令行集成状态正确反映
 [测试类型] 功能
 [前置条件] release 构建；桌面端处于安装过程中（内置 Node/dsh/pnpm 尚未全部安装成功）；`cli_link_enabled` 开关处于开启状态（true）
-[测试步骤] 1. 在网络异常导致安装中断（安装进度未到 100%）时调用 `get_cli_link_status` 查询链接状态。2. 在系统终端执行 `dsh`。
-[预期结果] 1. `get_cli_link_status` 正常返回且不抛错，`enabled` 为 true、`path_registered` 为 false（安装未完成、PATH 未注册），`shim_exists`、`user_dsh_preserved` 返回当前真实值。2. 因运行时尚未安装完成，终端输出「[dsh] Node.js runtime not found. Please run MIR3 Studio AI to install it first.」、退出码为 1，而非静默成功或崩溃。
+[测试步骤] 1. 在网络异常导致安装中断（安装进度未到 100%）时调用 `get_cli_link_status` 查询链接状态。2. 在系统终端执行 `mir3`。
+[预期结果] 1. `get_cli_link_status` 正常返回且不抛错，`enabled` 为 true、`path_registered` 为 false（安装未完成、PATH 未注册），`shim_exists`、`user_core_preserved` 返回当前真实值。2. 因运行时尚未安装完成，终端输出「[mir3] Node.js runtime not found. Please run MIR3 Studio AI to install it first.」、退出码为 1，而非静默成功或崩溃。
 
 
 ## PATH注册与shim
 
-## [P1] 验证安装后在各平台生成dsh shim并注册PATH
+## [P1] 验证安装后在各平台生成mir3 shim并注册PATH
 [测试类型] 功能
 [前置条件] release 构建；分别准备好 Windows 与 macOS/Linux 测试环境；两平台安装均已完成且 `cli_link_enabled` 为 true
-[测试步骤] 1. Windows 平台检查 `%LOCALAPPDATA%\deepseek-harness\bin` 目录及注册表 `HKCU\Environment\Path`。2. Unix 平台检查 `~/.local/bin` 目录及 `~/.zshrc`/`~/.bashrc` 中的注入块。3. 两平台均重新打开终端执行 `dsh --version`。
-[预期结果] 1. Windows：`dsh.cmd` 与 `dsh.ps1` 已生成，`HKCU\Environment\Path` 已追加 `%LOCALAPPDATA%\deepseek-harness\bin`。2. Unix：`~/.local/bin/dsh` shim 已生成且权限为 `-rwxr-xr-x`，rc 文件已写入 `# >>> deepseek-harness dsh >>>` 开头、`# <<< deepseek-harness dsh <<<` 结尾的注入块。3. 两平台终端均输出 dsh 版本号、退出码为 0。
+[测试步骤] 1. Windows 平台检查 `%LOCALAPPDATA%\mir3-studio-ai\bin` 目录及注册表 `HKCU\Environment\Path`。2. Unix 平台检查 `~/.local/bin` 目录及 `~/.zshrc`/`~/.bashrc` 中的注入块。3. 两平台均重新打开终端执行 `mir3 --version`。
+[预期结果] 1. Windows：`mir3.cmd` 与 `mir3.ps1` 已生成，`HKCU\Environment\Path` 已追加 `%LOCALAPPDATA%\mir3-studio-ai\bin`。2. Unix：`~/.local/bin/mir3` shim 已生成且权限为 `-rwxr-xr-x`，rc 文件已写入 `# >>> MIR3 Studio AI mir3 >>>` 开头、`# <<< MIR3 Studio AI mir3 <<<` 结尾的注入块。3. 两平台终端均输出 dsh 版本号、退出码为 0。
 
 ## [P4] 验证shim文本为纯英文且路径转义正确
 [测试类型] 兼容性
 [前置条件] release 构建；应用数据目录含特殊字符（Windows 用户名含 `%`，如 `C:\Users\100%test\...`；Unix 用户名含 `'`，如 `/home/o'brien/...`）
-[测试步骤] 1. 读取 `dsh.cmd`，检查 `set "APP_DIR=..."`、`set "DSH_HOME=..."` 行的 `%` 转义。2. 读取 `dsh.ps1`，检查 `$appDir = '...'`、`$dshHome = '...'` 行的 `'` 转义。3. 读取 Unix `dsh` shim，检查 `APP_DIR='...'` 行的 `'` 转义。4. 检查三个 shim 文件全文是否只含 ASCII 字符，并新开终端执行 `dsh --version`。
-[预期结果] 1. `dsh.cmd` 中含 `%` 的目录已写成 `%%`（如 `set "APP_DIR=C:\Users\100%%test\..."`），不存在未转义的单独 `%`。2. `dsh.ps1` 中含 `'` 的目录已写成 `''`（如 `$appDir = 'C:\Users\o''brien\...'`）。3. Unix `dsh` shim 中含 `'` 的目录已写成 `'\''`（如 `APP_DIR='/home/o'\''brien/...'`）。4. 三文件全文不含中文或非 ASCII 字符、可由英文代码页正确解析，`dsh --version` 输出版本号无乱码、退出码为 0。
+[测试步骤] 1. 读取 `mir3.cmd`，检查 `set "APP_DIR=..."`、`set "DSH_HOME=..."` 行的 `%` 转义。2. 读取 `mir3.ps1`，检查 `$appDir = '...'`、`$dshHome = '...'` 行的 `'` 转义。3. 读取 Unix `mir3` shim，检查 `APP_DIR='...'` 行的 `'` 转义。4. 检查三个 shim 文件全文是否只含 ASCII 字符，并新开终端执行 `mir3 --version`。
+[预期结果] 1. `mir3.cmd` 中含 `%` 的目录已写成 `%%`（如 `set "APP_DIR=C:\Users\100%%test\..."`），不存在未转义的单独 `%`。2. `mir3.ps1` 中含 `'` 的目录已写成 `''`（如 `$appDir = 'C:\Users\o''brien\...'`）。3. Unix `mir3` shim 中含 `'` 的目录已写成 `'\''`（如 `APP_DIR='/home/o'\''brien/...'`）。4. 三文件全文不含中文或非 ASCII 字符、可由英文代码页正确解析，`mir3 --version` 输出版本号无乱码、退出码为 0。
 
 ## [P2] 验证shim优先使用本机兼容Node并在不兼容时回退内置Node
 [测试类型] 功能
 [前置条件] release 构建；本机 PATH 前置 Node v22.22.0；内置 Node 已随应用安装至运行时目录；`cli_link_enabled` 为 true
-[测试步骤] 1. 在 PATH 前置本机 Node 目录后新开终端执行 `dsh --version`。2. 将本机 Node 切换为不兼容版本 v21.7.0（PATH 中仅有 v21.7.0）后新开终端执行 `dsh --version`。
-[预期结果] 1. shim 解析到本机 `node`（v22.22.0 满足 v22.15+ 条件），`dsh --version` 输出版本号、退出码为 0。2. 本机 Node v21.7.0 不满足兼容条件，shim 回退使用内置 `%APP_DIR%\runtime\node.exe`，`dsh --version` 仍输出版本号、退出码为 0。
+[测试步骤] 1. 在 PATH 前置本机 Node 目录后新开终端执行 `mir3 --version`。2. 将本机 Node 切换为不兼容版本 v21.7.0（PATH 中仅有 v21.7.0）后新开终端执行 `mir3 --version`。
+[预期结果] 1. shim 解析到本机 `node`（v22.22.0 满足 v22.15+ 条件），`mir3 --version` 输出版本号、退出码为 0。2. 本机 Node v21.7.0 不满足兼容条件，shim 回退使用内置 `%APP_DIR%\runtime\node.exe`，`mir3 --version` 仍输出版本号、退出码为 0。
 
 ## [P2] 验证用户已安装pnpm时pnpm shim优先转发用户pnpm
 [测试类型] 功能
 [前置条件] release 构建；用户自行安装的 pnpm 已在 PATH 中（如 `C:\Program Files\nodejs\pnpm.cmd` 的版本为 v9.15.0）；捆绑 pnpm 已随应用安装至 `dependencies/pnpm/bin/pnpm.cjs`
 [测试步骤] 1. 新开终端执行 `pnpm --version`。2. 确认 shim 未覆盖用户 pnpm，执行 `pnpm --version` 前后用户 pnpm 的全局配置目录保持不变。
-[预期结果] 1. `pnpm --version` 输出用户 pnpm 的版本号 v9.15.0、退出码为 0，而非捆绑 `dependencies/pnpm/bin/pnpm.cjs` 的版本。2. pnpm shim 转发到用户 pnpm（`where pnpm` 命中用户路径、排除 `%LOCALAPPDATA%\deepseek-harness\bin`），用户 pnpm 配置与环境未变。
+[预期结果] 1. `pnpm --version` 输出用户 pnpm 的版本号 v9.15.0、退出码为 0，而非捆绑 `dependencies/pnpm/bin/pnpm.cjs` 的版本。2. pnpm shim 转发到用户 pnpm（`where pnpm` 命中用户路径、排除 `%LOCALAPPDATA%\mir3-studio-ai\bin`），用户 pnpm 配置与环境未变。
 
 ## [P3] 验证本机已有pnpm或内置pnpm已安装时跳过捆绑安装
 [测试类型] 兼容性
@@ -1044,13 +1044,13 @@
 ## [P1] 验证 release 构建默认服务端口为 3080
 [测试类型] 功能
 [前置条件] 已安装 release 构建桌面端并完成首次安装；本机 3080 与 3081 端口均未被占用
-[测试步骤] 1. 以 release 构建启动桌面端，等待 Harness 服务状态进入 Running。2. 在终端执行 `netstat -ano | findstr :3080` 查看监听端口
+[测试步骤] 1. 以 release 构建启动桌面端，等待 MIR3 AI Core 服务状态进入 Running。2. 在终端执行 `netstat -ano | findstr :3080` 查看监听端口
 [预期结果] 1. 服务状态为 Running，界面服务 URL 为 `http://127.0.0.1:3080`。2. 存在监听地址为 `127.0.0.1:3080` 且状态为 LISTENING 的 node.exe 进程
 
 ## [P1] 验证 debug 构建默认服务端口为 3081
 [测试类型] 功能
 [前置条件] 以 `pnpm tauri dev` 启动的 debug 构建已安装并完成首次启动；本机 3080 与 3081 端口均未被占用
-[测试步骤] 1. 以 debug 构建启动桌面端，等待 Harness 服务状态进入 Running。2. 在终端执行 `netstat -ano | findstr :3081` 查看监听端口
+[测试步骤] 1. 以 debug 构建启动桌面端，等待 MIR3 AI Core 服务状态进入 Running。2. 在终端执行 `netstat -ano | findstr :3081` 查看监听端口
 [预期结果] 1. 服务状态为 Running，界面服务 URL 为 `http://127.0.0.1:3081`。2. 存在监听地址为 `127.0.0.1:3081` 且状态为 LISTENING 的 node.exe 进程
 
 ## [P1] 验证已安装版与开发版同时运行时端口不冲突
@@ -1068,35 +1068,35 @@
 
 ## 数据目录隔离
 
-## [P1] 验证 release 构建数据目录为 ~/.dsh 且 store 使用 .store.dat
+## [P1] 验证 release 构建数据目录为 ~/.mir3-studio-ai 且 store 使用 .store.dat
 [测试类型] 功能
 [前置条件] release 构建已安装并首次启动成功；Windows 用户主目录为 `C:\Users\<username>`
-[测试步骤] 1. 以 release 构建启动桌面端，等待 Harness 服务进入 Running。2. 打开设置/运行时信息面板，查看 `data_dir` 字段。3. 在应用数据目录（AppData）下确认 store 文件名
-[预期结果] 1. 服务状态为 Running。2. `data_dir` 为 `C:\Users\<username>\.dsh`。3. 应用数据目录中存在 store 文件 `.store.dat`
+[测试步骤] 1. 以 release 构建启动桌面端，等待 MIR3 AI Core 服务进入 Running。2. 打开设置/运行时信息面板，查看 `data_dir` 字段。3. 在应用数据目录（AppData）下确认 store 文件名
+[预期结果] 1. 服务状态为 Running。2. `data_dir` 为 `C:\Users\<username>\.mir3-studio-ai`。3. 应用数据目录中存在 store 文件 `.store.dat`
 
-## [P1] 验证 debug 构建数据目录为 ~/.dsh.dev 且 store 使用 .store.dev.dat
+## [P1] 验证 debug 构建数据目录为 ~/.mir3-studio-ai.dev 且 store 使用 .store.dev.dat
 [测试类型] 功能
 [前置条件] debug 构建（`pnpm tauri dev`）已安装并首次启动成功；Windows 用户主目录为 `C:\Users\<username>`
-[测试步骤] 1. 以 debug 构建启动桌面端，等待 Harness 服务进入 Running。2. 打开设置/运行时信息面板，查看 `data_dir` 字段。3. 在应用数据目录（AppData）下确认 store 文件名
-[预期结果] 1. 服务状态为 Running。2. `data_dir` 为 `C:\Users\<username>\.dsh.dev`。3. 应用数据目录中存在 store 文件 `.store.dev.dat`
+[测试步骤] 1. 以 debug 构建启动桌面端，等待 MIR3 AI Core 服务进入 Running。2. 打开设置/运行时信息面板，查看 `data_dir` 字段。3. 在应用数据目录（AppData）下确认 store 文件名
+[预期结果] 1. 服务状态为 Running。2. `data_dir` 为 `C:\Users\<username>\.mir3-studio-ai.dev`。3. 应用数据目录中存在 store 文件 `.store.dev.dat`
 
-## [P2] 验证 debug 构建不迁移旧数据、不注册 PATH、不改写 dsh shim
+## [P2] 验证新产品不访问其他应用数据
 [测试类型] 兼容性
-[前置条件] release 版存在旧版数据目录 `应用数据目录\data\dsh`；release 已注册 `dsh` 命令到用户 PATH 并生成 dsh shim；debug 构建可启动
-[测试步骤] 1. 以 debug 构建启动并完成安装，等待服务进入 Running。2. 检查 `应用数据目录\data\dsh` 目录是否存在且内容未变。3. 检查用户 PATH 中 `deepseek-harness\bin` 条目与 `dsh` shim 文件内容
-[预期结果] 1. 启动成功，debug 数据目录为独立 `C:\Users\<username>\.dsh.dev`。2. `应用数据目录\data\dsh` 仍存在，内容未被删除或移动（旧数据迁移为 no-op）。3. 用户 PATH 未新增/删除 `deepseek-harness\bin` 条目，`dsh` shim 内容仍指向 `~/.dsh`（未被改写为 `~/.dsh.dev`），仅 pnpm shim 被写入或保留
+[前置条件] 用户目录和 AppData 中存在其他应用的哨兵目录；debug 构建可启动
+[测试步骤] 1. 以 debug 构建启动并完成安装，等待服务进入 Running。2. 监控并核对其他应用哨兵目录。3. 检查应用只写入 `ai.mir3.studio` 与 `~/.mir3-studio-ai.dev`
+[预期结果] 1. debug 数据目录为 `C:\Users\<username>\.mir3-studio-ai.dev`。2. 其他应用目录未被读取、移动、改写或删除。3. pnpm shim 只位于应用私有工具目录，debug 不修改用户 PATH
 
-## [P2] 验证 debug 构建通过 .harness.pid 精确回收进程且不杀 release 进程
+## [P2] 验证 debug 构建通过 .mir3-core.pid 精确回收进程且不杀 release 进程
 [测试类型] 兼容性
-[前置条件] release 构建正在运行并监听 3080；上次 debug 构建被强杀，`C:\Users\<username>\.dsh.dev\.harness.pid` 记录其 PID 与端口
-[测试步骤] 1. 以 debug 构建（`pnpm tauri dev`）再次启动，观察启动前的孤儿清扫。2. 检查 release 版服务进程是否仍存活并监听 3080。3. 查看 `C:\Users\<username>\.dsh.dev\.harness.pid` 内容
-[预期结果] 1. 仅与 `.dsh.dev\.harness.pid` 记录 PID+端口匹配的残留 debug 进程被结束，debug 服务进入 Running，未按 dsh 安装目录路径清扫。2. release 版服务进程未被结束，状态 Running、仍监听 3080。3. `.harness.pid` 更新为本次 debug 服务的 PID 与端口（3081）
+[前置条件] release 构建正在运行并监听 3080；上次 debug 构建被强杀，`C:\Users\<username>\.mir3-studio-ai.dev\.mir3-core.pid` 记录其 PID 与端口
+[测试步骤] 1. 以 debug 构建（`pnpm tauri dev`）再次启动，观察启动前的孤儿清扫。2. 检查 release 版服务进程是否仍存活并监听 3080。3. 查看 `C:\Users\<username>\.mir3-studio-ai.dev\.mir3-core.pid` 内容
+[预期结果] 1. 仅与 `.mir3-studio-ai.dev\.mir3-core.pid` 记录 PID+端口匹配的残留 debug 进程被结束，debug 服务进入 Running，未按 dsh 安装目录路径清扫。2. release 版服务进程未被结束，状态 Running、仍监听 3080。3. `.mir3-core.pid` 更新为本次 debug 服务的 PID 与端口（3081）
 
 ## [P1] 验证 dev 与 release 的会话/档案/端口状态互不污染
 [测试类型] 功能
-[前置条件] release 构建正在运行（监听 3080、使用 `~/.dsh`）；同时以 debug 构建运行（监听 3081、使用 `~/.dsh.dev`）
+[前置条件] release 构建正在运行（监听 3080、使用 `~/.mir3-studio-ai`）；同时以 debug 构建运行（监听 3081、使用 `~/.mir3-studio-ai.dev`）
 [测试步骤] 1. 在 release 版创建档案 `profile-release` 并新建会话，记录其端口与状态。2. 在 debug 版创建档案 `profile-dev` 并新建会话。3. 在 debug 版停止并重启服务，再回看 release 版
-[预期结果] 1. `C:\Users\<username>\.dsh\profiles\profile-release\` 已创建，release 版端口 3080、状态 Running。2. `C:\Users\<username>\.dsh.dev\profiles\profile-dev\` 已创建且仅在 `.dsh.dev` 下，release 版档案列表不含 `profile-dev`。3. 仅 debug 服务重建，release 版仍端口 3080、状态 Running，`profile-release` 的会话与档案数据未变
+[预期结果] 1. `C:\Users\<username>\.mir3-studio-ai\profiles\profile-release\` 已创建，release 版端口 3080、状态 Running。2. `C:\Users\<username>\.mir3-studio-ai.dev\profiles\profile-dev\` 已创建且仅在 `.mir3-studio-ai.dev` 下，release 版档案列表不含 `profile-dev`。3. 仅 debug 服务重建，release 版仍端口 3080、状态 Running，`profile-release` 的会话与档案数据未变
 
 
 ---
@@ -1119,9 +1119,9 @@
 
 ## [P2] 验证 profile、会话与设置保存在本机目录
 [测试类型] 功能
-[前置条件] release 构建已初始化；用户主目录下已生成 %USERPROFILE%\.dsh（对应 $DSH_HOME）
-[测试步骤] 1. 启动并正常使用后，定位 %USERPROFILE%\.dsh，检查 profiles、settings.yaml 与 store 文件是否位于本机。2. 在应用中修改语言、主题、端口等设置后，重新读取 .dsh 目录下的对应配置文件。3. 在设置页查看「数据目录」信息并与磁盘实际路径比对。
-[预期结果] 1. %USERPROFILE%\.dsh 下存在 profiles\web、settings.yaml、.store.dat 等结构，会话与档案数据均在本机目录。2. 修改设置后，.store.dat 或 $DSH_HOME\settings.yaml 中对应字段值同步更新。3. 设置页显示的 data_dir 与磁盘实际目录一致，未指向远程或云端路径。
+[前置条件] release 构建已初始化；用户主目录下已生成 %USERPROFILE%\.mir3-studio-ai（对应 $MIR3_STUDIO_HOME）
+[测试步骤] 1. 启动并正常使用后，定位 %USERPROFILE%\.mir3-studio-ai，检查 profiles、settings.yaml 与 store 文件是否位于本机。2. 在应用中修改语言、主题、端口等设置后，重新读取 .dsh 目录下的对应配置文件。3. 在设置页查看「数据目录」信息并与磁盘实际路径比对。
+[预期结果] 1. %USERPROFILE%\.mir3-studio-ai 下存在 profiles\web、settings.yaml、.store.dat 等结构，会话与档案数据均在本机目录。2. 修改设置后，.store.dat 或 $MIR3_STUDIO_HOME\settings.yaml 中对应字段值同步更新。3. 设置页显示的 data_dir 与磁盘实际目录一致，未指向远程或云端路径。
 
 ## [P2] 验证本地网络与系统代理不影响正常运行
 [测试类型] 兼容性
@@ -1152,7 +1152,7 @@
 
 ## [P1] 验证暗色模式下界面配色正确
 [测试类型] 功能
-[前置条件] 当前主题为 dark（$DSH_HOME/settings.yaml 的 ui-theme.preference=dark）
+[前置条件] 当前主题为 dark（$MIR3_STUDIO_HOME/settings.yaml 的 ui-theme.preference=dark）
 [测试步骤] 1. 将 ui-theme.preference 设为 dark 并重启桌面端。2. 观察侧边栏、设置页与内嵌 dsh 页面的背景与前景配色。
 [预期结果] 1. 界面主要区域为深色背景，文字与图标为浅色且对比清晰可读。2. 侧边栏与设置页等桌面壳区域均为暗色，无白底残留块或刺眼高亮，与暗色主题一致。
 
@@ -1177,21 +1177,21 @@
 
 ## [P1] 验证启动后自动检查 GitHub 是否有新版本
 [测试类型] 功能
-[前置条件] 已安装生产版桌面端（Windows，本机版本 0.6.5）；GitHub 上最新版本为 0.6.6；网络畅通
+[前置条件] 已安装生产版桌面端（Windows，本机版本 0.1.0）；GitHub 上最新版本为 0.1.1；网络畅通
 [测试步骤] 1. 启动生产版桌面端（端口 3080），等待进入主界面并完成初始化。2. 保持网络畅通，观察应用在启动后对 GitHub 的检查请求及版本比对结果
-[预期结果] 1. 桌面端正常启动至主界面，初始化无中断、无错误弹窗。2. 应用启动后在后台自动向 https://github.com/hairyf/deepseek-harness-desktop/releases.atom 发起一次实时检查（无缓存），判定最新 tag v0.6.6 高于本机 0.6.5，确认存在新版本
+[预期结果] 1. 桌面端正常启动至主界面，初始化无中断、无错误弹窗。2. 应用启动后在后台自动向 https://github.com/shenmuli0324-glitch/mir3-studio-ai/releases.atom 发起一次实时检查（无缓存），判定最新 tag v0.1.1 高于本机 0.1.0，确认存在新版本
 
 ## [P1] 验证发现新版本时提示用户并可触发下载安装包
 [测试类型] 功能
-[前置条件] 已安装生产版桌面端（Windows，本机版本 0.6.5）；GitHub 最新 0.6.6；网络畅通；AppData 的 updates 目录下无对应安装包
-[测试步骤] 1. 启动桌面端，等待自动检查发现新版本 0.6.6，界面弹出「发现新版本」提示，点击「下载」。2. 观察下载进度与 desktop-update-progress 事件推送。3. 下载进度到达 100% 后点击「安装/打开」，确认系统默认处理器启动安装器
-[预期结果] 1. 界面提示「发现新版本 0.6.6」并提供「下载」按钮，可正常交互。2. 进度百分比从 0 递增到 100，进度事件持续推送，所选资产为当前平台匹配项（Windows 为 Deepseek.Harness.Desktop_0.6.6_x64-setup.exe）。3. 安装包按 tag+资产名构造地址下载到 AppData/updates/Deepseek.Harness.Desktop_0.6.6_x64-setup.exe 且该文件存在；点击后 Windows 触发 UAC 并打开安装程序
+[前置条件] 已安装生产版桌面端（Windows，本机版本 0.1.0）；GitHub 最新 0.1.1；网络畅通；AppData 的 updates 目录下无对应安装包
+[测试步骤] 1. 启动桌面端，等待自动检查发现新版本 0.1.1，界面弹出「发现新版本」提示，点击「下载」。2. 观察下载进度与 desktop-update-progress 事件推送。3. 下载进度到达 100% 后点击「安装/打开」，确认系统默认处理器启动安装器
+[预期结果] 1. 界面提示「发现新版本 0.1.1」并提供「下载」按钮，可正常交互。2. 进度百分比从 0 递增到 100，进度事件持续推送，所选资产为当前平台匹配项（Windows 为 MIR3.Studio.AI_0.1.1_x64-setup.exe）。3. 安装包按 tag+资产名构造地址下载到 AppData/updates/MIR3.Studio.AI_0.1.1_x64-setup.exe 且该文件存在；点击后 Windows 触发 UAC 并打开安装程序
 
 ## [P2] 验证当前已是最新版时提示无需更新
 [测试类型] 功能
-[前置条件] 已安装生产版桌面端（Windows，本机版本与 GitHub 最新版本均为 0.6.6）；网络畅通
+[前置条件] 已安装生产版桌面端（Windows，本机版本与 GitHub 最新版本均为 0.1.1）；网络畅通
 [测试步骤] 1. 启动桌面端（端口 3080），等待自动检查完成版本比对。2. 查看界面更新的提示与按钮状态
-[预期结果] 1. 应用查询到最新 tag 为 v0.6.6 并与本机 0.6.6 比对，判定最新不高于本机，结果为无需更新。2. 界面提示「当前已是最新版本」，不出现「更新/下载」按钮，无更新弹窗
+[预期结果] 1. 应用查询到最新 tag 为 v0.1.1 并与本机 0.1.1 比对，判定最新不高于本机，结果为无需更新。2. 界面提示「当前已是最新版本」，不出现「更新/下载」按钮，无更新弹窗
 
 ## [P3] 验证网络不可达时检查失败且不影响正常使用
 [测试类型] 功能
@@ -1201,15 +1201,15 @@
 
 ## [P3] 验证更新下载失败给出可重试的提示
 [测试类型] 功能
-[前置条件] 已安装生产版桌面端（本机版本 0.6.5）；GitHub 最新 0.6.6，存在新版本；下载期间封禁 github.com 与 ghfast.top 两个下载源
+[前置条件] 已安装生产版桌面端（本机版本 0.1.0）；GitHub 最新 0.1.1，存在新版本；下载期间封禁 github.com 与 ghfast.top 两个下载源
 [测试步骤] 1. 在发现新版本后点击「下载」，下载期间同时封禁主源 github.com 与镜像源 ghfast.top。2. 等待下载失败返回，观察界面提示与 updates 目录。3. 恢复网络后点击「重试」，重新触发下载
 [预期结果] 1. 下载中止，desktop-update-progress 事件停止推送，临时文件 .part 被清理，updates 目录下不残留该安装包。2. 界面提示「更新下载失败，请重试」（含已尝试 2 个下载源信息），应用不崩溃、不死循环。3. 点击「重试」重新发起下载，进度从 0 重新开始直至 100%，最终在 updates 目录生成安装包
 
 ## [P2] 验证开发版与生产版使用彼此隔离的更新/数据
 [测试类型] 兼容性
 [前置条件] 同时存在 debug 构建（pnpm tauri dev）与生产构建，且两个构建均可正常运行
-[测试步骤] 1. 同时启动 debug 构建（端口 3081）与生产构建（端口 3080），并保持运行。2. 分别检查两个构建使用的端口、$DSH_HOME、store 文件与服务日志。3. 对生产版执行一次桌面端自更新（检查并下载安装包）后重启，再次查看 $DSH_HOME 与 store 文件
-[预期结果] 1. debug 构建使用端口 3081、$DSH_HOME 为 ~/.dsh.dev、store 文件 .store.dev.dat、日志 logs/dsh-web.dev.log；生产构建使用端口 3080、$DSH_HOME 为 ~/.dsh、store 文件 .store.dat、日志 logs/dsh-web.log，两者互不污染。2. 两端口可同时监听不冲突，debug 构建通过 ~/.dsh.dev/.harness.pid 精确回收自有服务进程，不会终止生产版服务。3. 桌面端自更新仅替换桌面壳，更新前后 $DSH_HOME 与 .store.dat（核心数据）内容保持不变，共用内核未受影响
+[测试步骤] 1. 同时启动 debug 构建（端口 3081）与生产构建（端口 3080），并保持运行。2. 分别检查两个构建使用的端口、$MIR3_STUDIO_HOME、store 文件与服务日志。3. 对生产版执行一次桌面端自更新（检查并下载安装包）后重启，再次查看 $MIR3_STUDIO_HOME 与 store 文件
+[预期结果] 1. debug 构建使用端口 3081、$MIR3_STUDIO_HOME 为 ~/.mir3-studio-ai.dev、store 文件 .store.dev.dat、日志 logs/dsh-web.dev.log；生产构建使用端口 3080、$MIR3_STUDIO_HOME 为 ~/.mir3-studio-ai、store 文件 .store.dat、日志 logs/dsh-web.log，两者互不污染。2. 两端口可同时监听不冲突，debug 构建通过 ~/.mir3-studio-ai.dev/.mir3-core.pid 精确回收自有服务进程，不会终止生产版服务。3. 桌面端自更新仅替换桌面壳，更新前后 $MIR3_STUDIO_HOME 与 .store.dat（核心数据）内容保持不变，共用内核未受影响
 
 
 ---
@@ -1222,19 +1222,19 @@
 [测试类型] 功能
 [前置条件] 服务已启动并处于 Running；监听端口 3080；系统已安装并配置默认浏览器
 [测试步骤] 1. 点击工具栏「在浏览器打开」按钮（open_in_browser）。2. 返回桌面端点击「复制服务地址」按钮（copy_service_url）
-[预期结果] 1. 系统默认浏览器打开新标签页并加载 http://127.0.0.1:3080 的 Harness 界面。2. 桌面端提示复制成功，系统剪贴板内容为 http://127.0.0.1:3080
+[预期结果] 1. 系统默认浏览器打开新标签页并加载 http://127.0.0.1:3080 的 MIR3 AI Core 界面。2. 桌面端提示复制成功，系统剪贴板内容为 http://127.0.0.1:3080
 
 ## [P2] 验证在文件夹中显示定位数据目录与读取剪贴板图片
 [测试类型] 功能
-[前置条件] 服务 Running；$DSH_HOME 已存在（release 默认 ~/.dsh）；系统剪贴板已放入一张 800×600 的 PNG 图片
-[测试步骤] 1. 点击「在文件夹中显示」按钮（reveal_in_folder/reveal_data_dir）指向数据目录 $DSH_HOME。2. 在聊天输入框执行粘贴操作（触发 read_clipboard_image）
-[预期结果] 1. 系统文件管理器（Windows 资源管理器/macOS Finder/Linux 文件管理器）打开并定位到 ~/.dsh 目录。2. read_clipboard_image 返回 ClipboardImageResponse，data_url 以 data:image/png;base64, 开头、mime 为 image/png、filename 为 clipboard-image.png
+[前置条件] 服务 Running；$MIR3_STUDIO_HOME 已存在（release 默认 ~/.mir3-studio-ai）；系统剪贴板已放入一张 800×600 的 PNG 图片
+[测试步骤] 1. 点击「在文件夹中显示」按钮（reveal_in_folder/reveal_data_dir）指向数据目录 $MIR3_STUDIO_HOME。2. 在聊天输入框执行粘贴操作（触发 read_clipboard_image）
+[预期结果] 1. 系统文件管理器（Windows 资源管理器/macOS Finder/Linux 文件管理器）打开并定位到 ~/.mir3-studio-ai 目录。2. read_clipboard_image 返回 ClipboardImageResponse，data_url 以 data:image/png;base64, 开头、mime 为 image/png、filename 为 clipboard-image.png
 
 ## [P2] 验证 get_runtime_info 返回完整的运行时与系统信息
 [测试类型] 功能
-[前置条件] 服务 Running（release 端口 3080）；$DSH_HOME 默认 ~/.dsh
+[前置条件] 服务 Running（release 端口 3080）；$MIR3_STUDIO_HOME 默认 ~/.mir3-studio-ai
 [测试步骤] 1. 打开侧边栏「运行时信息」面板并调用 get_runtime_info
-[预期结果] 1. get_runtime_info 返回 RuntimeInfo：app_version 为当前桌面端版本号、dsh_version 为已安装 Harness 版本号、node_version 为实际使用的 Node 版本号、service_url 为 http://127.0.0.1:3080、data_dir 为 ~/.dsh（Windows 为 %USERPROFILE%\.dsh）、log_path 为服务日志路径、platform 与 arch 分别对应当前系统 OS 与 CPU 架构
+[预期结果] 1. get_runtime_info 返回 RuntimeInfo：app_version 为当前桌面端版本号、dsh_version 为已安装 MIR3 AI Core 版本号、node_version 为实际使用的 Node 版本号、service_url 为 http://127.0.0.1:3080、data_dir 为 ~/.mir3-studio-ai（Windows 为 %USERPROFILE%\.mir3-studio-ai）、log_path 为服务日志路径、platform 与 arch 分别对应当前系统 OS 与 CPU 架构
 
 ## [P3][反向] 验证服务停止后代理健康检查返回未运行错误
 [测试类型] 功能
@@ -1255,7 +1255,7 @@
 [测试类型] 兼容性
 [前置条件] Windows 10/11 x64；已安装 WebView2 运行时；执行全新安装
 [测试步骤] 1. 在 Windows x64 双击安装包完成安装。2. 启动桌面端并等待首次依赖安装与服务拉起。3. 观察主界面渲染与 dsh 服务状态
-[预期结果] 1. 安装过程无报错，安装目录与启动项创建成功。2. 首次启动自动装配内置 Node 运行时与 Harness 内核，状态机由 Installing 到达 Running。3. WebView2 正常渲染主界面（无白屏、无崩溃），http://127.0.0.1:3080 健康检查返回 HTTP 200
+[预期结果] 1. 安装过程无报错，安装目录与启动项创建成功。2. 首次启动自动装配内置 Node 运行时与 MIR3 AI Core，状态机由 Installing 到达 Running。3. WebView2 正常渲染主界面（无白屏、无崩溃），http://127.0.0.1:3080 健康检查返回 HTTP 200
 
 ## [P2] 验证 macOS 首次启动触发 Gatekeeper 放行提示
 [测试类型] 兼容性
@@ -1271,14 +1271,12 @@
 
 ## [P1] 验证 Windows 极简模式向导生成 cordis.patch.yml 挂载行与 minimal-win 极简 preset
 [测试类型] 功能
-[前置条件] Windows；预装插件流程已安装 dsh-win-terminal-inspector 插件（dsh plugin add github:clearkurt/dsh-win-terminal-inspector）；本机已安装 Git Bash（C:\Program Files\Git\bin\bash.exe）；$DSH_HOME 为 ~/.dsh
-[测试步骤] 1. 在预装插件列表确认勾选「修复」项 dsh-win-terminal-inspector 并完成安装。2. 查看当前档案 profile 目录下的 cordis.patch.yml。3. 查看 $DSH_HOME/.agent-presets/minimal-win/ 目录内容
-[预期结果] 1. 插件安装成功后 win_inspector::apply 被调用且返回 Ok。2. cordis.patch.yml 顶层数组新增一个 `- insert:` 挂载块，含 id=win-terminal-inspector 与 name=dsh-win-terminal-inspector。3. 生成 ~/.dsh/.agent-presets/minimal-win/，内含 agent.cordis.yml（terminal-bash 的 shellPath 指向 C:\Program Files\Git\bin\bash.exe、persistent-shell 组含 sandbox-policy 且 mode=danger-full-access）与 preset.yml（name 为 极简模式 (Windows)）
+[前置条件] Windows；预装插件流程已安装 dsh-win-terminal-inspector 插件（dsh plugin add github:clearkurt/dsh-win-terminal-inspector）；本机已安装 Git Bash（C:\Program Files\Git\bin\bash.exe）；$MIR3_STUDIO_HOME 为 ~/.mir3-studio-ai
+[测试步骤] 1. 在预装插件列表确认勾选「修复」项 dsh-win-terminal-inspector 并完成安装。2. 查看当前档案 profile 目录下的 cordis.patch.yml。3. 查看 $MIR3_STUDIO_HOME/.agent-presets/minimal-win/ 目录内容
+[预期结果] 1. 插件安装成功后 win_inspector::apply 被调用且返回 Ok。2. cordis.patch.yml 顶层数组新增一个 `- insert:` 挂载块，含 id=win-terminal-inspector 与 name=dsh-win-terminal-inspector。3. 生成 ~/.mir3-studio-ai/.agent-presets/minimal-win/，内含 agent.cordis.yml（terminal-bash 的 shellPath 指向 C:\Program Files\Git\bin\bash.exe、persistent-shell 组含 sandbox-policy 且 mode=danger-full-access）与 preset.yml（name 为 极简模式 (Windows)）
 
 ## [P3][反向] 验证极简模式仅在 Windows 触发且重复执行保持幂等
 [测试类型] 可移植性
-[前置条件] 分别具备 Windows 与 macOS/Linux 环境；Windows 已安装插件与 Git Bash；$DSH_HOME 为 ~/.dsh
+[前置条件] 分别具备 Windows 与 macOS/Linux 环境；Windows 已安装插件与 Git Bash；$MIR3_STUDIO_HOME 为 ~/.mir3-studio-ai
 [测试步骤] 1. 在 macOS/Linux 环境调用 win_inspector::apply（非 Windows 分支）。2. 在 Windows 环境连续两次调用 win_inspector::apply。3. 检查 cordis.patch.yml 与 minimal-win preset 目录
-[预期结果] 1. 非 Windows 平台 apply 返回 Ok 且无任何副作用，不创建 cordis.patch.yml 挂载行、不生成 ~/.dsh/.agent-presets/minimal-win/。2. 第二次调用不重复追加，cordis.patch.yml 中 dsh-win-terminal-inspector 挂载块仍仅出现一次、内容不变。3. ~/.dsh/.agent-presets/minimal-win/agent.cordis.yml 与 preset.yml 保持首次生成内容，未被覆盖或重写
-
-
+[预期结果] 1. 非 Windows 平台 apply 返回 Ok 且无任何副作用，不创建 cordis.patch.yml 挂载行、不生成 ~/.mir3-studio-ai/.agent-presets/minimal-win/。2. 第二次调用不重复追加，cordis.patch.yml 中 dsh-win-terminal-inspector 挂载块仍仅出现一次、内容不变。3. ~/.mir3-studio-ai/.agent-presets/minimal-win/agent.cordis.yml 与 preset.yml 保持首次生成内容，未被覆盖或重写

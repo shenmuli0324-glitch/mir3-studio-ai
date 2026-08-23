@@ -12,11 +12,11 @@ pub struct Setting {
     pub language: String,
     #[serde(default)]
     pub dsh_pkg_commit: Option<String>,
-    /// 已安装 Harness 发行版对应的 GitHub release tag（与 dsh_pkg_commit 配套，
+    /// 已安装 MIR3 AI Core 发行版对应的 GitHub release tag（与 dsh_pkg_commit 配套，
     /// 用于甄别“记录滞后于文件”与“同版本热修”两种不一致）
     #[serde(default)]
     pub dsh_pkg_tag: Option<String>,
-    /// 命令行集成开关：安装后在用户 PATH 中注册 `dsh` 命令
+    /// 命令行集成开关：安装后在用户 PATH 中注册 `mir3` 命令
     #[serde(default = "default_cli_link_enabled")]
     pub cli_link_enabled: bool,
     /// 预装插件引导是否已完成（确认安装或跳过都算完成，之后不再弹出）
@@ -27,11 +27,7 @@ pub struct Setting {
     /// 内容有变更 → 重新进入预设引导。`None` = 老用户升级（无基线）→ 弹一次建立基线。
     #[serde(default)]
     pub preset_hash: Option<String>,
-    /// 旧版 AppData `data/dsh` → 官方 `$DSH_HOME`（~/.dsh）数据迁移是否已完成。
-    /// 幂等标记：迁移成功并删除旧目录后置位，避免重复合并。
-    #[serde(default)]
-    pub dsh_home_migrated: bool,
-    /// 当前使用的档案 id（`$DSH_HOME/profiles/<id>`，默认 web）。
+    /// 当前使用的档案 id（`$MIR3_STUDIO_HOME/profiles/<id>`，默认 web）。
     /// 桌面端启动服务与插件管理都以它为准（见 service::profile）。
     #[serde(default = "default_active_profile")]
     pub active_profile: String,
@@ -72,7 +68,6 @@ impl Default for Setting {
             cli_link_enabled: default_cli_link_enabled(),
             preinstall_done: false,
             preset_hash: None,
-            dsh_home_migrated: false,
             active_profile: default_active_profile(),
             active_core: None,
         }
@@ -119,24 +114,24 @@ pub fn get_store_dat_setting(app_handle: &AppHandle) -> Setting {
         .unwrap_or_else(Setting::default)
 }
 
-/// 已安装 Harness 发行版对应的 GitHub release commit hash
+/// 已安装 MIR3 AI Core 发行版对应的 GitHub release commit hash
 pub fn get_dsh_pkg_commit(app_handle: &AppHandle) -> Option<String> {
     get_store_dat_setting(app_handle).dsh_pkg_commit
 }
 
-/// 记录已安装 Harness 发行版的 GitHub release commit hash
+/// 记录已安装 MIR3 AI Core 发行版的 GitHub release commit hash
 pub fn set_dsh_pkg_commit(app_handle: &AppHandle, commit: String) {
     let mut setting = get_store_dat_setting(app_handle);
     setting.dsh_pkg_commit = Some(commit);
     set_store_dat_setting(app_handle, setting);
 }
 
-/// 已安装 Harness 发行版对应的 GitHub release tag
+/// 已安装 MIR3 AI Core 发行版对应的 GitHub release tag
 pub fn get_dsh_pkg_tag(app_handle: &AppHandle) -> Option<String> {
     get_store_dat_setting(app_handle).dsh_pkg_tag
 }
 
-/// 记录已安装 Harness 发行版的 GitHub release tag
+/// 记录已安装 MIR3 AI Core 发行版的 GitHub release tag
 pub fn set_dsh_pkg_tag(app_handle: &AppHandle, tag: String) {
     let mut setting = get_store_dat_setting(app_handle);
     setting.dsh_pkg_tag = Some(tag);

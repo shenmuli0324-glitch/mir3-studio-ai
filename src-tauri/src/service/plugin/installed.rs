@@ -30,7 +30,7 @@ pub(crate) struct ProfileInner {
     pub(crate) bundles: Vec<String>,
 }
 
-/// 插件所在的 profile 目录（$DSH_HOME/profiles/<当前档案>）。
+/// 插件所在的 profile 目录（$MIR3_STUDIO_HOME/profiles/<当前档案>）。
 ///
 /// 档案由桌面端设置（`active_profile`）决定，不再写死 web；启动服务与插件
 /// 操作都以同一份「当前档案」为准（见 service::profile::active_profile）。
@@ -211,19 +211,23 @@ mod tests {
     fn list_installed_parses_manifest() {
         let dir = std::env::temp_dir().join(format!("dsh-plugin-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let manifest_json = serde_json::json!({
+        let base_bundle = crate::config::core_compat::WEB_PROFILE_BUNDLES[0];
+        let mut manifest_json = serde_json::json!({
             "name": "dsh-profile-web",
             "private": true,
             "dependencies": {
-                "dshmarket": "1.0.0",
-                "@deepseek-ai/dsh-base": "1.0.0"
+                "dshmarket": "1.0.0"
             },
             "dsh": {
                 "profile": {
-                    "bundles": ["@deepseek-ai/dsh-base", "dshmarket"]
+                    "bundles": [base_bundle, "dshmarket"]
                 }
             }
         });
+        manifest_json["dependencies"]
+            .as_object_mut()
+            .unwrap()
+            .insert(base_bundle.to_string(), serde_json::json!("1.0.0"));
         std::fs::write(
             dir.join("package.json"),
             serde_json::to_string(&manifest_json).unwrap(),
@@ -241,7 +245,7 @@ mod tests {
         }
 
         assert!(set.contains("dshmarket"));
-        assert!(set.contains("@deepseek-ai/dsh-base"));
+        assert!(set.contains(base_bundle));
         assert_eq!(set.len(), 2);
 
         std::fs::remove_dir_all(&dir).ok();

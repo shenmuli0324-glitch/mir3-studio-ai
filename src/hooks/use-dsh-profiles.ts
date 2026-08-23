@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 
 /** Rust 侧 service::profile::Profile 的序列化形态（camelCase） */
 export interface Profile {
-  /** 档案 id（$DSH_HOME/profiles/<id> 目录名） */
+  /** 档案 id（$MIR3_STUDIO_HOME/profiles/<id> 目录名） */
   id: string
   /** 展示名（manifest name 去 dsh-profile- 前缀，首字母大写） */
   name: string

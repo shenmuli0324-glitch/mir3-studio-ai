@@ -1,10 +1,10 @@
 {
   "name": "mir3-studio-ai",
   "type": "module",
-  "version": "0.7.3",
+  "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.28.2",
-  "description": "MIR3 developer desktop powered by DeepSeek Harness (dsh).",
+  "description": "AI development workspace for MIR3 engine projects.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -16,6 +16,7 @@
     "knip": "knip",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
+    "brand:audit": "node scripts/brand-audit.mjs",
     "icons": "tauri icon public/brand/mir3-studio-ai.svg --output src-tauri/icons/mir3-studio-ai"
   },
   "dependencies": {

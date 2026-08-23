@@ -20,7 +20,7 @@ use tauri::Manager;
 
 /// 启动守卫：并发调用 `launch` 时只允许一个真正拉起 dsh 进程
 static LAUNCH_GUARD: AtomicBool = AtomicBool::new(false);
-/// 当前进程内由桌面端创建的 Harness 根进程 PID；0 表示没有持有的实例。
+/// 当前进程内由桌面端创建的 MIR3 AI Core 根进程 PID；0 表示没有持有的实例。
 static OWNED_PROCESS_ID: AtomicU32 = AtomicU32::new(0);
 /// Windows 进程句柄用于确认 PID 仍指向原进程，消除 PID 复用误杀窗口。
 #[cfg(windows)]
@@ -82,7 +82,7 @@ fn web_supports_no_open_flag(app_handle: &tauri::AppHandle) -> bool {
     }
 }
 
-/// 只结束本应用当前进程创建并仍持有的 Harness 进程树。
+/// 只结束本应用当前进程创建并仍持有的 MIR3 AI Core 进程树。
 fn terminate_owned_process() {
     let pid = OWNED_PROCESS_ID.swap(0, Ordering::SeqCst);
     if pid == 0 {
@@ -129,13 +129,13 @@ fn kill_pid_tree(pid: u32) {
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::null());
         if let Err(e) = cmd.output() {
-            log::error!("Failed to stop Harness process tree {pid}: {e}");
+            log::error!("Failed to stop MIR3 AI Core process tree {pid}: {e}");
         }
     }
 
     #[cfg(unix)]
     {
-        // Harness 根进程启动在独立进程组中，负 PID 只作用于该进程树。
+        // MIR3 AI Core 根进程启动在独立进程组中，负 PID 只作用于该进程树。
         let group = format!("-{pid}");
         let _ = Command::new("kill").args(["-TERM", "--", &group]).output();
         std::thread::sleep(std::time::Duration::from_millis(300));
@@ -147,23 +147,23 @@ pub fn has_owned_process() -> bool {
     OWNED_PROCESS_ID.load(Ordering::SeqCst) != 0
 }
 
-/// 结束所有从本应用 dsh 安装目录启动的 Harness 服务进程（含历史崩溃残留的孤儿实例）。
+/// 结束所有从本应用 dsh 安装目录启动的 MIR3 AI Core 服务进程（含历史崩溃残留的孤儿实例）。
 ///
-/// 只停本应用当前持有的进程不够：`.harness.pid` 标记只记录最近一次会话的 PID，
+/// 只停本应用当前持有的进程不够：`.mir3-core.pid` 标记只记录最近一次会话的 PID，
 /// 应用多次崩溃/强杀（任务管理器结束等）会遗留多个孤儿 dsh 进程、端口一路漂移
-/// （3080→3081→…），`sweep_orphan_harness` 每次只能回收最近一个，更早的孤儿
+/// （3080→3081→…），`sweep_orphan_core` 每次只能回收最近一个，更早的孤儿
 /// 会持续占用 `dependencies/dsh` 目录的文件句柄（node 以该目录为 cwd 且模块
 /// DLL 加载在内存），更新切换目录时触发 os error 32（INSTALL_BACKUP_FAILED）。
 ///
 /// 命令行为本应用 dsh 入口路径（`...\dependencies\dsh\node_modules\...\bin.js`）
 /// 的 node 进程可判定为本应用的服务实例——路径精确匹配不会误杀用户其它 node
 /// 程序，因此可安全地全部结束（taskkill /T /F）。
-pub fn terminate_stale_harness_processes(app_handle: &tauri::AppHandle) {
+pub fn terminate_stale_core_processes(app_handle: &tauri::AppHandle) {
     // 开发（debug）构建不做按路径清扫：生产与开发共用同一个 `dependencies/dsh`
     // 安装目录（核心共用），按命令行路径匹配会把同时运行的 release 服务进程
     // 一并结束——`pnpm tauri dev` 每次后端重编译都会重启应用并触发清扫，导致
     // "release 版 DSH 被 dev 版热更新杀掉"。开发构建自身的崩溃残留仍由
-    // `.harness.pid` 标记（位于独立数据目录 `.dsh.dev`，PID+端口双重确认）
+    // `.mir3-core.pid` 标记（位于独立开发数据目录，PID+端口双重确认）
     // 精确回收。
     if cfg!(debug_assertions) {
         return;
@@ -186,7 +186,7 @@ pub fn terminate_stale_harness_processes(app_handle: &tauri::AppHandle) {
             .creation_flags(0x08000000)
             .output()
         else {
-            log::error!("Failed to enumerate stale Harness service processes");
+            log::error!("Failed to enumerate stale MIR3 AI Core service processes");
             return;
         };
         let mut found = 0;
@@ -195,7 +195,7 @@ pub fn terminate_stale_harness_processes(app_handle: &tauri::AppHandle) {
                 continue;
             };
             found += 1;
-            log::warn!("Terminating stale Harness service process {pid} (from dsh install dir)");
+            log::warn!("Terminating stale MIR3 AI Core service process {pid} (from dsh install dir)");
             kill_pid_tree(pid);
         }
         if found > 0 {
@@ -212,44 +212,44 @@ pub fn terminate_stale_harness_processes(app_handle: &tauri::AppHandle) {
 }
 
 // ---------------------------------------------------------------------------
-// 孤儿 Harness 清扫：崩溃/强杀残留实例的识别与回收（issue #34 关联现象）
+// 孤儿 MIR3 AI Core 清扫：崩溃/强杀残留实例的识别与回收（issue #34 关联现象）
 // ---------------------------------------------------------------------------
 
-/// 孤儿清扫用的 PID/端口标记文件路径（$DSH_HOME/.harness.pid，两行：PID、端口）。
+/// 孤儿清扫用的 PID/端口标记文件路径（$MIR3_STUDIO_HOME/.mir3-core.pid，两行：PID、端口）。
 ///
-/// 应用被强杀（崩溃、任务管理器结束等）时无法执行退出清理，其 Harness 子进程
+/// 应用被强杀（崩溃、任务管理器结束等）时无法执行退出清理，其 MIR3 AI Core 子进程
 /// 会继续占用端口；下一次启动只能一路漂移端口（3080→3081→…）并触发服务端
 /// "already running"，表现为应用"坏掉"。启动前据此文件识别并清理这类残留。
-fn harness_pid_path(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
-    config::get_dsh_data_path(app_handle).join(".harness.pid")
+fn core_pid_path(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
+    config::get_dsh_data_path(app_handle).join(".mir3-core.pid")
 }
 
-/// 记录本次启动的 Harness PID 与端口，供下次启动清扫孤儿用。
-fn persist_harness_pid(app_handle: &tauri::AppHandle, pid: u32, port: u16) {
-    let path = harness_pid_path(app_handle);
+/// 记录本次启动的 MIR3 AI Core PID 与端口，供下次启动清扫孤儿用。
+fn persist_core_pid(app_handle: &tauri::AppHandle, pid: u32, port: u16) {
+    let path = core_pid_path(app_handle);
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
     let _ = fs::write(&path, format!("{pid}\n{port}\n"));
 }
 
-/// 启动前清扫上次崩溃残留的孤儿 Harness。端口与 PID 双重确认后才动手：
+/// 启动前清扫上次崩溃残留的孤儿 MIR3 AI Core。端口与 PID 双重确认后才动手：
 /// - 标记进程已死 → 仅清理陈旧标记；
 /// - 端口占用者正是标记中的 PID → 本应用残留，结束其进程树并清标记；
 /// - 其余情况（标记不可解析、端口被其他程序占用、无法探测占用者）一律不动，
 ///   绝不凭端口猜进程、绝不杀未知进程。
-pub fn sweep_orphan_harness(app_handle: &tauri::AppHandle) {
+pub fn sweep_orphan_core(app_handle: &tauri::AppHandle) {
     if has_owned_process() {
         return;
     }
-    // 先按命令行路径清扫所有从本应用 dsh 安装目录启动的孤儿 Harness 实例：
+    // 先按命令行路径清扫所有从本应用 dsh 安装目录启动的孤儿 MIR3 AI Core 实例：
     // 标记文件只记录最近一次会话的 PID，应用多次崩溃/强杀会遗留更早的孤儿
     // （端口一路漂移 3081/3082/…），它们持续占用 dependencies/dsh 目录的文件
     // 句柄，导致更新切换目录失败（INSTALL_BACKUP_FAILED, os error 32）。
     // 路径精确匹配不会误杀用户其它 node 程序；标记中的进程若在其中会被一并
     // 结束，随后的 PID/端口双重确认自然落空，仅清理陈旧标记。
-    terminate_stale_harness_processes(app_handle);
-    let pid_file = harness_pid_path(app_handle);
+    terminate_stale_core_processes(app_handle);
+    let pid_file = core_pid_path(app_handle);
     let Ok(text) = fs::read_to_string(&pid_file) else { return; };
     let mut lines = text.lines();
     let (Some(pid), Some(port)) = (
@@ -269,7 +269,7 @@ pub fn sweep_orphan_harness(app_handle: &tauri::AppHandle) {
         // 端口占用者不是我们落盘的进程（或探测不到）：可能是其他程序，不动
         return;
     }
-    log::warn!("Sweeping orphaned Harness process {pid} (port {port}) left by a previous session");
+    log::warn!("Sweeping orphaned MIR3 AI Core process {pid} (port {port}) left by a previous session");
     kill_pid_tree(pid);
     let _ = fs::remove_file(&pid_file);
 }
@@ -370,7 +370,7 @@ fn relaunch_via_shell_escape(app_handle: &tauri::AppHandle) {
     }
 }
 
-/// 检测并启动 Harness 服务
+/// 检测并启动 MIR3 AI Core 服务
 pub async fn start(app_handle: tauri::AppHandle) -> Result<(), String> {
     let setting = config::get_store_dat_setting(&app_handle);
     let node_binary_path = config::get_node_binary_path(&app_handle);
@@ -378,7 +378,7 @@ pub async fn start(app_handle: tauri::AppHandle) -> Result<(), String> {
     let dsh_binary_path = crate::service::core::active_dsh_binary(&app_handle);
 
     if !setting.installed {
-        log::debug!("Harness not installed, skipping startup");
+        log::debug!("MIR3 AI Core not installed, skipping startup");
         return Ok(());
     }
     if !node_binary_path.exists() || !dsh_binary_path.exists() {
@@ -399,7 +399,7 @@ pub async fn start(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
 
     if has_owned_process() {
-        log::info!("Owned Harness process is already running");
+        log::info!("Owned MIR3 AI Core process is already running");
         status::set_status(status::Status::Running);
         status::emit_status(&app_handle);
         return Ok(());
@@ -410,7 +410,7 @@ pub async fn start(app_handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(windows)]
     let _ = std::fs::remove_file(relaunch_marker_path(&app_handle));
 
-    log::info!("Starting Harness service");
+    log::info!("Starting MIR3 AI Core service");
     status::set_status(status::Status::Starting);
     status::emit_status(&app_handle);
     launch(app_handle).await?;
@@ -419,9 +419,9 @@ pub async fn start(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 重启 Harness 服务
+/// 重启 MIR3 AI Core 服务
 pub async fn restart(app_handle: tauri::AppHandle) -> Result<(), String> {
-    log::info!("Restarting Harness service");
+    log::info!("Restarting MIR3 AI Core service");
 
     // 1. 停止现有服务
     stop(app_handle.clone()).await?;
@@ -432,7 +432,7 @@ pub async fn restart(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 启动 Harness 服务进程
+/// 启动 MIR3 AI Core 服务进程
 pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     let mut setting = config::get_store_dat_setting(&app_handle);
     let node_binary_path = config::get_node_binary_path(&app_handle);
@@ -444,22 +444,22 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
         log::error!("Node.js not installed");
         return Err("NODE_NOT_FOUND: Node.js not installed".to_string());
     }
-    log::debug!("Checking Harness path: {:?}", dsh_binary_path);
+    log::debug!("Checking MIR3 AI Core path: {:?}", dsh_binary_path);
     if !dsh_binary_path.exists() {
-        log::error!("Harness not installed");
-        return Err("HARNESS_NOT_FOUND: Harness not installed".to_string());
+        log::error!("MIR3 AI Core not installed");
+        return Err("HARNESS_NOT_FOUND: MIR3 AI Core not installed".to_string());
     }
 
     // 避免重复启动（配合启动守卫，确保并发调用只拉起一个进程）
     if has_owned_process() {
-        log::info!("Owned Harness process is already running, skipping launch");
+        log::info!("Owned MIR3 AI Core process is already running, skipping launch");
         return Ok(());
     }
     if LAUNCH_GUARD
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
-        log::info!("Harness launch already in progress, skipping");
+        log::info!("MIR3 AI Core launch already in progress, skipping");
         return Ok(());
     }
     let _launch_guard = LaunchGuard;
@@ -468,7 +468,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     let available_port = find_available_port(setting.port)?;
     if available_port != setting.port {
         log::info!(
-            "Harness port changed from {} to {} because the configured port is occupied",
+            "MIR3 AI Core port changed from {} to {} because the configured port is occupied",
             setting.port,
             available_port
         );
@@ -476,7 +476,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
         config::set_store_dat_setting(&app_handle, setting.clone());
     }
 
-    // 构造环境变量：隔离的 $DSH_HOME + 隐私默认（关闭遥测）
+    // 构造环境变量：隔离的 $MIR3_STUDIO_HOME + 隐私默认（关闭遥测）
     let dsh_home = config::get_dsh_data_path(&app_handle);
     fs::create_dir_all(&dsh_home).map_err(|e| format!("create dsh home failed: {e}"))?;
 
@@ -495,7 +495,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert(
-        "DSH_HOME".to_string(),
+        config::core_compat::CORE_HOME_ENV.to_string(),
         dsh_home.to_string_lossy().into_owned(),
     );
     envs.insert("DSH_TELEMETRY_DISABLED".to_string(), "1".to_string());
@@ -534,7 +534,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     // 浏览器，追加 `--no-open` 关闭（老版本无此标志时按版本判定不传）。
     let no_open = web_supports_no_open_flag(&app_handle);
 
-    log::info!("Starting Harness process");
+    log::info!("Starting MIR3 AI Core process");
 
     // Windows 打包版是 GUI 进程（没有控制台）。直接以 CREATE_NO_WINDOW 启动
     // node 会让 dsh 派生的子进程各自新建可见控制台窗口（频繁闪烁 cmd 黑窗），
@@ -577,9 +577,9 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
                     // 退出码也便于诊断问题
                     let mut exit_code: u32 = 0;
                     if GetExitCodeProcess(process_handle, &mut exit_code) != 0 {
-                        log::warn!("Owned Harness process {pid} exited with code {exit_code}");
+                        log::warn!("Owned MIR3 AI Core process {pid} exited with code {exit_code}");
                     } else {
-                        log::warn!("Owned Harness process {pid} exited (exit code unavailable)");
+                        log::warn!("Owned MIR3 AI Core process {pid} exited (exit code unavailable)");
                     }
                     let _ = OWNED_PROCESS_ID.compare_exchange(
                         pid,
@@ -618,7 +618,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
                 // 使用管道捕获输出，以便在子线程中读取
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                // 独立进程组让停止操作只影响 Harness 及其后代。
+                // 独立进程组让停止操作只影响 MIR3 AI Core 及其后代。
                 .process_group(0);
             cmd.spawn().map(|mut child| {
                 let pid = child.id();
@@ -629,9 +629,9 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
                     let code = child.wait().ok().and_then(|status| status.code());
                     // 记录退出码：启动即崩溃（插件冲突等）时前端据此快速失败
                     if let Some(code) = code {
-                        log::warn!("Owned Harness process {pid} exited with code {code}");
+                        log::warn!("Owned MIR3 AI Core process {pid} exited with code {code}");
                     } else {
-                        log::warn!("Owned Harness process {pid} exited (no exit code)");
+                        log::warn!("Owned MIR3 AI Core process {pid} exited (no exit code)");
                     }
                     let _ = OWNED_PROCESS_ID.compare_exchange(
                         pid,
@@ -648,11 +648,11 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     match spawn_result {
         Ok((stdout, stderr, pid)) => {
             log::info!(
-                "Harness process started successfully: pid={pid}, port={}",
+                "MIR3 AI Core process started successfully: pid={pid}, port={}",
                 setting.port
             );
-            // 记录 PID+端口供下次启动清扫崩溃残留的孤儿实例（见 sweep_orphan_harness）
-            persist_harness_pid(&app_handle, pid, setting.port);
+            // 记录 PID+端口供下次启动清扫崩溃残留的孤儿实例（见 sweep_orphan_core）
+            persist_core_pid(&app_handle, pid, setting.port);
             spawn_output_readers(stdout, stderr, log_path);
             Ok(())
         }
@@ -663,14 +663,14 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
-/// 停止 Harness 服务
+/// 停止 MIR3 AI Core 服务
 pub async fn stop(app_handle: tauri::AppHandle) -> Result<(), String> {
-    log::info!("Stopping Harness service...");
+    log::info!("Stopping MIR3 AI Core service...");
     // 重置启动守卫，确保后续 launch 可以重新拉起；仅结束持有的根进程树。
     LAUNCH_GUARD.store(false, Ordering::SeqCst);
     terminate_owned_process();
     // 清理孤儿清扫标记：正常停止的实例不应被下次启动当作残留
-    let _ = fs::remove_file(harness_pid_path(&app_handle));
+    let _ = fs::remove_file(core_pid_path(&app_handle));
 
     // 给系统一点时间释放端口 (重要！)
     tokio::time::sleep(std::time::Duration::from_millis(800)).await;
@@ -680,18 +680,18 @@ pub async fn stop(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 应用退出时同步回收 Harness 进程。
+/// 应用退出时同步回收 MIR3 AI Core 进程。
 ///
-/// 退出路径上不更新状态、不做异步等待，只结束当前应用持有的 Harness 进程树。
+/// 退出路径上不更新状态、不做异步等待，只结束当前应用持有的 MIR3 AI Core 进程树。
 pub fn stop_on_exit(app_handle: tauri::AppHandle, _port: u16) {
     terminate_owned_process();
     // 正常退出路径同样清理清扫标记（崩溃路径才需要下次启动清扫）
-    let _ = fs::remove_file(harness_pid_path(&app_handle));
+    let _ = fs::remove_file(core_pid_path(&app_handle));
 }
 
-/// 安装环境（Node.js 运行时 + 打包的 Harness 发行版）。
+/// 安装环境（Node.js 运行时 + 打包的 MIR3 AI Core 发行版）。
 ///
-/// 返回是否真正落盘更新了 Harness（dsh 任务实际下载并解压）；仅重装
+/// 返回是否真正落盘更新了 MIR3 AI Core（dsh 任务实际下载并解压）；仅重装
 /// Node/pnpm 或全部任务被跳过时返回 false，供调用方决定是否重启页面。
 pub async fn install(
     app_handle: &tauri::AppHandle,
@@ -701,19 +701,19 @@ pub async fn install(
     // dsh 任务（index==1）实际下载解压时置 true
     let mut dsh_updated = false;
 
-    // 安装前先停止本应用持有的 Harness 服务：运行中的 node 进程会把
+    // 安装前先停止本应用持有的 MIR3 AI Core 服务：运行中的 node 进程会把
     // 原生模块 DLL（如 sharp 的 libvips-42.dll）加载进内存并锁住文件，
     // 不停止的话覆盖解压必然失败（Windows os error 32）。
     // 进程归属以启动时记录的 PID 为准，不根据端口结束未知程序。
     if has_owned_process() {
-        log::info!("Stopping running Harness service before installation");
+        log::info!("Stopping running MIR3 AI Core service before installation");
         stop(app_handle.clone()).await?;
     }
-    // 只停本应用持有的进程还不够：历史崩溃/强杀残留的孤儿 Harness 实例
-    // （不在 .harness.pid 标记中）同样从 dependencies/dsh 启动、占用目录文件
+    // 只停本应用持有的进程还不够：历史崩溃/强杀残留的孤儿 MIR3 AI Core 实例
+    // （不在 .mir3-core.pid 标记中）同样从 dependencies/dsh 启动、占用目录文件
     // 句柄，会导致更新切换目录失败（INSTALL_BACKUP_FAILED, os error 32）。
     // 按命令行路径精确清扫所有本应用 dsh 安装目录启动的进程。
-    terminate_stale_harness_processes(app_handle);
+    terminate_stale_core_processes(app_handle);
 
     let window = app_handle
         .get_webview_window("main")
@@ -821,7 +821,7 @@ pub async fn install(
                             }
                             Err(e) => {
                                 return Err(format!(
-                                    "DSH_INTEGRITY_UNAVAILABLE: 无法获取 Harness 发行版的完整性校验信息（{}），请检查网络后重试",
+                                    "DSH_INTEGRITY_UNAVAILABLE: 无法获取 MIR3 AI Core 发行版的完整性校验信息（{}），请检查网络后重试",
                                     e
                                 ));
                             }
@@ -876,7 +876,7 @@ pub async fn install(
 /// 健康检查（通过 Rust 代理，避免 WebView CORS 问题）
 pub async fn proxy_health_check(port: u16) -> Result<String, String> {
     if !has_owned_process() {
-        return Err("HARNESS_NOT_OWNED: no Harness process is owned by this app".to_string());
+        return Err("HARNESS_NOT_OWNED: no MIR3 AI Core process is owned by this app".to_string());
     }
     let client = reqwest::Client::builder()
         .timeout(config::HEALTH_CHECK_TIMEOUT)
@@ -903,7 +903,7 @@ pub async fn proxy_health_check(port: u16) -> Result<String, String> {
             }
         }
     }
-    Err("HARNESS_NOT_READY: Harness service is not ready".to_string())
+    Err("HARNESS_NOT_READY: MIR3 AI Core service is not ready".to_string())
 }
 
 #[cfg(test)]

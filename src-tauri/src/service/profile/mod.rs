@@ -1,6 +1,6 @@
 //! 档案管理。
 //!
-//! 档案 = `$DSH_HOME/profiles/<id>` 目录，与官方 dsh CLI 的 profile 语义一致
+//! 档案 = `$MIR3_STUDIO_HOME/profiles/<id>` 目录，与官方 dsh CLI 的 profile 语义一致
 //! （`dsh --profile <id>` 启动 / `dsh plugin --profile <id>` 管理插件）。
 //! 桌面端把「当前使用哪个档案」持久化在自己的 store 设置（`active_profile`，
 //! 默认 `web`），服务启动、插件安装/升级/卸载全部以它为准——不再写死 web。
@@ -18,11 +18,8 @@ use tauri::AppHandle;
 /// 桌面端默认档案（内置，不可删除）
 pub const DEFAULT_PROFILE: &str = "web";
 
-/// 新建档案的初始 bundles：web 模板（`@deepseek-ai/dsh-base` +
-/// `@deepseek-ai/dsh-web-app`，与 dsh-app-boot `PROFILE_TEMPLATES.web` 一致）。
+/// 新建档案的初始 bundles：兼容核心的 web 模板。
 /// 桌面端内嵌的是 dsh web 应用，新档案不带 `dsh-web-app` 将无法渲染任何界面。
-const WEB_PROFILE_BUNDLES: [&str; 2] = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
-
 /// dsh `initProfile` 生成的空 patch 层（与官方一致）
 const PROFILE_PATCH_TEMPLATE: &str = "# Your patch layer for this dsh profile, applied after every bundle layer:\n# a top-level YAML array of loader patch entries (id-targeted config\n# overrides, disables, and insert lists; `!!js` expressions allowed).\n[]\n";
 
@@ -43,7 +40,7 @@ pub struct Profile {
     pub active: bool,
 }
 
-/// 指定档案的目录（`$DSH_HOME/profiles/<id>`）
+/// 指定档案的目录（`$MIR3_STUDIO_HOME/profiles/<id>`）
 pub fn profile_dir_of(app_handle: &AppHandle, id: &str) -> PathBuf {
     config::get_dsh_data_path(app_handle)
         .join("profiles")
@@ -145,7 +142,7 @@ fn normalize_profile_id(name: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
-/// 新建档案：初始化 `$DSH_HOME/profiles/<id>`（manifest + patch + pnpm 设置）。
+/// 新建档案：初始化 `$MIR3_STUDIO_HOME/profiles/<id>`（manifest + patch + pnpm 设置）。
 pub fn create(app_handle: &AppHandle, name: &str) -> Result<Profile, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -215,7 +212,7 @@ fn init_profile_dir(dir: &Path, id: &str) -> Result<(), String> {
             "name": format!("dsh-profile-{id}"),
             "private": true,
             "dependencies": {},
-            "dsh": { "profile": { "bundles": WEB_PROFILE_BUNDLES } }
+            "dsh": { "profile": { "bundles": config::core_compat::WEB_PROFILE_BUNDLES } }
         });
         let content = serde_json::to_string_pretty(&manifest)
             .map_err(|e| format!("PROFILE_MANIFEST_RENDER: {e}"))?;
@@ -296,7 +293,7 @@ mod tests {
         assert_eq!(manifest["dependencies"], serde_json::json!({}));
         assert_eq!(
             manifest["dsh"]["profile"]["bundles"],
-            serde_json::json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"])
+            serde_json::json!(config::core_compat::WEB_PROFILE_BUNDLES)
         );
         assert!(dir.join("cordis.patch.yml").is_file());
         assert!(dir.join("pnpm-workspace.yaml").is_file());

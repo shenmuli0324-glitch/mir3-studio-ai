@@ -38,7 +38,7 @@ const MAX_ALLOW_LIST_RETRIES: usize = 8;
 ///
 /// pnpm 10+ 才从 `pnpm-workspace.yaml` 读取 `autoInstallPeers`（9 及更早只读
 /// `.npmrc`）。低于此版本时插件安装必须改用捆绑版 pnpm，否则会出现自动合成
-/// peer 后 `No matching version found for @deepseek-ai/...` 的假失败。
+/// peer 后出现官方核心包版本不匹配的假失败。
 /// pnpm 9/10/11 都保留 workspace-root 安装保护；Profile 本身就是刻意的
 /// workspace 根，因此安装命令必须显式传 `--workspace-root`，不能依赖版本绕过。
 const MIN_TRUSTED_PNPM_MAJOR: u32 = 10;
@@ -78,7 +78,7 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
         return Err("NODE_NOT_FOUND: Node.js runtime missing".to_string());
     }
     if !dsh_bin.exists() {
-        return Err("HARNESS_NOT_FOUND: dsh CLI missing".to_string());
+        return Err("HARNESS_NOT_FOUND: MIR3 AI Core CLI missing".to_string());
     }
 
     let window = app_handle
@@ -95,7 +95,7 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
         let _ = window.emit(
             PREINSTALL_LOG_EVENT,
             PreinstallLogPayload {
-                line: "[harness] 正在停止运行中的服务（安装插件需要短暂重启）…".to_string(),
+                line: "[MIR3 AI Core] 正在停止运行中的服务（安装插件需要短暂重启）…".to_string(),
             },
         );
         log::info!("Stopping running harness service before installing plugins");
@@ -170,22 +170,22 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
                 },
             );
             format!(
-                "PREINSTALL_FAILED: dsh plugin exited with code {exit_code} ({hint})"
+                "PREINSTALL_FAILED: MIR3 AI Core plugin process exited with code {exit_code} ({hint})"
             )
         } else {
-            format!("PREINSTALL_FAILED: dsh plugin exited with code {exit_code}")
+            format!("PREINSTALL_FAILED: MIR3 AI Core plugin process exited with code {exit_code}")
         };
 
-        // 成功路径由前端拉起服务；失败路径在返回错误前恢复安装前运行的 Harness。
+        // 成功路径由前端拉起服务；失败路径在返回错误前恢复安装前运行的 MIR3 AI Core。
         if harness_was_running {
             let _ = window.emit(
                 PREINSTALL_LOG_EVENT,
                 PreinstallLogPayload {
-                    line: "[harness] 插件安装失败，正在恢复服务…".to_string(),
+                    line: "[MIR3 AI Core] 插件安装失败，正在恢复服务…".to_string(),
                 },
             );
             if let Err(restart_error) = workflow::start(app_handle.clone()).await {
-                log::error!("failed to restore Harness after plugin install failure: {restart_error}");
+                log::error!("failed to restore MIR3 AI Core after plugin install failure: {restart_error}");
                 return Err(format!("{failure}; HARNESS_RESTART_FAILED: {restart_error}"));
             }
         }
@@ -210,7 +210,7 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
     let _ = window.emit(
         PREINSTALL_LOG_EVENT,
         PreinstallLogPayload {
-            line: format!("[harness] 已安装 {} 个插件", ids.len()),
+            line: format!("[MIR3 AI Core] 已安装 {} 个插件", ids.len()),
         },
     );
 
@@ -232,14 +232,14 @@ fn build_install_args(dsh_bin: &Path, profile: &str, specs: &[String]) -> Vec<Os
     args
 }
 
-/// 构建 `dsh plugin` 子进程的环境变量：隔离 $DSH_HOME、关闭遥测与颜色，
+/// 构建 `dsh plugin` 子进程的环境变量：隔离 $MIR3_STUDIO_HOME、关闭遥测与颜色，
 /// PATH 前置 shim 目录与 node 目录；用户 pnpm 过旧时强制捆绑版（见 ensure_pnpm）。
 fn build_plugin_envs(app_handle: &AppHandle, prefer_bundled_pnpm: bool) -> HashMap<String, String> {
     let node = config::get_node_binary_path(app_handle);
-    let bin_dir = cli::get_bin_dir(app_handle);
+    let bin_dir = cli::get_internal_bin_dir(app_handle);
     let mut envs = HashMap::from([
         (
-            "DSH_HOME".to_string(),
+            config::core_compat::CORE_HOME_ENV.to_string(),
             config::get_dsh_data_path(app_handle)
                 .to_string_lossy()
                 .into_owned(),
@@ -326,7 +326,7 @@ async fn run_single_plugin_command(
         return Err("NODE_NOT_FOUND: Node.js runtime missing".to_string());
     }
     if !dsh_bin.exists() {
-        return Err("HARNESS_NOT_FOUND: dsh CLI missing".to_string());
+        return Err("HARNESS_NOT_FOUND: MIR3 AI Core CLI missing".to_string());
     }
 
     let prefer_bundled_pnpm = ensure_pnpm(app_handle, &window).await?;
@@ -336,7 +336,7 @@ async fn run_single_plugin_command(
         let _ = window.emit(
             PREINSTALL_LOG_EVENT,
             PreinstallLogPayload {
-                line: format!("[harness] 正在停止运行中的服务（{action}插件需要短暂重启）…"),
+                line: format!("[MIR3 AI Core] 正在停止运行中的服务（{action}插件需要短暂重启）…"),
             },
         );
         if let Err(e) = workflow::stop(app_handle.clone()).await {
@@ -367,7 +367,7 @@ async fn run_single_plugin_command(
             log::warn!("failed to record plugin error for {id}: {e}");
         }
         return Err(format!(
-            "PLUGIN_{}_FAILED: dsh plugin exited with code {exit_code}",
+            "PLUGIN_{}_FAILED: MIR3 AI Core plugin process exited with code {exit_code}",
             action.to_uppercase()
         ));
     }
@@ -645,7 +645,7 @@ fn extract_allow_line_key(line: &str) -> Option<String> {
     Some(key.to_string())
 }
 
-/// profile 下的 `pnpm-workspace.yaml` 路径（$DSH_HOME/profiles/<当前档案>）
+/// profile 下的 `pnpm-workspace.yaml` 路径（$MIR3_STUDIO_HOME/profiles/<当前档案>）
 fn profile_workspace_path(app_handle: &AppHandle) -> PathBuf {
     profile_dir(app_handle).join("pnpm-workspace.yaml")
 }
@@ -911,18 +911,18 @@ mod tests {
     #[test]
     fn store_major_parsed_from_modules_yaml() {
         // 真实 pnpm v10 写入的 .modules.yaml：storeDir 指向 store\v10
-        let content = "\
+        let content = format!("\
 lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 dependencies:
-  '@deepseek-ai/dsh-base': 0.0.4
-  '@deepseek-ai/dsh-web-app': 0.0.4
+  '{}': 0.0.4
+  '{}': 0.0.4
 storeDir: C:\\Users\\test\\AppData\\Local\\pnpm\\store\\v10
 virtualStoreDir: node_modules/.pnpm
-";
-        assert_eq!(parse_store_major_from_modules_yaml(content), Some(10));
+", crate::config::core_compat::WEB_PROFILE_BUNDLES[0], crate::config::core_compat::WEB_PROFILE_BUNDLES[1]);
+        assert_eq!(parse_store_major_from_modules_yaml(&content), Some(10));
     }
 
     #[test]

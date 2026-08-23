@@ -20,13 +20,8 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::config;
 
-/// 仓库主页（同时用于构造 atom / expanded_assets / 下载地址）
-const REPO_URL: &str = "https://github.com/hairyf/deepseek-harness-desktop";
 /// 版权信息（与 tauri.conf.json bundle.copyright 保持一致）
-const COPYRIGHT: &str =
-    "Copyright © 2026 MIR3 Studio AI contributors; based on deepseek-harness-desktop";
-/// About 对话框的 "Powered by" 文案
-const POWERED_BY: &str = "DeepSeek Harness";
+const COPYRIGHT: &str = "Copyright © 2026 MIR3 Studio AI contributors";
 /// AppData 下安装包存放目录名
 const UPDATES_DIR: &str = "updates";
 
@@ -42,7 +37,7 @@ struct LatestRelease {
 
 /// 当前桌面端版本号（来自 Cargo.toml / tauri.conf.json）
 fn current_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    config::brand::get().version.clone()
 }
 
 /// 解析版本号为数字段序列：`v0.5.2` / `0.5.2` → [0, 5, 2]
@@ -126,7 +121,7 @@ fn pick_asset(assets: &[String]) -> Option<String> {
 /// 构造带统一 UA 的 HTTP 客户端（并发小、超时短）。
 fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent("deepseek-harness-desktop")
+        .user_agent(&config::brand::get().user_agent)
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("UPDATE_CLIENT: {e}"))
@@ -144,7 +139,7 @@ fn find_token<'a>(s: &'a str, marker: &str, end_marker: &str) -> Option<&'a str>
 /// 不走 api.github.com，故不受未认证限流约束。
 async fn fetch_latest_meta() -> Result<(String, String), String> {
     let body = http_client()?
-        .get(format!("{REPO_URL}/releases.atom"))
+        .get(format!("{}/releases.atom", config::brand::get().update_repo))
         .send()
         .await
         .map_err(|e| format!("UPDATE_ATOM: {e}"))?
@@ -187,7 +182,7 @@ fn extract_asset_names(html: &str, tag: &str) -> Vec<String> {
 /// 不走 api.github.com，故不受未认证限流约束。
 async fn fetch_asset_names(tag: &str) -> Result<Vec<String>, String> {
     let body = http_client()?
-        .get(format!("{REPO_URL}/releases/expanded_assets/{tag}"))
+        .get(format!("{}/releases/expanded_assets/{tag}", config::brand::get().update_repo))
         .send()
         .await
         .map_err(|e| format!("UPDATE_ASSETS: {e}"))?
@@ -216,7 +211,10 @@ async fn fetch_latest_release() -> Result<Option<LatestRelease>, String> {
     };
 
     // 下载地址由 tag + 资产名直接构造，无需 API
-    let url = format!("{REPO_URL}/releases/download/{tag}/{asset_name}");
+    let url = format!(
+        "{}/releases/download/{tag}/{asset_name}",
+        config::brand::get().update_repo
+    );
     Ok(Some(LatestRelease {
         version,
         tag,
@@ -352,7 +350,7 @@ pub async fn download(app_handle: &AppHandle) -> Result<DesktopUpdateInfo, Strin
     }
 
     let client = reqwest::Client::builder()
-        .user_agent("deepseek-harness-desktop")
+        .user_agent(&config::brand::get().user_agent)
         .build()
         .map_err(|e| format!("UPDATE_CLIENT: {e}"))?;
 
@@ -439,8 +437,8 @@ pub async fn about() -> DesktopAboutInfo {
         version: current_version(),
         published_at,
         copyright: COPYRIGHT.to_string(),
-        repo: REPO_URL.to_string(),
-        powered_by: POWERED_BY.to_string(),
+        repo: config::brand::get().update_repo.clone(),
+        powered_by: config::brand::get().core_display_name.clone(),
     }
 }
 
@@ -494,19 +492,19 @@ mod tests {
     #[test]
     fn arch_rank_matches_host_and_universal() {
         // 通用包任何架构都可用
-        assert_eq!(arch_rank("Deepseek.Harness.Desktop-universal.dmg"), 1);
+        assert_eq!(arch_rank("MIR3.Studio.AI-universal.dmg"), 1);
         // 按编译目标分支断言，保证 CI 在任意架构上都能通过
         #[cfg(target_arch = "aarch64")]
         {
-            assert_eq!(arch_rank("Deepseek.Harness.Desktop_0.6.6_aarch64.dmg"), 2);
-            assert_eq!(arch_rank("Deepseek.Harness.Desktop_0.6.6_x64.dmg"), 0);
+            assert_eq!(arch_rank("MIR3.Studio.AI_0.1.0_aarch64.dmg"), 2);
+            assert_eq!(arch_rank("MIR3.Studio.AI_0.1.0_x64.dmg"), 0);
         }
         #[cfg(target_arch = "x86_64")]
         {
-            assert_eq!(arch_rank("Deepseek.Harness.Desktop_0.6.6_x64.dmg"), 2);
-            assert_eq!(arch_rank("Deepseek.Harness.Desktop_0.6.6_amd64.AppImage"), 2);
-            assert_eq!(arch_rank("Deepseek.Harness.Desktop-0.6.6-1.x86_64.rpm"), 2);
-            assert_eq!(arch_rank("Deepseek.Harness.Desktop_0.6.6_aarch64.dmg"), 0);
+            assert_eq!(arch_rank("MIR3.Studio.AI_0.1.0_x64.dmg"), 2);
+            assert_eq!(arch_rank("MIR3.Studio.AI_0.1.0_amd64.AppImage"), 2);
+            assert_eq!(arch_rank("MIR3.Studio.AI-0.1.0-1.x86_64.rpm"), 2);
+            assert_eq!(arch_rank("MIR3.Studio.AI_0.1.0_aarch64.dmg"), 0);
         }
         // 未携带架构信息的文件名作为兜底（0）
         assert_eq!(arch_rank("app.dmg"), 0);
@@ -518,31 +516,31 @@ mod tests {
         let mk = |name: &str| name.to_string();
         // aarch64 与 x64 并存（与真实发布资产命名一致）：选当前架构匹配的包
         let assets: Vec<String> = vec![
-            mk("Deepseek.Harness.Desktop_0.6.6_aarch64.dmg"),
-            mk("Deepseek.Harness.Desktop_0.6.6_x64.dmg"),
+            mk("MIR3.Studio.AI_0.1.0_aarch64.dmg"),
+            mk("MIR3.Studio.AI_0.1.0_x64.dmg"),
         ];
         let picked = pick_asset(&assets).unwrap();
         #[cfg(target_arch = "aarch64")]
-        assert_eq!(picked, "Deepseek.Harness.Desktop_0.6.6_aarch64.dmg");
+        assert_eq!(picked, "MIR3.Studio.AI_0.1.0_aarch64.dmg");
         #[cfg(target_arch = "x86_64")]
-        assert_eq!(picked, "Deepseek.Harness.Desktop_0.6.6_x64.dmg");
+        assert_eq!(picked, "MIR3.Studio.AI_0.1.0_x64.dmg");
         // 通用包优于与本机架构不匹配的包（用「非本机架构」的名字构造，任意架构成立）
         #[cfg(target_arch = "aarch64")]
-        let wrong = "Deepseek.Harness.Desktop_0.6.6_x64.dmg";
+        let wrong = "MIR3.Studio.AI_0.1.0_x64.dmg";
         #[cfg(target_arch = "x86_64")]
-        let wrong = "Deepseek.Harness.Desktop_0.6.6_aarch64.dmg";
+        let wrong = "MIR3.Studio.AI_0.1.0_aarch64.dmg";
         let assets: Vec<String> = vec![
             wrong.to_string(),
-            "Deepseek.Harness.Desktop_0.6.6-universal.dmg".to_string(),
+            "MIR3.Studio.AI_0.1.0-universal.dmg".to_string(),
         ];
         let picked = pick_asset(&assets).unwrap();
-        assert_eq!(picked, "Deepseek.Harness.Desktop_0.6.6-universal.dmg");
+        assert_eq!(picked, "MIR3.Studio.AI_0.1.0-universal.dmg");
     }
 
     #[test]
     fn find_token_extracts_between_markers() {
-        let s = r#"<link rel="alternate" href="https://github.com/x/releases/tag/v0.6.6"/>"#;
-        assert_eq!(find_token(s, "releases/tag/", "\""), Some("v0.6.6"));
+        let s = r#"<link rel="alternate" href="https://github.com/x/releases/tag/v0.1.1"/>"#;
+        assert_eq!(find_token(s, "releases/tag/", "\""), Some("v0.1.1"));
         let s2 = "<updated>2026-08-19T09:27:38Z</updated>";
         assert_eq!(find_token(s2, "<updated>", "</updated>"), Some("2026-08-19T09:27:38Z"));
         assert_eq!(find_token("no marker", "releases/tag/", "\""), None);
@@ -550,12 +548,12 @@ mod tests {
 
     #[test]
     fn extract_asset_names_parses_download_links() {
-        let tag = "v0.6.6";
         let html = r#"
-            <a href="/hairyf/deepseek-harness-desktop/releases/download/v0.6.6/x64-setup.exe">x</a>
-            <a href="/hairyf/deepseek-harness-desktop/releases/download/v0.6.6/x64_en-US.msi">y</a>
-            <a href="/hairyf/deepseek-harness-desktop/releases/download/v0.6.5/old.dmg">z</a>
+            <a href="/shenmuli0324-glitch/mir3-studio-ai/releases/download/v0.1.1/x64-setup.exe">x</a>
+            <a href="/shenmuli0324-glitch/mir3-studio-ai/releases/download/v0.1.1/x64_en-US.msi">y</a>
+            <a href="/shenmuli0324-glitch/mir3-studio-ai/releases/download/v0.1.0/old.dmg">z</a>
         "#;
+        let tag = "v0.1.1";
         let names = extract_asset_names(html, tag);
         assert_eq!(names, vec!["x64-setup.exe", "x64_en-US.msi"]);
         assert!(extract_asset_names(html, "v9.9.9").is_empty());

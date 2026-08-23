@@ -1,7 +1,6 @@
 pub mod cli;
 pub mod core;
 pub mod download;
-pub mod migrate;
 pub mod plugin;
 pub mod profile;
 pub mod scheduler;

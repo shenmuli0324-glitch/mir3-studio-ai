@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'valtio-define'
+import { BRAND } from '@/config/brand'
 import { store } from '@/store'
 import { Info } from './info'
 
@@ -41,7 +42,7 @@ export function DesktopAboutDialog(props: DesktopAboutDialogProps) {
                   {t('app.title')}
                 </div>
                 <Description className="text-xs">
-                  {t('about.powered_by', { name: about?.powered_by ?? 'Hairy & DeepSeek' })}
+                  {t('about.powered_by', { name: about?.powered_by ?? BRAND.coreDisplayName })}
                 </Description>
               </div>
               <div className="space-y-1.5 border-t border-line/40 pt-3">

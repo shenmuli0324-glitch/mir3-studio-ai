@@ -5,7 +5,7 @@
 //! - 页面运行期异常——内嵌 dsh 页面（或 dsh-tauri 桥）经
 //!   `report_plugin_error` 命令上报（见 desktop 的 iframe 消息桥）。
 //!
-//! 记录保存在桌面端数据目录 `plugin-errors.json`，与 `$DSH_HOME`（官方数据）
+//! 记录保存在桌面端数据目录 `plugin-errors.json`，与 `$MIR3_STUDIO_HOME`（官方数据）
 //! 分离：这是桌面端自己的诊断信息，不属于 dsh profile 数据。
 //! 插件安装/升级/卸载成功时清除对应记录。
 

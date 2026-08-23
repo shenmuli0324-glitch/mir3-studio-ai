@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MIR3 Studio AI",
-  "version": "0.7.3",
-  "identifier": "io.github.hairyf.deepseek-harness-desktop",
+  "version": "0.1.0",
+  "identifier": "ai.mir3.studio",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -29,7 +29,7 @@
     "resources": ["resources/**/*"],
     "licenseFile": "licenses/INSTALLER-LICENSE.txt",
     "category": "DeveloperTool",
-    "copyright": "Copyright © 2026 MIR3 Studio AI contributors; based on deepseek-harness-desktop",
+    "copyright": "Copyright © 2026 MIR3 Studio AI contributors",
     "windows": {
       "nsis": {
         "template": "templates/installer.nsi",
@@ -42,7 +42,7 @@
         "language": ["en-US", "zh-CN"]
       }
     },
-    "shortDescription": "MIR3 developer desktop powered by DeepSeek Harness",
-    "longDescription": "MIR3 Studio AI is a native desktop foundation for MIR3 development workflows, powered by DeepSeek Harness (dsh)."
+    "shortDescription": "AI development workspace for MIR3 engine projects",
+    "longDescription": "MIR3 Studio AI is a native desktop workspace for MIR3 engine development, project analysis, automation, and AI-assisted workflows."
   }
 }

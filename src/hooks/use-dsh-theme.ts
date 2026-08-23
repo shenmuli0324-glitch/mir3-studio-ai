@@ -18,7 +18,7 @@ function resolveTheme(preference: DshThemePreference): ResolvedTheme {
 /**
  * 让桌面外壳（侧边栏、设置页等）跟随内嵌 dsh 页面的主题。
  *
- * dsh 把主题偏好持久化在 `$DSH_HOME/settings.yaml` 的 `ui-theme.preference`
+ * dsh 把主题偏好持久化在 `$MIR3_STUDIO_HOME/settings.yaml` 的 `ui-theme.preference`
  * （light/dark/system），后端轮询到变化后通过 `dsh-theme-updated` 事件推送，
  * 这里解析为最终主题并写到 `<html data-theme="...">`，由 CSS 变量切换配色。
  */

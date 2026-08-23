@@ -99,7 +99,7 @@ function LogPanel({ logs }: { logs: readonly string[] }) {
       toast(t('messages.log_copied'), {})
     }
     catch (err) {
-      console.error('[Harness] copy preinstall logs failed:', err)
+      console.error('[MIR3 AI Core] copy preinstall logs failed:', err)
     }
   }
 
@@ -163,7 +163,7 @@ export function PreinstallSetup() {
 
   function openRepo(id: string) {
     void invoke('open_preinstall_repo', { id }).catch((err) => {
-      console.error('[Harness] open preinstall repo failed:', err)
+      console.error('[MIR3 AI Core] open preinstall repo failed:', err)
     })
   }
 

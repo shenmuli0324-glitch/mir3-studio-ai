@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::runtime::get_dsh_data_path;
 
-/// dsh 主题偏好（对应 `$DSH_HOME/settings.yaml` 的 `ui-theme.preference`）
+/// dsh 主题偏好（对应 `$MIR3_STUDIO_HOME/settings.yaml` 的 `ui-theme.preference`）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DshTheme {

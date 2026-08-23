@@ -3,7 +3,7 @@
 //! 极简模式在 Windows 上有两层故障，本模块处理后一层（挂载与 preset 落盘），
 //! 前一层（插件安装）走预装插件流程（`service/plugin`）：
 //!
-//! 1. **终端检查缺失**：`@deepseek-ai/dsh-subprocess-local` 的
+//! 1. **终端检查缺失**：兼容核心子进程模块的
 //!    `createProcessInspector()` 只在 linux/darwin 实现，win32 上 persistent
 //!    shell spawn 时在 PTY 之前直接 throw
 //!    `subprocess-local: terminal inspection is unsupported on platform win32`
@@ -58,7 +58,7 @@ mod imp {
     /// 注入判定标记：patch 中出现该字符串即视为已挂载。
     const PATCH_MARKER: &str = "dsh-win-terminal-inspector";
 
-    /// 用户 preset 目录名（`$DSH_HOME/.agent-presets/<id>/`）。
+    /// 用户 preset 目录名（`$MIR3_STUDIO_HOME/.agent-presets/<id>/`）。
     const WIN_PRESET_ID: &str = "minimal-win";
 
     /// 候选 Git Bash 安装位置（常见路径 + 环境变量覆盖）。
@@ -77,7 +77,7 @@ mod imp {
         )
     }
 
-    /// dsh 用户数据目录（`$DSH_HOME`）。
+    /// dsh 用户数据目录（`$MIR3_STUDIO_HOME`）。
     fn dsh_home(app_handle: &tauri::AppHandle) -> PathBuf {
         crate::config::get_dsh_data_path(app_handle)
     }
@@ -284,75 +284,10 @@ mod imp {
     /// 2. `terminal-bash` 的 `shellPath` 指向本机 Git Bash，并固定
     ///    `--noprofile --norc -i`（登录 shell 会覆写 PS1，破坏受控提示符契约）。
     fn render_composition(shell_path: &str) -> String {
-        let shell_path = shell_path.replace('\'', "''"); // YAML 单引号标量：单引号双写
-        format!(
-            r#"# Windows 版极简模式：基于 shipped `minimal` preset 复制并修正。
-# 1) terminal-bash 的 shellPath 指向本机 Git Bash（默认 /bin/bash 在
-#    Windows 上不是有效路径）；
-# 2) persistent-shell 组内沙箱策略固定为 danger-full-access：Git Bash
-#    （MSYS）在 workspace-write 的受限令牌下无法初始化信号管道
-#    （cygheap/ACL），shell 必须运行在非受限令牌下。
-
-- id: persona
-  name: '@deepseek-ai/dsh-persona'
-  config:
-    text: You are a helpful software engineer assistant.
-    complete: true
-    includeRuntimeContext: false
-
-- id: persistent-shell
-  name: cordis:group
-  group: true
-  isolate:
-    terminals: true
-    sandboxPolicy: true
-  config:
-    - id: pty
-      name: '@deepseek-ai/dsh-terminal'
-
-    - id: sandbox-policy
-      name: '@deepseek-ai/dsh-sandbox-policy'
-      config:
-        mode: danger-full-access
-        workspaceRoot: !!js process.env.DSH_CWD ?? process.cwd()
-
-    - id: terminal-bash
-      name: '@deepseek-ai/dsh-terminal-bash'
-      config:
-        timeoutMs: 300000
-        shellPath: '{}'
-        shellArgs: ['--noprofile', '--norc', '-i']
-
-    - id: persistent-bash
-      name: '@deepseek-ai/dsh-tool-bash-persistent'
-      config:
-        timeoutMs: 300000
-        description: |-
-          Run commands in a bash shell (Git Bash on Windows)
-          * This shell runs unconfined (danger-full-access): no file sandbox on shell commands.
-          * State is persistent across command calls and discussions with the user.
-
-- id: filesystem
-  name: cordis:group
-  group: true
-  isolate:
-    fs: true
-  config:
-    - id: fs-local
-      name: '@deepseek-ai/dsh-fs-local'
-      config:
-        cwd: !!js process.env.DSH_CWD ?? process.cwd()
-
-    - id: str-replace-editor
-      name: '@deepseek-ai/dsh-tool-str-replace-editor'
-      config:
-        maxOutputChars: 16000
-"#,
-            shell_path
-        )
+        crate::config::core_compat::render_windows_minimal_composition(shell_path)
     }
 
-    /// 在用户根创作 Windows 版极简 preset（`$DSH_HOME/.agent-presets/minimal-win/`）。
+    /// 在用户根创作 Windows 版极简 preset（`$MIR3_STUDIO_HOME/.agent-presets/minimal-win/`）。
     ///
     /// 幂等：目录已存在则视为用户已拥有该 preset，跳过（shipped preset 之外的
     /// 用户根由用户自己管理，升级不覆盖）。Git Bash 未安装时跳过并告警，

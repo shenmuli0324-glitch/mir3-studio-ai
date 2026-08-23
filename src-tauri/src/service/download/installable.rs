@@ -37,13 +37,13 @@ impl Installable for Nodejs {
     }
 }
 
-// --- DeepSeek Harness 实现 ---
+// --- MIR3 AI Core 实现 ---
 pub struct Dsh;
 
 #[async_trait]
 impl Installable for Dsh {
     fn title(&self) -> &str {
-        "Harness 核心"
+        "MIR3 AI Core"
     }
     fn get_download_url(&self) -> Result<String, String> {
         config::get_dsh_download_url()

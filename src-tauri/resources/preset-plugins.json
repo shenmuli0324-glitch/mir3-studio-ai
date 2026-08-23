@@ -22,7 +22,7 @@
     "id": "dshmarket",
     "spec": "dshmarket",
     "name": "DSH Market",
-    "description": "Visual plugin market inside DeepSeek Harness — browse, search, and one-click install community plugins.",
+    "description": "Visual plugin market inside MIR3 AI Core — browse, search, and one-click install community plugins.",
     "repoUrl": "https://github.com/dsh-market/dsh-market",
     "recommended": true
   },

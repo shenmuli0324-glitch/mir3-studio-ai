@@ -1,7 +1,7 @@
-//! 依赖安装、自愈与 Harness 服务生命周期管理。
+//! 依赖安装、自愈与 MIR3 AI Core 服务生命周期管理。
 //!
-//! 覆盖三块：依赖（Node.js / 打包 Harness / pnpm）的安装与「记录滞后」自愈、
-//! Harness 服务进程的启停与状态查询，以及运行时三件套的就绪判断。
+//! 覆盖三块：依赖（Node.js / 打包 MIR3 AI Core / pnpm）的安装与「记录滞后」自愈、
+//! MIR3 AI Core 服务进程的启停与状态查询，以及运行时三件套的就绪判断。
 
 use crate::config;
 use crate::service::cli;
@@ -24,7 +24,7 @@ fn sync_cli_link(app_handle: &AppHandle) {
     }
 }
 
-/// 一键安装依赖（Node.js 运行时 + 打包的 Harness 发行版）
+/// 一键安装依赖（Node.js 运行时 + 打包的 MIR3 AI Core 发行版）
 ///
 /// 返回是否真正执行了安装/更新：`true` 表示本次调用落盘了运行时（前端
 /// 需重启服务以加载新版本），`false` 表示未发生任何安装（已是最新、记录
@@ -53,7 +53,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
     // `installed`（一旦复位，此后每次启动都会走进安装分支）。此时直接补记
     // installed 收尾：不做联网核对、绝不整包重下——联网核对可能把「记录滞后」
     // 误判为真更新，而重下整目录在 Windows 上极易破坏 node_modules（历史 issue：
-    // 重解压后启动报找不到 @deepseek-ai/dsh-client-ui-settings）。真更新一律由
+    // 重解压后启动报找不到 @deepseek核心 UI 设置包）。真更新一律由
     // 启动后的 check_dsh_update 提示用户手动安装，启动路径不该自行下载。
     if node_ok && dsh_files_ok && pnpm_ok {
         let setting = config::get_store_dat_setting(&app_handle);
@@ -74,7 +74,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
     // 已安装文件在盘时，用 resolve_update 甄别「记录滞后」与「真更新」：
     // 记录滞后（HealUpToDate）只修正 store 记录、绝不整包重下。否则会把一个
     // 可用的 node_modules 整目录删除重解压，Windows 上原生模块 DLL 锁/重解压
-    // 很容易留下破损安装，导致启动报找不到 @deepseek-ai/dsh-client-ui-settings
+    // 很容易留下破损安装，导致启动报找不到 @deepseek核心 UI 设置包
     // 或 HARNESS_NOT_FOUND。仅在真更新（UpdateAvailable）时才允许重新下载。
     let dsh_need_install = match &dsh_latest {
         Ok(latest) if dsh_files_ok => {
@@ -101,7 +101,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
                 | download::UpdateCheck::HealUpToDate => {
                     if record_commit.as_deref() != Some(latest.commit.as_str()) {
                         log::info!(
-                            "Installed Harness files already at latest release, healing stale record: {} ({})",
+                            "Installed MIR3 AI Core files already at latest release, healing stale record: {} ({})",
                             latest.tag,
                             latest.commit
                         );
@@ -163,7 +163,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
     Ok(updated)
 }
 
-/// 静默检查是否有新版 Harness 可用（只查不装，供进入页面后后台调用）
+/// 静默检查是否有新版 MIR3 AI Core 可用（只查不装，供进入页面后后台调用）
 ///
 /// 以“实际安装文件”为准核对，而不是只看本地记录：记录可能因安装时 API
 /// 失败或外围途径更新而滞后于文件，此时修正记录并免打扰；同版本热修
@@ -204,7 +204,7 @@ pub async fn check_dsh_update(
             // 安装文件已是最新 release，只是记录滞后：修正记录后下次启动
             // 直接走 commit 比对快速路径，不再误报
             log::info!(
-                "Installed Harness files already at latest release, healing stale record: {} ({})",
+                "Installed MIR3 AI Core files already at latest release, healing stale record: {} ({})",
                 latest.tag,
                 latest.commit
             );
@@ -215,25 +215,25 @@ pub async fn check_dsh_update(
     }
 }
 
-/// 启动 Harness 服务
+/// 启动 MIR3 AI Core 服务
 #[tauri::command]
 pub async fn launch_harness(app_handle: AppHandle) -> Result<(), String> {
     workflow::launch(app_handle).await
 }
 
-/// 停止 Harness 服务
+/// 停止 MIR3 AI Core 服务
 #[tauri::command]
 pub async fn shutdown_harness(app_handle: AppHandle) -> Result<(), String> {
     workflow::stop(app_handle).await
 }
 
-/// 重启 Harness 服务
+/// 重启 MIR3 AI Core 服务
 #[tauri::command]
 pub async fn restart_harness(app_handle: AppHandle) -> Result<(), String> {
     workflow::restart(app_handle).await
 }
 
-/// 获取当前 Harness 服务状态
+/// 获取当前 MIR3 AI Core 服务状态
 #[tauri::command]
 pub fn get_dsh_status() -> workflow::status::Status {
     workflow::status::get_status()

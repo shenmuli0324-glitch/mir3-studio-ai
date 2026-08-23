@@ -1,9 +1,9 @@
-//! Harness 核心管理。
+//! MIR3 AI Core 管理。
 //!
 //! 核心来源：
 //! - `local`：用户通过 CLI（npm/pnpm 全局安装）自行安装的 dsh，安装目录与
-//!   配置（`$DSH_HOME`）都不归桌面端管理；
-//! - `app`：桌面端预打包管理的 deepseek-harness-pkg 多版本副本。激活版本固定
+//!   配置（`$MIR3_STUDIO_HOME`）都不归桌面端管理；
+//! - `app`：桌面端预打包管理的兼容核心多版本副本。激活版本固定
 //!   位于 `dependencies/dsh`（既有代码全部依赖该路径），通过「核心」面板下载的
 //!   历史版本存放在 `dependencies/dsh-<tag>` 槽位，切换时两个目录互换。
 //!
@@ -101,24 +101,27 @@ fn find_user_dsh_bin(app_handle: &AppHandle) -> Option<PathBuf> {
     None
 }
 
-/// 在给定前缀下探测 `node_modules/@deepseek-ai/dsh` 包目录。
+/// 在给定前缀下探测兼容核心包目录。
 fn probe_package_dir(prefix: &Path) -> Option<PathBuf> {
-    let p = prefix.join("node_modules").join("@deepseek-ai").join("dsh");
+    let p = prefix
+        .join("node_modules")
+        .join(config::core_compat::CORE_SCOPE)
+        .join(config::core_compat::CORE_PACKAGE_NAME);
     p.join("package.json").is_file().then_some(p)
 }
 
 /// 解析用户 dsh 的包目录（npm / pnpm 全局布局探测，纯文件系统、不派生子进程）：
 /// 1. PATH 命中项同级推导（npm：bin 与 node_modules 同前缀；pnpm Windows：
 ///    bin 在 `%LOCALAPPDATA%\pnpm`，包在 `global/<n>/node_modules`）；
-/// 2. pnpm 全局布局扫描（`<prefix>/global/*/node_modules/@deepseek-ai/dsh`）。
+/// 2. pnpm 全局布局扫描。
 fn user_dsh_package_dir(app_handle: &AppHandle) -> Option<PathBuf> {
     let bin = find_user_dsh_bin(app_handle)?;
     let prefix = bin.parent()?;
-    // npm 布局：`<prefix>/node_modules/@deepseek-ai/dsh`
+    // npm 全局布局。
     if let Some(dir) = probe_package_dir(prefix) {
         return Some(dir);
     }
-    // pnpm 布局：`<prefix>/global/<n>/node_modules/@deepseek-ai/dsh`
+    // pnpm 全局布局。
     if let Ok(entries) = std::fs::read_dir(prefix.join("global")) {
         for entry in entries.flatten() {
             if let Some(dir) = probe_package_dir(&entry.path()) {
@@ -207,29 +210,23 @@ fn slot_dir(app_handle: &AppHandle, tag: &str) -> PathBuf {
     dependencies_dir(app_handle).join(tag)
 }
 
-/// 定位已下载的槽位：优先新命名 `dependencies/<tag>`，兼容旧版遗留的双前缀
-/// `dependencies/dsh-<tag>`（tag 以 `dsh-` 开头时旧命名会产生 `dsh-dsh-...`）。
+/// 定位已下载的槽位。新产品只接受当前命名 `dependencies/<tag>`，不读取旧版槽位。
 fn existing_slot_dir(app_handle: &AppHandle, tag: &str) -> Option<PathBuf> {
-    let deps = dependencies_dir(app_handle);
-    let new = deps.join(tag);
-    if new.is_dir() {
-        return Some(new);
-    }
-    let legacy = deps.join(format!("dsh-{tag}"));
-    legacy.is_dir().then_some(legacy)
+    let slot = dependencies_dir(app_handle).join(tag);
+    slot.is_dir().then_some(slot)
 }
 
-/// 读取发行版目录 `package.json` 中 `@deepseek-ai/dsh` 依赖版本（历史槽位展示用）。
+/// 读取发行版目录 `package.json` 中的兼容核心依赖版本。
 fn read_manifest_dsh_version(dir: &Path) -> Option<String> {
     let content = std::fs::read_to_string(dir.join("package.json")).ok()?;
     let v: serde_json::Value = serde_json::from_str(&content).ok()?;
     v.get("dependencies")?
-        .get("@deepseek-ai/dsh")?
+        .get(config::core_compat::CORE_PACKAGE)?
         .as_str()
         .map(|s| s.trim_start_matches(['^', '~', '=', '>', '<']).to_string())
 }
 
-/// 核心列表：本地核心 + deepseek-harness-pkg 各发布版本（按版本去重）。
+/// 核心列表：本地核心 + 应用管理的兼容核心各发布版本（按版本去重）。
 ///
 /// 版本行数据源为 GitHub tags（`fetch_dsh_pkg_tags`，最新在前）。pkg 仓库会对同一
 /// 版本打多个 tag（含测试打包），这里按版本去重——同一版本只保留**最后一个** tag。
@@ -619,9 +616,9 @@ fn local_core_uses_pnpm(app_handle: &AppHandle) -> bool {
     let Some(prefix) = bin.parent() else {
         return false;
     };
-    // npm 布局：`<prefix>/node_modules/@deepseek-ai/dsh` 命中 → npm 管理
+    // npm 布局命中 → npm 管理。
     let npm_layout = probe_package_dir(prefix).is_some();
-    // pnpm 布局：`<prefix>/global/<n>/node_modules/@deepseek-ai/dsh` 命中 → pnpm 管理
+    // pnpm 布局命中 → pnpm 管理。
     let pnpm_layout = std::fs::read_dir(prefix.join("global"))
         .map(|entries| entries.flatten().any(|e| probe_package_dir(&e.path()).is_some()))
         .unwrap_or(false);
@@ -643,12 +640,12 @@ pub async fn update_local_core(app_handle: AppHandle) -> Result<String, String> 
     let (pm, args): (&str, Vec<String>) = if uses_pnpm {
         (
             "pnpm",
-            vec!["add".to_string(), "-g".to_string(), "@deepseek-ai/dsh@latest".to_string()],
+            vec!["add".to_string(), "-g".to_string(), config::core_compat::latest_install_spec()],
         )
     } else {
         (
             "npm",
-            vec!["install".to_string(), "-g".to_string(), "@deepseek-ai/dsh@latest".to_string()],
+            vec!["install".to_string(), "-g".to_string(), config::core_compat::latest_install_spec()],
         )
     };
     log::info!("Updating local dsh core via `{pm} {args:?}`");
@@ -719,7 +716,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("package.json"),
-            r#"{"name":"@deepseek-ai/dsh","version":"0.1.0-rc.8"}"#,
+            serde_json::json!({
+                "name": config::core_compat::CORE_PACKAGE,
+                "version": "0.1.0-rc.8"
+            })
+            .to_string(),
         )
         .unwrap();
         assert_eq!(

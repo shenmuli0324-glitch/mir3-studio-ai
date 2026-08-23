@@ -25,7 +25,7 @@ export interface CliLinkStatus {
   enabled: boolean
   shim_exists: boolean
   path_registered: boolean
-  user_dsh_preserved: boolean
+  user_core_preserved: boolean
   bin_dir: string
   shim_path: string
 }
@@ -244,10 +244,10 @@ export function ConfigDebug() {
           <If cond={cliStatus != null}>
             <div className="flex flex-col">
               <If
-                cond={!cliStatus?.user_dsh_preserved}
+                cond={!cliStatus?.user_core_preserved}
                 else={(
                   <Description className="text-[10px] text-muted/70">
-                    {t('ui.cli_link_user_dsh_preserved')}
+                    {t('ui.cli_link_user_core_preserved')}
                   </Description>
                 )}
               >

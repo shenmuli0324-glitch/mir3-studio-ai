@@ -10,10 +10,10 @@
 
 ## 一、产品概述
 
-桌面端一键运行 DeepSeek Harness（`dsh`）：首次启动自动装配内置 Node 运行时与 Harness 内核，无需用户安装 Node/pnpm/Docker；通过 Tauri 2 在 `127.0.0.1` 本地端口提供服务；包含核心多版本管理、档案隔离、插件管理、应用配置中心、命令行集成（`dsh` shim + PATH）、首次启动引导与桌面端自更新。纯本地运行、默认关闭遥测，中英双语界面、支持暗色模式。
+桌面端一键运行 MIR3 AI Core：首次启动自动装配内置 Node 运行时与核心，无需用户安装 Node/pnpm/Docker；通过 Tauri 2 在 `127.0.0.1` 本地端口提供服务；包含核心多版本管理、档案隔离、插件管理、应用配置中心、命令行集成（`mir3` shim + PATH）、首次启动引导与桌面端自更新。纯本地运行、默认关闭遥测，中英双语界面、支持暗色模式。
 
 - **端口隔离**：release 默认 `3080`，debug（`pnpm tauri dev` / `cargo build`）默认 `3081`，由 `config::setting::default_port()` 用 `cfg!(debug_assertions)` 区分，避免开发时与已运行的桌面端争用端口。
-- **数据隔离（核心共用、数据不共用）**：node/`dependencies/dsh`/`dependencies/pnpm` 为共用核心（AppData）；`$DSH_HOME` 默认 `~/.dsh`（release）/`~/.dsh.dev`（debug），store 文件 `.store.dat`/`.store.dev.dat`；debug 不迁移旧数据、不注册/注销 PATH、不写烘焙 DSH_HOME 的 `dsh` shim。
+- **数据隔离（核心共用、数据不共用）**：node/`dependencies/dsh`/`dependencies/pnpm` 为共用核心（AppData）；`$MIR3_STUDIO_HOME` 默认 `~/.mir3-studio-ai`（release）/`~/.mir3-studio-ai.dev`（debug），store 文件 `.store.dat`/`.store.dev.dat`；不迁移其他产品数据，debug 不注册/注销用户 PATH。
 - **Windows 极简模式**：预装插件流程为 Windows 用户列出「修复」项（`dsh-win-terminal-inspector`），确认后 `dsh plugin add github:clearkurt/dsh-win-terminal-inspector` 安装；随后写入 profile `cordis.patch.yml` 挂载行并生成基于 Git Bash + danger-full-access 的用户 preset。
 
 ## 二、测试范围与质量目标
@@ -26,7 +26,7 @@
 | 前端（React） | 安装状态机、下载进度、内嵌 iframe、侧边栏控制、配置对话框（调试/档案/插件/核心）、更新对话框、插件恢复、i18n、主题、store 状态管理 | `src/**` |
 | 跨层集成 | 前端 `invoke` 命令 + 事件 ↔ 后端命令桥；WebView 内嵌 dsh UI；进程启动/停止；PATH 注册后的 CLI 可用性 | `bridge/**` + `layout/**` |
 | 资源 | 预设插件清单、内嵌 WebView、运行时/发行版产物 | `src-tauri/resources/**` |
-| 发布 | release（`:3080` / `~/.dsh`）与 debug（`:3081` / `~/.dsh.dev`）隔离，三平台安装包 | `src-tauri/**` + `dependencies/**` |
+| 发布 | release（`:3080` / `~/.mir3-studio-ai`）与 debug（`:3081` / `~/.mir3-studio-ai.dev`）隔离，三平台安装包 | `src-tauri/**` + `dependencies/**` |
 
 ### 2.2 质量目标（Quality Objectives）
 
@@ -34,7 +34,7 @@
 | --- | --- |
 | 功能正确性 | 100% 验收标准被测试用例覆盖；首次装配、档案切换、核心切换、插件装卸、自更新等核心路径无失败 |
 | 稳定性 | 核心 E2E 场景通过率 ≥ 95%；无 critical / high 级缺陷进入发布 |
-| 数据隔离 | release 与 debug 数据/端口互不污染（验证 `.store.dat` 与 `.store.dev.dat`、`~/.dsh` 与 `~/.dsh.dev`） |
+| 数据隔离 | release 与 debug 数据/端口互不污染（验证 `.store.dat` 与 `.store.dev.dat`、`~/.mir3-studio-ai` 与 `~/.mir3-studio-ai.dev`） |
 | 代码质量 | 关键路径行覆盖率 ≥ 80%、分支覆盖率 ≥ 90%；无未处理 panic |
 | 本地化 | 中英双语 key 同步，无硬编码字符串，桌面与后端文案一致 |
 | 安全 | 无 critical 级漏洞；本地代码执行能力被限制在可信/隔离环境并给出明确提示 |
@@ -75,15 +75,15 @@
 
 | 风险 | 等级 | 影响 | 缓解策略 |
 | --- | --- | --- | --- |
-| 首次装配下载失败 / 网络不可达 | 高 | 无法进入 Harness 界面 | 失败可重试、保留本地已装配产物；前置断网场景测试 |
+| 首次装配下载失败 / 网络不可达 | 高 | 无法进入 MIR3 AI Core 界面 | 失败可重试、保留本地已装配产物；前置断网场景测试 |
 | 内核版本切换后服务未重启或端口被占 | 高 | 界面无法加载、进程残留 | 进程树回收（`taskkill /T /F`）、`WM_SETTINGCHANGE`、健康检查轮询 |
-| PATH 注册 / shim 失效 | 高 | 新终端无法使用 `dsh` | 安装后 `cli::ensure`；检查 `%LOCALAPPDATA%\deepseek-harness\bin` 与 shim 转义 |
+| PATH 注册 / shim 失效 | 高 | 新终端无法使用 `mir3` | 安装后 `cli::ensure`；检查 `%LOCALAPPDATA%\mir3-studio-ai\bin` 与 shim 转义 |
 | 插件安装/升级/卸载异常 | 中 | 插件损坏、面板异常 | 插件恢复（recovery）、只读展示 + 升级/卸载入口、错误详情同步 |
 | 档案配置污染 | 中 | 各档案插件/补丁/设置互相干扰 | 档案隔离验证、切换后服务重启 |
 | Windows 极简模式不支持 `win32` | 中 | 持久 shell 报错 | `win-terminal-inspector` 预设修复（仅 Windows，幂等） |
 | 自更新失败 / 版本回退 | 中 | 无法获取新版本 | 独立检查 GitHub 最新版、失败保留本地、开发/生产构建端口与数据隔离 |
 | iframe 跨源通信 / 消息桥失效 | 高 | 侧边栏控制不起作用 | iframe origin 校验、消息桥（dsh-tauri）契约测试 |
-| 安全声明：`dsh` 具备本地代码执行能力 | 高 | 代码执行风险 | 文档声明 + 隔离环境 + 安装来源白名单（预设插件清单） |
+| 安全声明：MIR3 AI Core 具备本地代码执行能力 | 高 | 代码执行风险 | 文档声明 + 隔离环境 + 安装来源白名单（预设插件清单） |
 
 > ITEM 级风险详见「五、测试项与测试点」各表「风险」列。
 
@@ -96,13 +96,13 @@
 
 | # | 测试点（POINT） | 风险 | 输入项/关注点 |
 |---|--------------|------|--------------|
-| 1 | 运行时与内核依赖安装 | 高 | 首次启动自动下载内置 Node 运行时与 Harness 内核；安装状态机（Initial→Installing→Running）；`install_dependencies` 返回 bool |
+| 1 | 运行时与内核依赖安装 | 高 | 首次启动自动下载内置 Node 运行时与 MIR3 AI Core；安装状态机（Initial→Installing→Running）；`install_dependencies` 返回 bool |
 | 2 | 下载与解压进度 | 高 | 两阶段进度（下载 0–50、解压 50–100）；进度事件实时推送；失败重试（官方直连→ghfast.top 镜像兜底） |
 | 3 | 本机 Node/Pnpm 复用 | 高 | 本机已有兼容 Node/pnpm 时直接复用，不修改系统环境；未检测到才走内置运行时 |
 | 4 | 首次启动预设插件引导 | 高 | 预设清单（`resources/preset-plugins.json`）；`get_preinstall_plugins`/`install_preinstall_plugins`/`skip_preinstall_plugins`/`cancel_preinstall_plugins`/`get_preinstall_pending`/`open_preinstall_repo`；指纹（preset_hash）决定重新进入引导 |
 | 5 | 安装失败与网络异常处理 | 高 | GitHub 不可达；下载/校验/解压失败；镜像兜底失败；提示与重试 |
 
-### ITEM 2：Harness 核心管理（目录 `02-core`，风险：高）
+### ITEM 2：MIR3 AI Core管理（目录 `02-core`，风险：高）
 
 | # | 测试点（POINT） | 风险 | 输入项/关注点 |
 |---|--------------|------|--------------|
@@ -127,7 +127,7 @@
 | 1 | 配置对话框与管理 | 中 | `get_app_config`/`update_app_config`；调试/档案/插件/核心四个分页；字段校验与保存 |
 | 2 | 语言与主题 | 中 | `set_language`（zh-CN/en）；`get_dsh_theme`（light/dark/system）；界面实时切换；i18n 扁平键 |
 | 3 | 侧边栏与偏好设置 | 低 | `toggle_sidebar`；`auto_start`、`cli_link_enabled` 等开关 |
-| 4 | 设置持久化 | 中 | `setting_updated` 事件；store 键（installed/port/active_profile/active_core/cli_link_enabled/preinstall_done/preset_hash/dsh_home_migrated/dsh_pkg_tag/dsh_pkg_commit） |
+| 4 | 设置持久化 | 中 | `setting_updated` 事件；store 键（installed/port/active_profile/active_core/cli_link_enabled/preinstall_done/preset_hash/dsh_pkg_tag/dsh_pkg_commit） |
 
 ### ITEM 5：档案隔离管理（目录 `05-profile`，风险：高）
 
@@ -152,15 +152,15 @@
 
 | # | 测试点（POINT） | 风险 | 输入项/关注点 |
 |---|--------------|------|--------------|
-| 1 | dsh 命令链接状态 | 中 | `get_cli_link_status`；`cli_link_enabled` 开关；安装后自动注册 `dsh` 命令 |
-| 2 | PATH 注册与 shim | 中 | Win `%LOCALAPPDATA%\deepseek-harness\bin`、Unix `~/.local/bin`；shim 文本纯英文；本地 Node 优先、pnpm 用户优先；安装跳过条件 |
+| 1 | mir3 命令链接状态 | 中 | `get_cli_link_status`；`cli_link_enabled` 开关；安装后自动注册 `mir3` 命令 |
+| 2 | PATH 注册与 shim | 中 | Win `%LOCALAPPDATA%\mir3-studio-ai\bin`、Unix `~/.local/bin`；shim 文本纯英文；本地 Node 优先、pnpm 用户优先；安装跳过条件 |
 
 ### ITEM 8：端口与数据隔离（目录 `08-isolation`，风险：中）
 
 | # | 测试点（POINT） | 风险 | 输入项/关注点 |
 |---|--------------|------|--------------|
 | 1 | 端口隔离 | 中 | release 3080 / debug 3081；`cfg!(debug_assertions)` 区分；避免争用 |
-| 2 | 数据目录隔离 | 中 | `$DSH_HOME` 默认 `~/.dsh`（release）/`~/.dsh.dev`（debug）；store 文件 `.store.dat`/`.store.dev.dat`；debug 不迁移/不注册 PATH/不写 shim；`~/.dsh.dev/.harness.pid` 精确回收 |
+| 2 | 数据目录隔离 | 中 | `$MIR3_STUDIO_HOME` 默认 `~/.mir3-studio-ai`（release）/`~/.mir3-studio-ai.dev`（debug）；store 文件 `.store.dat`/`.store.dev.dat`；不访问其他产品目录；`~/.mir3-studio-ai.dev/.mir3-core.pid` 精确回收 |
 
 ### ITEM 9：隐私与本地化（目录 `09-privacy`，风险：中）
 
@@ -191,7 +191,7 @@
 | 操作系统 | Windows 10/11、macOS 10.15+、Linux（Ubuntu 22.04+） |
 | 应用构建 | release（`:3080`）与 debug（`:3081`，`pnpm tauri dev`）分别验证 |
 | 网络 | 首次装配需要网络；断网场景单向验证 |
-| 数据目录 | release `~/.dsh`、debug `~/.dsh.dev`；store 文件 `.store.dat` / `.store.dev.dat` |
+| 数据目录 | release `~/.mir3-studio-ai`、debug `~/.mir3-studio-ai.dev`；store 文件 `.store.dat` / `.store.dev.dat` |
 | 浏览器/WebView | Tauri WebView（遵循宿主 WebView 内核）；E2E 用 WebDriver（Windows `msedgedriver`、Linux `WebKitWebDriver`、macOS `safaridriver`） |
 
 ### 6.2 测试数据管理

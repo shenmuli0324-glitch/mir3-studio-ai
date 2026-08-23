@@ -10,7 +10,7 @@ pub struct DownloadFinishedPayload {
     pub(crate) success: bool,
 }
 
-/// iframe 内 DSH 页面发来的原生通知请求载荷。
+/// iframe 内 MIR3 AI Core 页面发来的原生通知请求载荷。
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeNotificationPayload {
