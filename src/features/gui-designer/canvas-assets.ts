@@ -2,8 +2,8 @@ import type { Mir3UiNode } from './types'
 import { useQueries } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { guiAssetQueryOptions } from './api'
+import { componentDefinition, nodeAssetValue, renderAssetValue } from './component-catalog'
 
-const MAX_ACTIVE_ASSETS = 128
 const MAX_CACHED_URLS = 256
 const MAX_CACHED_BYTES = 128 * 1024 * 1024
 const ASSET_CONCURRENCY = 6
@@ -11,6 +11,7 @@ const ASSET_CONCURRENCY = 6
 interface CachedAssetUrl {
   url: string
   projectId: string
+  logicalPath: string
   touchedAt: number
   byteLength: number
 }
@@ -25,9 +26,9 @@ const blobUrlCache = new Map<string, CachedAssetUrl>()
 const projectReleaseTimers = new Map<string, number>()
 let assetTouchSequence = 0
 
-export function useCanvasAssets(projectId: string | undefined, nodes: Record<string, Mir3UiNode>, enabled: boolean): CanvasAssetTable {
-  const paths = enabled ? uniqueAssetPaths(nodes) : []
-  const activePaths = paths.slice(0, MAX_ACTIVE_ASSETS)
+export function useCanvasAssets(projectId: string | undefined, nodes: Record<string, Mir3UiNode>, enabled: boolean, selectedNodeId?: string | null): CanvasAssetTable {
+  const paths = enabled ? prioritizedAssetPaths(nodes, selectedNodeId) : []
+  const activePaths = paths
   const assetKey = `${projectId ?? ''}:${activePaths.join('|')}`
   const [requestWindow, setRequestWindow] = useState({ key: assetKey, count: ASSET_CONCURRENCY })
   const requestedCount = requestWindow.key === assetKey ? requestWindow.count : ASSET_CONCURRENCY
@@ -57,18 +58,19 @@ export function useCanvasAssets(projectId: string | undefined, nodes: Record<str
   }, [projectId])
   const hrefs: Record<string, string> = {}
   const dimensions: Record<string, { width: number, height: number }> = {}
+  const protectedPaths = new Set(requestedPaths)
   for (let index = 0; index < requestedPaths.length; index += 1) {
     const path = requestedPaths[index]
     const asset = queries[index]?.data
     if (!asset || !projectId)
       continue
-    const href = cachedBlobUrl(projectId, path, asset.sha256, asset.blob)
+    const href = cachedBlobUrl(projectId, path, asset.sha256, asset.blob, protectedPaths)
     if (href)
       hrefs[path] = href
     if (asset.width != null && asset.height != null)
       dimensions[path] = { width: asset.width, height: asset.height }
   }
-  return { hrefs, dimensions, omitted: Math.max(0, paths.length - activePaths.length) }
+  return { hrefs, dimensions, omitted: 0 }
 }
 
 export function clearCanvasAssetUrlCache(): void {
@@ -95,22 +97,43 @@ function scheduleProjectAssetRelease(projectId: string): void {
   projectReleaseTimers.set(projectId, timer)
 }
 
-function uniqueAssetPaths(nodes: Record<string, Mir3UiNode>): string[] {
+function prioritizedAssetPaths(nodes: Record<string, Mir3UiNode>, selectedNodeId?: string | null): string[] {
   const paths = new Set<string>()
+  const selected = selectedNodeId ? nodes[selectedNodeId] : undefined
+  if (selected)
+    addNodeAssets(paths, selected, false)
+  for (const node of Object.values(nodes))
+    addRenderableAsset(paths, node)
   for (const node of Object.values(nodes)) {
-    const path = node.paint?.image?.value || node.paint?.normalImage?.value
-    if (path)
-      paths.add(path)
-    for (const [property, bound] of Object.entries(node.properties ?? {})) {
-      if (typeof bound.value !== 'string' || !/image|texture/i.test(property) || !/\.(?:png|jpe?g)$/i.test(bound.value))
-        continue
-      paths.add(bound.value)
-    }
+    if (node.id !== selectedNodeId)
+      addNodeAssets(paths, node, true)
   }
   return [...paths]
 }
 
-function cachedBlobUrl(projectId: string, logicalPath: string, sha256: string, blob: Blob): string | undefined {
+function addRenderableAsset(paths: Set<string>, node: Mir3UiNode): void {
+  const path = renderAssetValue(node)?.value
+  if (path && isRasterAsset(path))
+    paths.add(path)
+}
+
+function addNodeAssets(paths: Set<string>, node: Mir3UiNode, secondaryOnly: boolean): void {
+  if (node.kind === 'Unsupported')
+    return
+  for (const slot of componentDefinition(node.kind).assetSlots) {
+    if (secondaryOnly && slot.render)
+      continue
+    const path = nodeAssetValue(node, slot.property)?.value
+    if (path && isRasterAsset(path))
+      paths.add(path)
+  }
+}
+
+function isRasterAsset(path: string): boolean {
+  return /\.(?:png|jpe?g)$/i.test(path)
+}
+
+function cachedBlobUrl(projectId: string, logicalPath: string, sha256: string, blob: Blob, protectedPaths: Set<string>): string | undefined {
   if (typeof URL.createObjectURL !== 'function')
     return undefined
   const key = `${projectId}:${logicalPath}:${sha256}`
@@ -120,12 +143,12 @@ function cachedBlobUrl(projectId: string, logicalPath: string, sha256: string, b
     return existing.url
   }
   const url = URL.createObjectURL(blob)
-  blobUrlCache.set(key, { url, projectId, touchedAt: ++assetTouchSequence, byteLength: blob.size })
-  pruneBlobUrls()
+  blobUrlCache.set(key, { url, projectId, logicalPath, touchedAt: ++assetTouchSequence, byteLength: blob.size })
+  pruneBlobUrls(projectId, protectedPaths)
   return url
 }
 
-function pruneBlobUrls(): void {
+function pruneBlobUrls(projectId: string, protectedPaths: Set<string>): void {
   let byteLength = [...blobUrlCache.values()].reduce((total, cached) => total + cached.byteLength, 0)
   if (blobUrlCache.size <= MAX_CACHED_URLS && byteLength <= MAX_CACHED_BYTES)
     return
@@ -133,6 +156,8 @@ function pruneBlobUrls(): void {
   for (const [key, cached] of ordered) {
     if (blobUrlCache.size <= MAX_CACHED_URLS && byteLength <= MAX_CACHED_BYTES)
       break
+    if (cached.projectId === projectId && protectedPaths.has(cached.logicalPath))
+      continue
     URL.revokeObjectURL(cached.url)
     blobUrlCache.delete(key)
     byteLength -= cached.byteLength

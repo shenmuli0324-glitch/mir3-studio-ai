@@ -1,14 +1,21 @@
 import type {
+  BoundValue,
   GuiAssetMeta,
   GuiDesignerStatus,
   GuiDevTreePage,
+  GuiDiagnostic,
   GuiDocumentEntry,
   GuiDocumentOpenResult,
   GuiDraftApplyResult,
   GuiDraftChangeSet,
   GuiDraftConfirmation,
   GuiDraftPrepareResult,
+  GuiPropertyValue,
   GuiReadonlyDocument,
+  GuiRuntimeCapabilities,
+  GuiRuntimeDataSource,
+  GuiRuntimeSceneCatalog,
+  GuiRuntimeSceneResult,
   GuiTemplateRequest,
   GuiTemplateResult,
   Mir3UiDocument,
@@ -68,6 +75,75 @@ export function useGuiDocumentList(projectId?: string) {
     queryFn: () => invoke<unknown>('gui_document_list', { projectId }).then(normalizeDocumentList),
     enabled: projectId != null,
   })
+}
+
+export function useGuiRuntimeCapabilities(projectId?: string) {
+  return useQuery({
+    queryKey: ['gui-runtime-capabilities', projectId],
+    queryFn: () => invoke<unknown>('gui_runtime_capabilities', { projectId }).then(normalizeRuntimeCapabilities),
+    enabled: projectId != null,
+    retry: false,
+  })
+}
+
+export function useGuiRuntimeCatalog(projectId?: string) {
+  return useQuery({
+    queryKey: ['gui-runtime-catalog', projectId],
+    queryFn: () => invoke<unknown>('gui_runtime_catalog', { projectId }).then(normalizeRuntimeCatalog),
+    enabled: projectId != null,
+    retry: false,
+  })
+}
+
+export function useGuiRuntimeActions(projectId?: string) {
+  const queryClient = useQueryClient()
+  const start = useMutation({
+    mutationFn: (request: { sceneId: string, device: string, viewport: { width: number, height: number }, workingSources?: Record<string, string> }) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_runtime_scene_start', { projectId, request }).then(normalizeRuntimeSceneResult)
+    },
+  })
+  const event = useMutation({
+    mutationFn: (request: { sessionId: string, nodeId: string, eventType: string, payload?: Record<string, unknown>, expectedSequence: number }) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_runtime_scene_event', { projectId, ...request }).then(normalizeRuntimeSceneResult)
+    },
+  })
+  const reload = useMutation({
+    mutationFn: (request: { sessionId: string, workingSources: Record<string, string> }) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_runtime_scene_reload', { projectId, ...request }).then(normalizeRuntimeSceneResult)
+    },
+  })
+  const stop = useMutation({
+    mutationFn: (sessionId: string) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<{ stopped: boolean }>('gui_runtime_scene_stop', { projectId, sessionId })
+    },
+  })
+  const setDataSource = useMutation({
+    mutationFn: (mode: GuiRuntimeDataSource) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_runtime_data_source_set', { projectId, mode }).then(normalizeRuntimeCapabilities)
+    },
+    onSuccess: (capabilities) => {
+      queryClient.setQueryData(['gui-runtime-capabilities', projectId], capabilities)
+    },
+  })
+  return {
+    start: start.mutateAsync,
+    event: event.mutateAsync,
+    reload: reload.mutateAsync,
+    stop: stop.mutateAsync,
+    setDataSource: setDataSource.mutateAsync,
+    busy: start.isPending || event.isPending || reload.isPending || stop.isPending || setDataSource.isPending,
+    error: start.error || event.error || reload.error || stop.error || setDataSource.error,
+  }
 }
 
 export interface GuiAssetBinary {
@@ -177,6 +253,7 @@ interface WireDocument {
   nodes?: unknown[] | Record<string, unknown>
   assets?: unknown[]
   diagnostics?: unknown[]
+  provenance?: unknown[]
 }
 
 function normalizeOpenResult(input: unknown): GuiDocumentOpenResult {
@@ -238,7 +315,7 @@ function normalizeDraftConfirmation(input: unknown): GuiDraftConfirmation {
   }
 }
 
-function normalizeDocument(wire: WireDocument): Mir3UiDocument {
+export function normalizeDocument(wire: WireDocument): Mir3UiDocument {
   const source = wire.source
   const rawNodes = Array.isArray(wire.nodes) ? wire.nodes : Object.values(wire.nodes ?? {})
   const nodes = rawNodes.map(normalizeNode)
@@ -256,6 +333,7 @@ function normalizeDocument(wire: WireDocument): Mir3UiDocument {
       const value = asset as Record<string, unknown>
       return { logicalPath: String(value.logicalPath ?? ''), available: value.available !== false }
     }),
+    provenance: normalizeProvenance(wire.provenance),
     diagnostics: (wire.diagnostics ?? []).map((diagnostic) => {
       const value = diagnostic as Record<string, unknown>
       return {
@@ -314,10 +392,13 @@ function normalizeNode(input: unknown): Mir3UiNode {
       innerHeight: boundValue<number>(container?.innerHeight, 0),
     },
     properties: propertyValues(wire.properties),
+    assetSlots: stringBoundValues(wire.assetSlots),
     paint: {
       text: boundValue<string>(wire.text, ''),
       image: boundValue<string>(wire.image, ''),
       normalImage: boundValue<string>(wire.image ?? wire.normalImage, ''),
+      pressedImage: boundValue<string>(wire.pressedImage, ''),
+      disabledImage: boundValue<string>(wire.disabledImage, ''),
       fontSize: boundValue<number>(wire.fontSize, 14),
       color: boundValue<string>(wire.color, '#ffffff'),
       opacity: boundValue<number>(wire.opacity, 255),
@@ -331,7 +412,245 @@ function normalizeNode(input: unknown): Mir3UiNode {
       properties: spansValue(sourceBinding?.propertySpans),
       safeInsertion: zeroSpan,
     },
+    sourceRef: isRecord(wire.sourceRef)
+      ? {
+          devRelativePath: String(wire.sourceRef.devRelativePath ?? ''),
+          line: numberValue(wire.sourceRef.line),
+          column: numberValue(wire.sourceRef.column),
+          templateNodeId: stringValue(wire.sourceRef.templateNodeId),
+        }
+      : undefined,
   }
+}
+
+function normalizeRuntimeCapabilities(input: unknown): GuiRuntimeCapabilities {
+  const wire = isRecord(input) ? input : {}
+  const tables = Array.isArray(wire.tables) ? wire.tables : []
+  return {
+    available: wire.available === true,
+    backend: wire.backend === 'sidecar' ? 'sidecar' : 'unavailable',
+    dataSource: wire.dataSource === 'projectStatic' ? 'projectStatic' : 'builtInMock',
+    projectStaticAvailable: wire.projectStaticAvailable === true,
+    tables: tables.map((table) => {
+      const value = isRecord(table) ? table : {}
+      return { name: String(value.name ?? ''), available: value.available === true }
+    }),
+    limits: numericRecord(wire.limits),
+    diagnostics: normalizeDiagnostics(wire.diagnostics),
+  }
+}
+
+function normalizeRuntimeCatalog(input: unknown): GuiRuntimeSceneCatalog {
+  const wire = isRecord(input) ? input : {}
+  const scenes = Array.isArray(wire.scenes) ? wire.scenes : []
+  return {
+    scenes: scenes.map((scene) => {
+      const value = isRecord(scene) ? scene : {}
+      return {
+        id: String(value.id ?? ''),
+        name: String(value.name ?? value.id ?? ''),
+        category: String(value.category ?? 'general'),
+        layoutPath: String(value.layoutPath ?? ''),
+        platform: runtimePlatform(value.platform),
+        compatibility: compatibilityValue(value.compatibility),
+      }
+    }).filter(scene => scene.id.length > 0),
+  }
+}
+
+function normalizeRuntimeSceneResult(input: unknown): GuiRuntimeSceneResult {
+  const wire = isRecord(input) ? input : {}
+  const scene = isRecord(wire.scene) ? normalizeRuntimeScene(wire.scene) : null
+  return {
+    sessionId: String(wire.sessionId ?? ''),
+    sequence: numberValue(wire.sequence) ?? 0,
+    scene,
+    fallback: wire.fallback === true,
+    diagnostics: normalizeDiagnostics(wire.diagnostics),
+  }
+}
+
+function normalizeRuntimeScene(scene: Record<string, unknown>): Mir3UiDocument {
+  const rawNodes = Array.isArray(scene.nodes)
+    ? scene.nodes
+    : isRecord(scene.nodes)
+      ? Object.values(scene.nodes)
+      : []
+  if (rawNodes.some(node => isRecord(node) && isRecord(node.position)))
+    return normalizeDocument(scene as WireDocument)
+  const runtimeNodes = rawNodes.map((node) => {
+    const value = isRecord(node) ? node : {}
+    const transform = isRecord(value.transform) ? value.transform : {}
+    const size = isRecord(value.size) ? value.size : {}
+    const properties = isRecord(value.properties) ? value.properties : {}
+    const sourceRef = isRecord(value.sourceRef) ? value.sourceRef : {}
+    const nodeKind = runtimeNodeKind(value.nodeType)
+    const asset = String(value.asset ?? '')
+    const assetSlots = runtimeAssetSlots(nodeKind, asset, value.assetSlots)
+    const primaryAsset = assetSlots[runtimePrimaryAssetSlot(nodeKind)]?.value ?? asset
+    return {
+      id: String(value.id ?? ''),
+      nodeType: nodeKind,
+      parentId: stringValue(value.parentId),
+      children: arrayStrings(value.children),
+      luaVariable: null,
+      name: runtimeBound(String(value.name ?? value.nodeType ?? 'RuntimeNode')),
+      position: {
+        x: runtimeBound(numberValue(transform.x) ?? 0),
+        y: runtimeBound(numberValue(transform.y) ?? 0),
+      },
+      size: {
+        width: runtimeBound(numberValue(size.width) ?? 0),
+        height: runtimeBound(numberValue(size.height) ?? 0),
+      },
+      anchor: {
+        x: runtimeBound(numberValue(transform.anchorX) ?? 0),
+        y: runtimeBound(numberValue(transform.anchorY) ?? 0),
+      },
+      transform: {
+        scaleX: runtimeBound(numberValue(transform.scaleX) ?? 1),
+        scaleY: runtimeBound(numberValue(transform.scaleY) ?? 1),
+        rotation: runtimeBound(numberValue(transform.rotation) ?? 0),
+        skewX: runtimeBound(0),
+        skewY: runtimeBound(0),
+      },
+      visible: runtimeBound(value.visible !== false),
+      text: runtimeBound(String(value.text ?? '')),
+      image: runtimeBound(primaryAsset),
+      assetSlots,
+      properties: Object.fromEntries(Object.entries(properties).map(([key, property]) => [key, runtimeBound(property as GuiPropertyValue)])),
+      compatibility: { status: 'supported' },
+      sourceRef: {
+        devRelativePath: String(sourceRef.devRelativePath ?? ''),
+        line: numberValue(sourceRef.line),
+        column: numberValue(sourceRef.column),
+        templateNodeId: stringValue(sourceRef.templateNodeId),
+      },
+      sourceBinding: sourceRef.line == null
+        ? undefined
+        : {
+            statement: {
+              startByte: 0,
+              endByte: 0,
+              start: { row: Math.max(0, (numberValue(sourceRef.line) ?? 1) - 1), column: numberValue(sourceRef.column) ?? 0 },
+              end: { row: Math.max(0, (numberValue(sourceRef.line) ?? 1) - 1), column: numberValue(sourceRef.column) ?? 0 },
+            },
+          },
+    }
+  })
+  return normalizeDocument({
+    schemaVersion: String(scene.schemaVersion ?? 'runtime-1'),
+    projectId: '',
+    devRelativePath: runtimeSceneSourcePath(rawNodes),
+    viewport: isRecord(scene.viewport)
+      ? { width: numberValue(scene.viewport.width) ?? 1136, height: numberValue(scene.viewport.height) ?? 640 }
+      : undefined,
+    roots: arrayStrings(scene.roots),
+    nodes: Object.fromEntries(runtimeNodes.map(node => [node.id, node])),
+    diagnostics: Array.isArray(scene.diagnostics) ? scene.diagnostics : [],
+    provenance: Array.isArray(scene.provenance) ? scene.provenance : [],
+  })
+}
+
+function runtimeAssetSlots(kind: string, asset: string, input: unknown): Record<string, BoundValue<string>> {
+  const slots = isRecord(input)
+    ? Object.fromEntries(Object.entries(input).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0).map(([slot, value]) => [slot, runtimeBound(value)]))
+    : {}
+  if (Object.keys(slots).length > 0 || !asset)
+    return slots
+  return { [runtimePrimaryAssetSlot(kind)]: runtimeBound(asset) }
+}
+
+function runtimePrimaryAssetSlot(kind: string): string {
+  if (kind === 'Panel' || kind === 'ListView' || kind === 'ScrollView' || kind === 'Slider')
+    return 'background'
+  if (kind === 'LoadingBar')
+    return 'progress'
+  if (kind === 'TextAtlas')
+    return 'atlas'
+  if (kind === 'SpineAnim')
+    return 'json'
+  return 'normal'
+}
+
+function runtimeBound<T>(value: T): { value: T, source: 'default', writable: false, originalToken: null, span: null } {
+  return { value, source: 'default', writable: false, originalToken: null, span: null }
+}
+
+function runtimeNodeKind(input: unknown): string {
+  const value = String(input ?? 'Unsupported')
+  if (value === 'Layout')
+    return 'Panel'
+  if (value === 'Scene')
+    return 'Node'
+  return value
+}
+
+function runtimeSceneSourcePath(nodes: unknown[]): string {
+  for (const node of nodes) {
+    if (!isRecord(node) || !isRecord(node.sourceRef))
+      continue
+    const path = stringValue(node.sourceRef.devRelativePath)
+    if (path)
+      return path
+  }
+  return ''
+}
+
+function normalizeDiagnostics(input: unknown): GuiDiagnostic[] {
+  if (!Array.isArray(input))
+    return []
+  return input.map((diagnostic) => {
+    const value = isRecord(diagnostic) ? diagnostic : {}
+    return {
+      code: String(value.code ?? 'GUI_RUNTIME_DIAGNOSTIC'),
+      severity: severityValue(value.severity),
+      message: String(value.message ?? ''),
+      span: spanValue(value.span),
+      nodeId: stringValue(value.nodeId),
+    }
+  })
+}
+
+function normalizeProvenance(input: unknown): import('./types').GuiDataProvenance[] {
+  if (!Array.isArray(input))
+    return []
+  return input.map((entry) => {
+    const value = isRecord(entry) ? entry : {}
+    return {
+      kind: provenanceKind(value.kind),
+      key: String(value.key ?? ''),
+      description: String(value.description ?? ''),
+    }
+  })
+}
+
+function provenanceKind(input: unknown): import('./types').GuiDataProvenance['kind'] {
+  const value = String(input ?? '').toLowerCase()
+  if (value === 'staticconfig')
+    return 'staticConfig'
+  if (value === 'runtimederived')
+    return 'runtimeDerived'
+  if (value === 'missing')
+    return 'missing'
+  if (value === 'usersnapshot')
+    return 'userSnapshot'
+  return 'sceneMock'
+}
+
+function numericRecord(input: unknown): Record<string, number> {
+  if (!isRecord(input))
+    return {}
+  return Object.fromEntries(Object.entries(input).flatMap(([key, value]) => {
+    const number = numberValue(value)
+    return number == null ? [] : [[key, number]]
+  }))
+}
+
+function runtimePlatform(input: unknown): 'mobile' | 'pc' | 'shared' {
+  if (input === 'mobile' || input === 'pc')
+    return input
+  return 'shared'
 }
 
 function boundValue<T>(input: unknown, fallback: T) {
@@ -417,6 +736,12 @@ function propertyValues(input: unknown): Mir3UiNode['properties'] {
   if (!isRecord(input))
     return {}
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, boundValue(value, null)]))
+}
+
+function stringBoundValues(input: unknown): Record<string, import('./types').BoundValue<string>> {
+  if (!isRecord(input))
+    return {}
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, boundValue(value, '')]))
 }
 
 function compatibilityValue(input: unknown): Mir3UiNode['compatibility'] {

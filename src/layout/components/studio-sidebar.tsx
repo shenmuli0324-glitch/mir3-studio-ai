@@ -26,9 +26,10 @@ const NAV_ITEMS = [
   { id: 'logs', icon: FileText },
 ] as const
 
-export function StudioSidebar({ activeView, collapsed, onNavigate }: {
+export function StudioSidebar({ activeView, collapsed, guiDirty = false, onNavigate }: {
   activeView: StudioView
   collapsed: boolean
+  guiDirty?: boolean
   onNavigate: (view: StudioView) => void
 }) {
   const { t } = useTranslation()
@@ -56,6 +57,9 @@ export function StudioSidebar({ activeView, collapsed, onNavigate }: {
               key={item.id}
             >
               <Icon className="size-[18px] shrink-0" />
+              <If cond={item.id === 'gui-designer' && guiDirty}>
+                <span className="absolute ml-3 mt-[-14px] size-1.5 rounded-full bg-accent ring-2 ring-panel" aria-label={t('studio.gui.dirty')} />
+              </If>
               <span className={sidebarLabelClass(collapsed)}>
                 <strong className="block whitespace-nowrap text-left text-xs font-medium">{t(`studio.nav.${item.id}`)}</strong>
                 <small className="mt-0.5 block whitespace-nowrap text-left text-[10px] text-muted">{t(`studio.nav.${item.id}_hint`)}</small>
@@ -92,5 +96,5 @@ function sidebarLabelClass(collapsed: boolean): string {
 function navItemClass(active: boolean, collapsed: boolean): string {
   const alignment = collapsed ? 'justify-center px-0' : 'justify-start px-3 max-[1040px]:justify-center max-[1040px]:px-0'
   const tone = active ? 'bg-accent/12 text-accent' : 'text-muted hover:bg-panel-hover hover:text-ink'
-  return `h-12 w-full min-w-0 gap-3 rounded-xl ${alignment} ${tone}`
+  return `relative h-12 w-full min-w-0 gap-3 rounded-xl ${alignment} ${tone}`
 }

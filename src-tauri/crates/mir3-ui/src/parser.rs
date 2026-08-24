@@ -1,9 +1,9 @@
 use crate::{
-    widget_adapter_registry, AdapterPropertyKind, BoundValue, BoundValueSource,
-    CompatibilityStatus, DiagnosticSeverity, Mir3UiAsset, Mir3UiCompatibility, Mir3UiContainer,
-    Mir3UiDiagnostic, Mir3UiDocument, Mir3UiNode, Mir3UiNodeType, Mir3UiPoint, Mir3UiPropertyValue,
-    Mir3UiScale9, Mir3UiSize, Mir3UiSource, Mir3UiTransform, Mir3UiViewport, SourceBinding,
-    SourcePoint, SourceSpan, WidgetAdapter, MIR3_UI_SCHEMA_VERSION,
+    widget_adapter_registry, AdapterAssetSlotBinding, AdapterPropertyKind, BoundValue,
+    BoundValueSource, CompatibilityStatus, DiagnosticSeverity, Mir3UiAsset, Mir3UiCompatibility,
+    Mir3UiContainer, Mir3UiDiagnostic, Mir3UiDocument, Mir3UiNode, Mir3UiNodeType, Mir3UiPoint,
+    Mir3UiPropertyValue, Mir3UiScale9, Mir3UiSize, Mir3UiSource, Mir3UiTransform, Mir3UiViewport,
+    SourceBinding, SourcePoint, SourceSpan, WidgetAdapter, MIR3_UI_SCHEMA_VERSION,
 };
 use std::collections::{BTreeMap, HashMap};
 use tree_sitter::{Node, Parser, Point};
@@ -222,7 +222,18 @@ fn process_create(
     let y = bound_number(adapter, &call.arguments, "y", 0.0);
     let width = bound_number(adapter, &call.arguments, "width", 0.0);
     let height = bound_number(adapter, &call.arguments, "height", 0.0);
-    let image = bound_string(adapter, &call.arguments, "image", String::new());
+    let asset_slots = create_asset_slots(adapter, &call.arguments);
+    let image = primary_asset(adapter, &asset_slots)
+        .cloned()
+        .unwrap_or_else(|| bound_string(adapter, &call.arguments, "image", String::new()));
+    let pressed_image = asset_slots
+        .get("pressed")
+        .cloned()
+        .unwrap_or_else(|| BoundValue::default(String::new()));
+    let disabled_image = asset_slots
+        .get("disabled")
+        .cloned()
+        .unwrap_or_else(|| BoundValue::default(String::new()));
     let font_size = bound_number(adapter, &call.arguments, "fontSize", 14.0);
     let color = bound_string(adapter, &call.arguments, "color", String::new());
     let text = bound_string(adapter, &call.arguments, "text", String::new());
@@ -301,8 +312,9 @@ fn process_create(
         visible: BoundValue::default(true),
         text,
         image,
-        pressed_image: BoundValue::default(String::new()),
-        disabled_image: BoundValue::default(String::new()),
+        pressed_image,
+        disabled_image,
+        asset_slots,
         font_size,
         color,
         opacity: BoundValue::default(255.0),
@@ -381,6 +393,30 @@ fn bound_string(
         Some(binding) => string_argument(arguments, binding.index, default),
         None => BoundValue::default(default),
     }
+}
+
+fn create_asset_slots(
+    adapter: Option<&WidgetAdapter>,
+    arguments: &[CallArgument],
+) -> BTreeMap<String, BoundValue<String>> {
+    let mut slots = BTreeMap::new();
+    let Some(adapter) = adapter else {
+        return slots;
+    };
+    for slot in adapter.asset_slots {
+        let value = bound_string(Some(adapter), arguments, slot.property, String::new());
+        slots.insert(slot.slot.to_string(), value);
+    }
+    slots
+}
+
+fn primary_asset<'a>(
+    adapter: Option<&WidgetAdapter>,
+    slots: &'a BTreeMap<String, BoundValue<String>>,
+) -> Option<&'a BoundValue<String>> {
+    adapter
+        .and_then(|adapter| adapter.asset_slots.iter().find(|slot| slot.primary))
+        .and_then(|slot| slots.get(slot.slot))
 }
 
 fn bound_bool(
@@ -488,6 +524,22 @@ fn process_setter(
     let Some(node) = nodes.get_mut(index) else {
         return;
     };
+    let registry = widget_adapter_registry();
+    let asset_setter = registry
+        .find_by_node_type(node.node_type)
+        .and_then(|adapter| {
+            adapter.asset_slots.iter().find_map(|slot| {
+                slot.setters
+                    .iter()
+                    .find(|setter| setter.method == call.method)
+                    .map(|setter| (*slot, *setter))
+            })
+        });
+    if let Some((slot, setter)) = asset_setter {
+        update_asset_string(node, &slot, &call.arguments, setter.argument_index);
+        finish_setter(node, &call);
+        return;
+    }
     match call.method.as_str() {
         "setPosition" => {
             update_number(node, "x", &call.arguments, 1);
@@ -532,12 +584,6 @@ fn process_setter(
         | "TextAtlas_setString"
         | "TextInput_setString"
         | "Button_setTitleText" => update_string(node, "text", &call.arguments, 1),
-        "Image_loadTexture" | "Layout_setBackGroundImage" => {
-            update_string(node, "image", &call.arguments, 1)
-        }
-        "Button_loadTextureNormal" => update_string(node, "image", &call.arguments, 1),
-        "Button_loadTexturePressed" => update_string(node, "pressedImage", &call.arguments, 1),
-        "Button_loadTextureDisabled" => update_string(node, "disabledImage", &call.arguments, 1),
         "Button_setTitleFontSize" => update_number(node, "fontSize", &call.arguments, 1),
         "Button_setTitleColor" => update_string(node, "color", &call.arguments, 1),
         "TextInput_setFontColor" => update_string(node, "color", &call.arguments, 1),
@@ -590,9 +636,14 @@ fn process_setter(
         "CheckBox_setSelected" => update_generic_bool(node, "selected", &call.arguments, 1),
         _ => return,
     }
+    finish_setter(node, &call);
+}
+
+fn finish_setter(node: &mut Mir3UiNode, call: &GuiCall) {
     if node.node_type != Mir3UiNodeType::Unsupported && node_has_dynamic(node) {
         node.compatibility.status = CompatibilityStatus::Dynamic;
         node.compatibility.reason = Some("包含动态 Lua 属性；动态 token 保持只读".to_string());
+        node.compatibility.reason_code = Some("dynamic_property".to_string());
     }
     node.source_binding.insert_byte = node
         .source_binding
@@ -637,6 +688,10 @@ fn node_has_dynamic(node: &Mir3UiNode) -> bool {
         node.container.inner_height.source,
     ]
     .contains(&BoundValueSource::Dynamic)
+        || node
+            .asset_slots
+            .values()
+            .any(|value| value.source == BoundValueSource::Dynamic)
         || node
             .properties
             .values()
@@ -690,6 +745,35 @@ fn update_string(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgumen
         "pressedImage" => node.pressed_image = value,
         "disabledImage" => node.disabled_image = value,
         "color" => node.color = value,
+        _ => {}
+    }
+}
+
+fn update_asset_string(
+    node: &mut Mir3UiNode,
+    slot: &AdapterAssetSlotBinding,
+    arguments: &[CallArgument],
+    index: usize,
+) {
+    let value = string_argument(arguments, index, String::new());
+    bind_span(
+        &mut node.source_binding.property_spans,
+        slot.property,
+        &value,
+    );
+    node.properties.insert(
+        slot.property.to_string(),
+        map_bound_value(value.clone(), Mir3UiPropertyValue::String),
+    );
+    node.asset_slots
+        .insert(slot.slot.to_string(), value.clone());
+    if slot.primary {
+        node.image = value.clone();
+        bind_span(&mut node.source_binding.property_spans, "image", &value);
+    }
+    match slot.slot {
+        "pressed" => node.pressed_image = value,
+        "disabled" => node.disabled_image = value,
         _ => {}
     }
 }
@@ -880,6 +964,14 @@ fn bind_span<T>(spans: &mut BTreeMap<String, SourceSpan>, property: &str, value:
 fn collect_assets(nodes: &[Mir3UiNode]) -> Vec<Mir3UiAsset> {
     let mut assets: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for node in nodes {
+        for value in node.asset_slots.values() {
+            if !value.value.trim().is_empty() {
+                assets
+                    .entry(value.value.clone())
+                    .or_default()
+                    .push(node.id.clone());
+            }
+        }
         for value in [&node.image, &node.pressed_image, &node.disabled_image] {
             if !value.value.trim().is_empty() {
                 assets

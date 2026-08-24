@@ -1,7 +1,9 @@
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { StreamLanguage } from '@codemirror/language'
 import { lua } from '@codemirror/legacy-modes/mode/lua'
 import { TriangleExclamation } from '@gravity-ui/icons'
 import CodeMirror from '@uiw/react-codemirror'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useScope } from '@/hooks/use-scope'
@@ -31,6 +33,20 @@ function CodeEditor() {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
   const file = scope.currentFile
+  const jump = scope.codeJump
+  const editorRef = useRef<ReactCodeMirrorRef>(null)
+
+  useEffect(() => {
+    const view = editorRef.current?.view
+    if (!jump || !view || jump.path !== file?.path)
+      return
+    const offset = sourceOffsetForLine(file.workingSource, jump.line)
+    view.dispatch({
+      selection: { anchor: offset },
+      scrollIntoView: true,
+    })
+    view.focus()
+  }, [file?.path, file?.workingSource, jump])
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#111216]">
       <If cond={file?.valid === false}>
@@ -44,6 +60,7 @@ function CodeEditor() {
       </If>
       <If cond={file != null}>
         <CodeMirror
+          ref={editorRef}
           className="min-h-0 flex-1 overflow-auto bg-[#111216] text-[12px] [&_.cm-content]:font-mono [&_.cm-editor]:min-h-full [&_.cm-editor]:bg-[#111216] [&_.cm-gutters]:bg-[#111216] [&_.cm-gutters]:text-muted"
           height="100%"
           theme="dark"
@@ -56,6 +73,19 @@ function CodeEditor() {
       </If>
     </div>
   )
+}
+
+function sourceOffsetForLine(source: string, line: number): number {
+  if (line <= 1)
+    return 0
+  let offset = 0
+  for (let index = 1; index < line; index += 1) {
+    const newline = source.indexOf('\n', offset)
+    if (newline < 0)
+      return source.length
+    offset = newline + 1
+  }
+  return offset
 }
 
 function DiagnosticsDrawer() {

@@ -1,6 +1,7 @@
 use mir3_ui::{
-    parse_document, widget_adapter_registry, CompatibilityStatus, Mir3UiNodeType,
-    Mir3UiPropertyValue, MIR3_UI_SCHEMA_VERSION, WIDGET_ADAPTER_REGISTRY_VERSION,
+    parse_document, replace_bound_property, widget_adapter_manifest, widget_adapter_registry,
+    AdapterAssetKind, CompatibilityStatus, Mir3UiNodeType, Mir3UiPropertyValue,
+    ASSET_SLOT_MANIFEST_VERSION, MIR3_UI_SCHEMA_VERSION, WIDGET_ADAPTER_REGISTRY_VERSION,
 };
 use std::collections::HashSet;
 
@@ -46,6 +47,96 @@ end
     for node in &document.nodes {
         assert_ne!(node.compatibility.status, CompatibilityStatus::Unknown);
     }
+}
+
+#[test]
+fn adapter_manifest_is_versioned_and_frontend_serializable() {
+    let manifest = widget_adapter_manifest();
+    assert_eq!(manifest.registry_version, WIDGET_ADAPTER_REGISTRY_VERSION);
+    assert_eq!(manifest.asset_slot_version, ASSET_SLOT_MANIFEST_VERSION);
+    assert_eq!(manifest.adapters.len(), 23);
+    let json = serde_json::to_string(&manifest).unwrap();
+    let decoded = serde_json::from_str(&json).unwrap();
+    assert_eq!(manifest, decoded);
+
+    let button = manifest
+        .adapters
+        .iter()
+        .find(|adapter| adapter.create_method == "Button_Create")
+        .unwrap();
+    assert_eq!(button.asset_slots.len(), 3);
+    assert_eq!(button.asset_slots[0].slot, "normal");
+    assert!(button.asset_slots[0].primary);
+    assert_eq!(button.asset_slots[1].slot, "pressed");
+    assert_eq!(button.asset_slots[2].slot, "disabled");
+
+    let spine = manifest
+        .adapters
+        .iter()
+        .find(|adapter| adapter.create_method == "SpineAnim_Create")
+        .unwrap();
+    assert_eq!(spine.asset_slots[0].kind, AdapterAssetKind::Json);
+    assert_eq!(spine.asset_slots[1].kind, AdapterAssetKind::Atlas);
+}
+
+#[test]
+fn asset_slots_follow_create_and_setter_bindings_without_rewriting_source() {
+    let source = r#"local Panel = GUI:Layout_Create(parent, "Panel", 0, 0, 320, 200, false)
+GUI:Layout_setBackGroundImage(Panel, "res/layout.png") -- keep
+local Button = GUI:Button_Create(Panel, "Button", 1, 2, "res/normal.png")
+GUI:Button_loadTexturePressed(Button, "res/pressed.png")
+GUI:Button_loadTextureDisabled(Button, "res/disabled.png")
+local Check = GUI:CheckBox_Create(Panel, "Check", 1, 2, "res/off.png", "res/on.png")
+GUI:CheckBox_loadTextureFrontCross(Check, "res/on-new.png")
+local Slider = GUI:Slider_Create(Panel, "Slider", 1, 2, "res/slider-bg.png", "res/slider-progress.png", "res/thumb.png")
+GUI:Slider_loadProgressBarTexture(Slider, "res/slider-progress-new.png")
+local Loading = GUI:LoadingBar_Create(Panel, "Loading", 1, 2, "res/loading.png", 0)
+GUI:LoadingBar_loadTexture(Loading, "res/loading-new.png")
+local Atlas = GUI:TextAtlas_Create(Panel, "Atlas", 1, 2, "0", "res/font.png", 8, 12, "0")
+local Spine = GUI:SpineAnim_Create(Panel, "Spine", 1, 2, "res/a.json", "res/a.atlas", 0, "idle", true)
+local List = GUI:ListView_Create(Panel, "List", 1, 2, 692, 293, 1)
+GUI:ListView_setBackGroundImage(List, "res/list.png")
+"#;
+    let document = parse_document(source, "GUIExport/assets.lua", "sha", "utf-8", "\n").unwrap();
+    let panel = &document.nodes[0];
+    assert_eq!(panel.asset_slots["background"].value, "res/layout.png");
+    assert_eq!(panel.image.value, "res/layout.png");
+    assert!(panel
+        .source_binding
+        .property_spans
+        .contains_key("backgroundImage"));
+
+    let button = &document.nodes[1];
+    assert_eq!(button.asset_slots["normal"].value, "res/normal.png");
+    assert_eq!(button.asset_slots["pressed"].value, "res/pressed.png");
+    assert_eq!(button.asset_slots["disabled"].value, "res/disabled.png");
+    let check = &document.nodes[2];
+    assert_eq!(check.asset_slots["selected"].value, "res/on-new.png");
+    let slider = &document.nodes[3];
+    assert_eq!(
+        slider.asset_slots["progress"].value,
+        "res/slider-progress-new.png"
+    );
+    let loading = &document.nodes[4];
+    assert_eq!(loading.asset_slots["progress"].value, "res/loading-new.png");
+    assert_eq!(document.nodes[5].asset_slots["atlas"].value, "res/font.png");
+    assert_eq!(document.nodes[6].asset_slots["json"].value, "res/a.json");
+    assert_eq!(document.nodes[6].asset_slots["atlas"].value, "res/a.atlas");
+    let list = &document.nodes[7];
+    assert_eq!(list.size.width.value, 692.0);
+    assert_eq!(list.size.height.value, 293.0);
+    assert_eq!(list.asset_slots["background"].value, "res/list.png");
+
+    let patched = replace_bound_property(
+        source,
+        &document,
+        &panel.id,
+        "backgroundImage",
+        "\"res/layout-new.png\"",
+    )
+    .unwrap();
+    assert!(patched.contains("\"res/layout-new.png\") -- keep"));
+    assert!(!patched.contains("\"res/layout.png\" -- keep"));
 }
 
 #[test]

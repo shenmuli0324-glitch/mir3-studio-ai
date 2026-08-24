@@ -1,6 +1,6 @@
 export type GuiDevice = 'mobile' | 'pc'
 export type GuiMode = 'visual' | 'code' | 'split'
-export type GuiLeftPanel = 'files' | 'layers' | 'components'
+export type GuiLeftPanel = 'files' | 'scenes' | 'layers' | 'components'
 export type GuiNodeKind
   = | 'Panel'
     | 'Image'
@@ -60,6 +60,8 @@ export interface GuiPaint {
   text?: BoundValue<string> | null
   image?: BoundValue<string> | null
   normalImage?: BoundValue<string> | null
+  pressedImage?: BoundValue<string> | null
+  disabledImage?: BoundValue<string> | null
   fontSize?: BoundValue<number> | null
   color?: BoundValue<string> | null
   opacity?: BoundValue<number> | null
@@ -102,6 +104,19 @@ export interface GuiSourceBinding {
   safeInsertion?: SourceSpan | null
 }
 
+export interface GuiSourceRef {
+  devRelativePath: string
+  line?: number | null
+  column?: number | null
+  templateNodeId?: string | null
+}
+
+export interface GuiDataProvenance {
+  kind: 'staticConfig' | 'sceneMock' | 'runtimeDerived' | 'missing' | 'userSnapshot'
+  key: string
+  description: string
+}
+
 export interface Mir3UiNode {
   id: string
   kind: GuiNodeKind
@@ -120,11 +135,13 @@ export interface Mir3UiNode {
   scale9?: GuiScale9 | null
   container?: GuiContainer | null
   properties?: Record<string, BoundValue<GuiPropertyValue>>
+  assetSlots?: Record<string, BoundValue<string>>
   paint?: GuiPaint | null
   compatibility: GuiCompatibility
   compatibilityReasonCode?: string | null
   compatibilityReason?: string | null
   binding?: GuiSourceBinding | null
+  sourceRef?: GuiSourceRef | null
 }
 
 export interface GuiDiagnostic {
@@ -146,6 +163,7 @@ export interface Mir3UiDocument {
   roots: string[]
   nodes: Record<string, Mir3UiNode>
   assets?: Array<{ logicalPath: string, available: boolean }>
+  provenance?: GuiDataProvenance[]
   diagnostics: GuiDiagnostic[]
 }
 
@@ -196,11 +214,51 @@ export interface GuiAssetMeta {
 }
 
 export interface GuiDesignerStatus {
+  projectId?: string | null
   available: boolean
   devRoot?: string | null
-  guiExportRoot?: string | null
-  assetRoot?: string | null
+  guiExportAvailable?: boolean
+  resourceAvailable?: boolean
   reason?: string | null
+}
+
+export type GuiRuntimeBackend = 'sidecar' | 'unavailable'
+export type GuiRuntimeDataSource = 'builtInMock' | 'projectStatic'
+
+export interface GuiRuntimeTableCapability {
+  name: string
+  available: boolean
+}
+
+export interface GuiRuntimeCapabilities {
+  available: boolean
+  backend: GuiRuntimeBackend
+  dataSource: GuiRuntimeDataSource
+  projectStaticAvailable: boolean
+  tables: GuiRuntimeTableCapability[]
+  limits: Record<string, number>
+  diagnostics: GuiDiagnostic[]
+}
+
+export interface GuiRuntimeSceneCatalogEntry {
+  id: string
+  name: string
+  category: string
+  layoutPath: string
+  platform: 'mobile' | 'pc' | 'shared'
+  compatibility: GuiCompatibility
+}
+
+export interface GuiRuntimeSceneCatalog {
+  scenes: GuiRuntimeSceneCatalogEntry[]
+}
+
+export interface GuiRuntimeSceneResult {
+  sessionId: string
+  sequence: number
+  scene?: Mir3UiDocument | null
+  fallback: boolean
+  diagnostics: GuiDiagnostic[]
 }
 
 export interface GuiDocumentOpenResult {

@@ -15,11 +15,7 @@ export function GuiDesignerView() {
   const { t } = useTranslation()
   if (!activeProject)
     return <DesignerEmpty icon={<FolderCode />} title={t('studio.gui.no_project')} description={t('studio.gui.no_project_desc')} />
-  return (
-    <GuiDesignerScope.Provider>
-      <GuiDesignerContent />
-    </GuiDesignerScope.Provider>
-  )
+  return <GuiDesignerContent />
 }
 
 function GuiDesignerContent() {

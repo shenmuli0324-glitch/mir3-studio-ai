@@ -302,12 +302,16 @@ function TreeRowView({
         </span>
         <If
           cond={isDirectory}
-          then={<span className="block truncate text-[9px] text-muted">{`@${t(`studio.gui.dev_tree.description.${entry.descriptionId}`)}`}</span>}
+          then={isDevRootDirectory(entry) ? <span className="block truncate text-[9px] text-muted">{`@ ${t(`studio.gui.dev_tree.description.${entry.descriptionId}`)}`}</span> : null}
           else={<span className="block truncate text-[9px] text-muted">{fileSecondaryLabel(entry, t)}</span>}
         />
       </span>
     </button>
   )
+}
+
+function isDevRootDirectory(entry: GuiDevTreeEntry): boolean {
+  return entry.entryType === 'directory' && !entry.path.includes('/')
 }
 
 function StatusRow({ top, depth, label, danger = false }: { top: number, depth: number, label: string, danger?: boolean }) {

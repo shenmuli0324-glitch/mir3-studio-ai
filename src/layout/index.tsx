@@ -1,10 +1,9 @@
 import type { StudioShellState, StudioView } from './studio-types'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
 import { PluginRecovery } from '@/components/plugin-recovery'
-import { isGuiDesignerDirty } from '@/features/gui-designer/gui-designer-scope'
+import { GuiDesignerScope } from '@/features/gui-designer/gui-designer-scope'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
@@ -20,7 +19,6 @@ import { DEFAULT_STUDIO_VIEW, harnessSurfaceFor, isHarnessView } from './studio-
 import '../i18n'
 
 export function App() {
-  const { t } = useTranslation()
   useDshTheme()
   const { status, recovery } = useStore(store.harness)
   const { activeProject, selectWorkspace } = useMir3Projects()
@@ -79,10 +77,6 @@ export function App() {
   }
 
   function navigate(view: StudioView) {
-    // Studio离开保护需要使用桌面WebView的同步确认，避免未进入Draft的源码被静默丢弃。
-    // eslint-disable-next-line no-alert
-    if (activeView === 'gui-designer' && view !== 'gui-designer' && isGuiDesignerDirty() && !window.confirm(t('studio.gui.leave_warning')))
-      return
     setShellState(value => ({ ...value, activeView: view }))
   }
 
@@ -93,38 +87,42 @@ export function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-canvas">
-      <If
-        cond={status === 'ready'}
-        else={<StartupGate status={status} recoveryRequired={recovery.required} iframeRef={iframeRef} />}
-      >
-        <StudioTopbar
-          activeView={activeView}
-          sidebarCollapsed={sidebarCollapsed}
-          iframeRef={iframeRef}
-          showSidebarToggle
-          onToggleSidebar={toggleSidebar}
-          project={shellState.project}
-          onSelectWorkspace={() => {
-            if (shellState.project)
-              void selectWorkspace(shellState.project.id)
-          }}
-        />
-        <div className="flex min-h-0 flex-1">
-          <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} onNavigate={navigate} />
-          <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
-            <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
-            <div className={studioPageClass(activeView)}>{readyContent()}</div>
-          </main>
+    <GuiDesignerScope.Provider key={activeProject?.id ?? 'no-project'}>
+      {guiScope => (
+        <div className="flex h-screen w-screen flex-col bg-canvas">
+          <If
+            cond={status === 'ready'}
+            else={<StartupGate status={status} recoveryRequired={recovery.required} iframeRef={iframeRef} />}
+          >
+            <StudioTopbar
+              activeView={activeView}
+              sidebarCollapsed={sidebarCollapsed}
+              iframeRef={iframeRef}
+              showSidebarToggle
+              onToggleSidebar={toggleSidebar}
+              project={shellState.project}
+              onSelectWorkspace={() => {
+                if (shellState.project)
+                  void selectWorkspace(shellState.project.id)
+              }}
+            />
+            <div className="flex min-h-0 flex-1">
+              <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} guiDirty={guiScope.dirty} onNavigate={navigate} />
+              <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
+                <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
+                <div className={studioPageClass(activeView)}>{readyContent()}</div>
+              </main>
+            </div>
+          </If>
+          <If cond={status === 'ready'}>
+            <HarnessUpdater />
+            <DownloadToast />
+            <PluginRecovery />
+          </If>
+          <DesktopUpdater />
         </div>
-      </If>
-      <If cond={status === 'ready'}>
-        <HarnessUpdater />
-        <DownloadToast />
-        <PluginRecovery />
-      </If>
-      <DesktopUpdater />
-    </div>
+      )}
+    </GuiDesignerScope.Provider>
   )
 }
 

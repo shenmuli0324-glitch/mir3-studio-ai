@@ -24,7 +24,10 @@ if (!hostTarget || !target) {
   throw new Error('Unable to detect Rust host target')
 }
 
-const cargoArgs = ['build', '--manifest-path', manifest, '-p', 'mir3-mcp']
+const packages = ['mir3-mcp', 'mir3-gui-runtime']
+const cargoArgs = ['build', '--manifest-path', manifest]
+for (const packageName of packages)
+  cargoArgs.push('-p', packageName)
 if (target !== hostTarget)
   cargoArgs.push('--target', target)
 if (mode === 'release')
@@ -35,10 +38,12 @@ const cargoCommand = target !== hostTarget && target.endsWith('-pc-windows-msvc'
 run(cargoCommand, cargoArgs)
 
 const extension = target.includes('-windows-') ? '.exe' : ''
-const source = target === hostTarget
-  ? join(repository, 'src-tauri', 'target', mode, `mir3-mcp${extension}`)
-  : join(repository, 'src-tauri', 'target', target, mode, `mir3-mcp${extension}`)
-const destination = join(repository, 'src-tauri', 'binaries', `mir3-mcp-${target}${extension}`)
-mkdirSync(dirname(destination), { recursive: true })
-copyFileSync(source, destination)
-process.stdout.write(`Prepared MIR3 MCP sidecar: ${destination}\n`)
+for (const packageName of packages) {
+  const source = target === hostTarget
+    ? join(repository, 'src-tauri', 'target', mode, `${packageName}${extension}`)
+    : join(repository, 'src-tauri', 'target', target, mode, `${packageName}${extension}`)
+  const destination = join(repository, 'src-tauri', 'binaries', `${packageName}-${target}${extension}`)
+  mkdirSync(dirname(destination), { recursive: true })
+  copyFileSync(source, destination)
+  process.stdout.write(`Prepared ${packageName} sidecar: ${destination}\n`)
+}

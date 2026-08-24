@@ -1,6 +1,6 @@
 import type { GuiComponentCategory, GuiComponentKind } from './component-catalog'
 import type { Mir3UiNode } from './types'
-import { ChevronRight, Layers, Picture, Square, Text } from '@gravity-ui/icons'
+import { ChevronRight, CirclePlay, Layers, Picture, Square, Text } from '@gravity-ui/icons'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
@@ -16,13 +16,15 @@ export function DesignerSidebar() {
   const scope = useScope(GuiDesignerScope)
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
-      <div className="grid h-10 shrink-0 grid-cols-3 border-b border-line p-1">
+      <div className="grid h-10 shrink-0 grid-cols-4 border-b border-line p-1">
         <SideTab active={scope.leftPanel === 'files'} label={t('studio.gui.panel.files')} onPress={() => scope.setLeftPanel('files')} />
+        <SideTab active={scope.leftPanel === 'scenes'} label={t('studio.gui.panel.scenes')} onPress={() => scope.setLeftPanel('scenes')} />
         <SideTab active={scope.leftPanel === 'layers'} label={t('studio.gui.panel.layers')} onPress={() => scope.setLeftPanel('layers')} />
         <SideTab active={scope.leftPanel === 'components'} label={t('studio.gui.panel.components')} onPress={() => scope.setLeftPanel('components')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <If cond={scope.leftPanel === 'files'}><FilePanel /></If>
+        <If cond={scope.leftPanel === 'scenes'}><ScenePanel /></If>
         <If cond={scope.leftPanel === 'layers'}><LayerPanel /></If>
         <If cond={scope.leftPanel === 'components'}><ComponentPanel /></If>
       </div>
@@ -33,6 +35,69 @@ export function DesignerSidebar() {
         </span>
       </footer>
     </aside>
+  )
+}
+
+function ScenePanel() {
+  const { t } = useTranslation()
+  const scope = useScope(GuiDesignerScope)
+  const capabilities = scope.runtimeCapabilities
+  const scenes = scope.runtimeCatalog?.scenes ?? []
+  return (
+    <div>
+      <PanelHeading icon={<CirclePlay />} title={t('studio.gui.scenes.title')} />
+      <p className="mb-3 px-2 text-[10px] leading-4 text-muted">{t('studio.gui.scenes.hint')}</p>
+      <label className="mb-3 block px-1">
+        <span className="mb-1 block text-[9px] text-muted">{t('studio.gui.scenes.data_source')}</span>
+        <select
+          className="h-8 w-full rounded-lg bg-panel-2 px-2 text-[10px] text-ink outline-none ring-1 ring-line focus:ring-accent disabled:opacity-45"
+          value={capabilities?.dataSource ?? 'builtInMock'}
+          disabled={!capabilities?.available || scope.busy}
+          onChange={event => void scope.setRuntimeDataSource(event.target.value as 'builtInMock' | 'projectStatic')}
+        >
+          <option value="builtInMock">{t('studio.gui.scenes.data_source.built_in_mock')}</option>
+          <option value="projectStatic" disabled={!capabilities?.projectStaticAvailable}>{t('studio.gui.scenes.data_source.project_static')}</option>
+        </select>
+      </label>
+      <If cond={scope.runtimeCapabilitiesLoading || scope.runtimeCatalogLoading}>
+        <p className="px-2 py-4 text-center text-[10px] text-muted">{t('studio.gui.scenes.loading')}</p>
+      </If>
+      <If cond={!scope.runtimeCapabilitiesLoading && capabilities?.available === false}>
+        <div className="mb-3 rounded-lg bg-warning/8 px-3 py-2 text-[10px] leading-4 text-warning ring-1 ring-warning/20">{t('studio.gui.scenes.unavailable')}</div>
+      </If>
+      <If cond={scope.runtimeError != null}>
+        <div className="mb-3 rounded-lg bg-danger/8 px-3 py-2 text-[10px] leading-4 text-danger ring-1 ring-danger/20">
+          <span className="block">{t('studio.gui.scenes.fallback')}</span>
+          <span className="mt-1 block break-words opacity-80">{scope.runtimeError}</span>
+        </div>
+      </If>
+      <If cond={scope.selectedSceneId != null}>
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={scope.busy || scope.runtimeScene == null} onClick={() => void scope.reloadRuntimeScene()}>{t('studio.gui.scenes.reload')}</button>
+          <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-muted ring-1 ring-line hover:text-ink disabled:opacity-40" type="button" disabled={scope.busy} onClick={() => void scope.stopRuntimeScene()}>{t('studio.gui.scenes.stop')}</button>
+        </div>
+      </If>
+      <div className="grid gap-1.5">
+        {scenes.map(scene => (
+          <button
+            className={sceneButtonClass(scope.selectedSceneId === scene.id)}
+            type="button"
+            disabled={scope.busy}
+            onClick={() => void scope.startRuntimeScene(scene.id)}
+            key={scene.id}
+          >
+            <span className="flex items-center justify-between gap-2">
+              <strong className="truncate text-[10px] font-medium text-ink">{scene.name}</strong>
+              <span className="shrink-0 text-[8px] uppercase text-muted">{scene.platform}</span>
+            </span>
+            <span className="mt-1 block truncate text-[9px] text-muted">{scene.layoutPath}</span>
+          </button>
+        ))}
+      </div>
+      <If cond={!scope.runtimeCatalogLoading && scenes.length === 0}>
+        <p className="px-2 py-5 text-center text-[10px] leading-4 text-muted">{t('studio.gui.scenes.empty')}</p>
+      </If>
+    </div>
   )
 }
 
@@ -49,10 +114,10 @@ function LayerPanel() {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const file = scope.currentFile
-  const roots = file?.document.roots ?? []
-  const unresolvedRoots = roots.filter(id => file?.document.nodes[id]?.compatibilityReasonCode === 'unresolved_parent')
-  const normalRoots = roots.filter(id => file?.document.nodes[id]?.compatibilityReasonCode !== 'unresolved_parent')
+  const document = scope.previewDocument
+  const roots = document?.roots ?? []
+  const unresolvedRoots = roots.filter(id => document?.nodes[id]?.compatibilityReasonCode === 'unresolved_parent')
+  const normalRoots = roots.filter(id => document?.nodes[id]?.compatibilityReasonCode !== 'unresolved_parent')
 
   function toggleNode(nodeId: string) {
     setCollapsed(value => ({ ...value, [nodeId]: !value[nodeId] }))
@@ -61,8 +126,8 @@ function LayerPanel() {
   return (
     <div>
       <PanelHeading icon={<Layers />} title={t('studio.gui.layers.title')} />
-      <If cond={file == null}><p className="px-2 py-4 text-center text-[11px] text-muted">{t('studio.gui.layers.empty')}</p></If>
-      <If cond={file != null}>
+      <If cond={document == null}><p className="px-2 py-4 text-center text-[11px] text-muted">{t('studio.gui.layers.empty')}</p></If>
+      <If cond={document != null}>
         <div className="space-y-0.5">
           {normalRoots.map(id => <LayerNode nodeId={id} depth={0} collapsed={collapsed} onToggle={toggleNode} key={id} />)}
           <If cond={unresolvedRoots.length > 0}>
@@ -84,7 +149,7 @@ function LayerPanel() {
 
 function LayerNode({ nodeId, depth, collapsed, onToggle }: { nodeId: string, depth: number, collapsed: Record<string, boolean>, onToggle: (nodeId: string) => void }) {
   const scope = useScope(GuiDesignerScope)
-  const node = scope.currentFile?.document.nodes[nodeId]
+  const node = scope.previewDocument?.nodes[nodeId]
   if (!node)
     return null
   return (
@@ -198,6 +263,13 @@ function tabClass(active: boolean): string {
   if (active)
     return 'rounded-md bg-panel-2 text-[10px] font-medium text-ink'
   return 'rounded-md text-[10px] text-muted hover:text-ink'
+}
+
+function sceneButtonClass(active: boolean): string {
+  const base = 'rounded-lg px-2.5 py-2 text-left ring-1 disabled:opacity-40'
+  if (active)
+    return `${base} bg-accent/10 ring-accent/40`
+  return `${base} bg-panel-2 ring-line hover:ring-accent/50`
 }
 
 function layerClass(active: boolean, unsupported: boolean): string {

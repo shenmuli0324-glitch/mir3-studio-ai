@@ -6,6 +6,8 @@ import type {
   GuiLeftPanel,
   GuiMode,
   GuiPropertyValue,
+  GuiRuntimeDataSource,
+  GuiRuntimeSceneResult,
   GuiTemplateRequest,
   Mir3UiDocument,
   Mir3UiNode,
@@ -14,7 +16,7 @@ import type {
 import { useEffect, useRef, useState } from 'react'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { defineScope } from '@/hooks/define-scope'
-import { useGuiDesignerStatus, useGuiDocumentActions, useGuiDocumentList } from './api'
+import { useGuiDesignerStatus, useGuiDocumentActions, useGuiDocumentList, useGuiRuntimeActions, useGuiRuntimeCapabilities, useGuiRuntimeCatalog } from './api'
 import { componentDefinition, isContainerKind } from './component-catalog'
 import { MOBILE_VIEWPORT, PC_VIEWPORTS } from './types'
 
@@ -57,6 +59,9 @@ export const GuiDesignerScope = defineScope(() => {
   const status = useGuiDesignerStatus(projectId)
   const documentList = useGuiDocumentList(projectId)
   const actions = useGuiDocumentActions(projectId)
+  const runtimeCapabilities = useGuiRuntimeCapabilities(projectId)
+  const runtimeCatalog = useGuiRuntimeCatalog(projectId)
+  const runtimeActions = useGuiRuntimeActions(projectId)
   const [files, setFiles] = useState<Record<string, GuiWorkingFile>>({})
   const [currentPath, setCurrentPath] = useState<string | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -70,12 +75,24 @@ export const GuiDesignerScope = defineScope(() => {
   const [draftConfirmation, setDraftConfirmation] = useState<GuiDraftConfirmation | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [parsePending, setParsePending] = useState(false)
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
+  const [runtimeScene, setRuntimeScene] = useState<GuiRuntimeSceneResult | null>(null)
+  const [runtimeLastValidScene, setRuntimeLastValidScene] = useState<GuiRuntimeSceneResult | null>(null)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [codeJump, setCodeJump] = useState<{ path: string, line: number, revision: number } | null>(null)
   const parseSequenceRef = useRef(0)
   const openSequenceRef = useRef(0)
+  const runtimeRequestSequenceRef = useRef(0)
+  const runtimeSessionIdRef = useRef<string | null>(null)
+  const runtimeOperationChainRef = useRef<Promise<void>>(Promise.resolve())
+  const runtimeStopActionRef = useRef(runtimeActions.stop)
+  runtimeStopActionRef.current = runtimeActions.stop
   const currentFile = currentPath ? files[currentPath] : undefined
   const entries = documentList.data ?? []
   const dirty = Object.values(files).some(file => file.workingSource !== file.originalSource || file.isNew)
   const viewport = deviceState === 'mobile' ? MOBILE_VIEWPORT : PC_VIEWPORTS[pcViewportIndex]
+  const previewDocument = runtimeScene?.scene ?? runtimeLastValidScene?.scene ?? currentFile?.document
+  const runtimePreviewActive = runtimeScene?.scene != null || runtimeLastValidScene?.scene != null
 
   useEffect(() => {
     dirtyOutsideScope = dirty
@@ -83,6 +100,7 @@ export const GuiDesignerScope = defineScope(() => {
       if (!dirty)
         return
       event.preventDefault()
+      event.returnValue = ''
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
@@ -90,6 +108,16 @@ export const GuiDesignerScope = defineScope(() => {
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
   }, [dirty])
+
+  useEffect(() => {
+    return () => {
+      runtimeRequestSequenceRef.current += 1
+      const sessionId = runtimeSessionIdRef.current
+      runtimeSessionIdRef.current = null
+      if (sessionId)
+        void runtimeStopActionRef.current(sessionId).catch(() => {})
+    }
+  }, [projectId])
 
   useEffect(() => {
     if (!currentFile || (currentFile.workingSource === currentFile.originalSource && currentFile.history.length === 0))
@@ -139,7 +167,9 @@ export const GuiDesignerScope = defineScope(() => {
   // eslint-disable-next-line react/exhaustive-deps
   }, [currentFile?.path, currentFile?.workingSource])
 
-  async function openFile(path: string) {
+  async function openFile(path: string, preserveRuntime = false) {
+    if (selectedSceneId && !preserveRuntime)
+      await stopRuntimeScene()
     const sequence = ++openSequenceRef.current
     const cached = files[path]
     if (cached) {
@@ -262,6 +292,8 @@ export const GuiDesignerScope = defineScope(() => {
   }
 
   function nodePropertyWritable(node: Mir3UiNode, property: 'x' | 'y' | 'width' | 'height' | 'text' | 'image'): boolean {
+    if (runtimePreviewActive)
+      return false
     const bound = boundForProperty(node, property)
     if (bound?.writable && bound.span)
       return true
@@ -277,6 +309,8 @@ export const GuiDesignerScope = defineScope(() => {
   }
 
   function nodeGenericPropertyWritable(node: Mir3UiNode, property: string): boolean {
+    if (runtimePreviewActive)
+      return false
     const bound = node.properties?.[property]
     return Boolean(bound?.writable && bound.span)
   }
@@ -383,8 +417,146 @@ export const GuiDesignerScope = defineScope(() => {
     setDraftConfirmation(null)
   }
 
+  function startRuntimeScene(sceneId: string, requestedDevice: GuiDevice = deviceState): Promise<void> {
+    const requestSequence = ++runtimeRequestSequenceRef.current
+    setRuntimeError(null)
+    setSelectedSceneId(sceneId)
+    const operation = runtimeOperationChainRef.current.catch(() => {}).then(async () => {
+      if (requestSequence !== runtimeRequestSequenceRef.current)
+        return
+      const previousSessionId = runtimeSessionIdRef.current
+      if (previousSessionId)
+        await runtimeActions.stop(previousSessionId).catch(() => {})
+      runtimeSessionIdRef.current = null
+      if (requestSequence !== runtimeRequestSequenceRef.current)
+        return
+      const result = await runtimeActions.start({
+        sceneId,
+        device: requestedDevice,
+        viewport: requestedDevice === 'mobile' ? MOBILE_VIEWPORT : PC_VIEWPORTS[pcViewportIndex],
+        workingSources: workingSources(files),
+      })
+      if (requestSequence !== runtimeRequestSequenceRef.current) {
+        if (result.sessionId)
+          await runtimeActions.stop(result.sessionId).catch(() => {})
+        return
+      }
+      acceptRuntimeScene(result)
+    }).catch((error) => {
+      if (requestSequence !== runtimeRequestSequenceRef.current)
+        return
+      setRuntimeError(errorMessage(error))
+      setRuntimeScene(null)
+    })
+    runtimeOperationChainRef.current = operation
+    return operation
+  }
+
+  async function reloadRuntimeScene() {
+    if (!runtimeScene?.sessionId)
+      return
+    setRuntimeError(null)
+    try {
+      const result = await runtimeActions.reload({
+        sessionId: runtimeScene.sessionId,
+        workingSources: workingSources(files),
+      })
+      acceptRuntimeScene(result)
+    }
+    catch (error) {
+      setRuntimeError(errorMessage(error))
+      setRuntimeScene(null)
+    }
+  }
+
+  async function sendRuntimeEvent(nodeId: string, eventType: string, payload: Record<string, unknown> = {}) {
+    const session = runtimeScene
+    if (!session?.sessionId)
+      return
+    try {
+      const result = await runtimeActions.event({
+        sessionId: session.sessionId,
+        nodeId,
+        eventType,
+        payload,
+        expectedSequence: session.sequence,
+      })
+      acceptRuntimeScene(result)
+    }
+    catch (error) {
+      setRuntimeError(errorMessage(error))
+      setRuntimeScene(null)
+    }
+  }
+
+  function stopRuntimeScene(): Promise<void> {
+    const requestSequence = ++runtimeRequestSequenceRef.current
+    const operation = runtimeOperationChainRef.current.catch(() => {}).then(async () => {
+      const sessionId = runtimeSessionIdRef.current
+      runtimeSessionIdRef.current = null
+      if (sessionId)
+        await runtimeActions.stop(sessionId).catch(() => {})
+      if (requestSequence !== runtimeRequestSequenceRef.current)
+        return
+      setSelectedSceneId(null)
+      setRuntimeScene(null)
+      setRuntimeLastValidScene(null)
+      setRuntimeError(null)
+    })
+    runtimeOperationChainRef.current = operation
+    return operation
+  }
+
+  async function setRuntimeDataSource(mode: GuiRuntimeDataSource) {
+    setRuntimeError(null)
+    try {
+      await runtimeActions.setDataSource(mode)
+      const sceneId = selectedSceneId
+      if (sceneId) {
+        await stopRuntimeScene()
+        await startRuntimeScene(sceneId)
+      }
+    }
+    catch (error) {
+      setRuntimeError(errorMessage(error))
+    }
+  }
+
+  async function openRuntimeNodeSource(nodeId: string) {
+    const node = previewDocument?.nodes[nodeId]
+    const sourceRef = node?.sourceRef
+    if (!sourceRef?.devRelativePath.startsWith('GUIExport/'))
+      return
+    await openFile(sourceRef.devRelativePath, true)
+    setSelectedNodeId(nodeId)
+    setMode('split')
+    setCodeJump({
+      path: sourceRef.devRelativePath,
+      line: Math.max(1, sourceRef.line ?? 1),
+      revision: Date.now(),
+    })
+  }
+
+  function acceptRuntimeScene(result: GuiRuntimeSceneResult) {
+    const valid = result.scene != null && !result.diagnostics.some(diagnostic => diagnostic.severity === 'error')
+    if (valid) {
+      runtimeSessionIdRef.current = result.sessionId || null
+      setRuntimeScene(result)
+      setRuntimeLastValidScene(result)
+      setSelectedNodeId(result.scene?.roots[0] ?? null)
+      return
+    }
+    runtimeSessionIdRef.current = null
+    setRuntimeScene(null)
+    setRuntimeError(result.diagnostics.find(diagnostic => diagnostic.severity === 'error')?.message ?? 'GUI_RUNTIME_SCENE_INVALID')
+  }
+
   function setDevice(nextDevice: GuiDevice) {
     setDeviceState(nextDevice)
+    if (selectedSceneId) {
+      void startRuntimeScene(selectedSceneId, nextDevice)
+      return
+    }
     if (!currentPath)
       return
     const entry = entries.find(item => item.path === currentPath)
@@ -430,9 +602,11 @@ export const GuiDesignerScope = defineScope(() => {
     entriesLoading: documentList.isLoading,
     files,
     currentFile,
+    previewDocument,
+    runtimePreviewActive,
     currentPath,
     selectedNodeId,
-    selectedNode: currentFile && selectedNodeId ? currentFile.document.nodes[selectedNodeId] : undefined,
+    selectedNode: previewDocument && selectedNodeId ? previewDocument.nodes[selectedNodeId] : undefined,
     device: deviceState,
     viewport,
     pcViewportIndex,
@@ -445,8 +619,17 @@ export const GuiDesignerScope = defineScope(() => {
     draftConfirmation,
     notice,
     parsePending,
-    busy: actions.busy,
-    error: actions.error,
+    runtimeCapabilities: runtimeCapabilities.data,
+    runtimeCapabilitiesLoading: runtimeCapabilities.isLoading,
+    runtimeCatalog: runtimeCatalog.data,
+    runtimeCatalogLoading: runtimeCatalog.isLoading,
+    runtimeScene,
+    runtimeLastValidScene,
+    runtimeError,
+    codeJump,
+    selectedSceneId,
+    busy: actions.busy || runtimeActions.busy,
+    error: actions.error || runtimeActions.error,
     openFile,
     updateWorkingSource,
     undo,
@@ -462,6 +645,12 @@ export const GuiDesignerScope = defineScope(() => {
     createPage,
     prepareDiff,
     applyDiff,
+    startRuntimeScene,
+    reloadRuntimeScene,
+    sendRuntimeEvent,
+    stopRuntimeScene,
+    openRuntimeNodeSource,
+    setRuntimeDataSource,
     setCurrentPath,
     setSelectedNodeId,
     setDevice,
@@ -479,6 +668,10 @@ export const GuiDesignerScope = defineScope(() => {
 
 function selectedNode(file: GuiWorkingFile, nodeId: string | null): Mir3UiNode | undefined {
   return nodeId ? file.document.nodes[nodeId] : undefined
+}
+
+function workingSources(files: Record<string, GuiWorkingFile>): Record<string, string> {
+  return Object.fromEntries(Object.values(files).map(file => [file.path, file.workingSource]))
 }
 
 function insertionParent(file: GuiWorkingFile, selected?: Mir3UiNode): Mir3UiNode | undefined {

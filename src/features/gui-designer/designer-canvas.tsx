@@ -9,7 +9,7 @@ import { useScope } from '@/hooks/use-scope'
 import { setGuiAssetDecodingPaused } from './api'
 import { useCanvasAssets } from './canvas-assets'
 import { canvasRenderMode, matrixTransformValue, nodeLocalMatrix, renderedNodeSize, translatedNodeMatrix } from './canvas-render-model'
-import { isGuiComponentKind } from './component-catalog'
+import { isGuiComponentKind, renderAssetValue } from './component-catalog'
 import { GuiDesignerScope } from './gui-designer-scope'
 
 interface DragRuntime {
@@ -54,11 +54,11 @@ export function DesignerCanvas() {
   const dragRef = useRef<DragRuntime | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const file = scope.currentFile
-  const document = file?.document
+  const document = scope.previewDocument
   const nodes = document?.nodes ?? {}
   const nodeCount = Object.keys(nodes).length
   const renderMode = canvasRenderMode(nodeCount)
-  const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full')
+  const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId)
   const viewport = scope.viewport
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export function DesignerCanvas() {
     if (!node)
       return
     scope.setSelectedNodeId(node.id)
-    if (scope.parsePending || !node.position.x.writable || !node.position.y.writable)
+    if (scope.parsePending || scope.runtimePreviewActive || !node.position.x.writable || !node.position.y.writable)
       return
     const parentMatrix = (group.parentElement as unknown as SVGGraphicsElement | null)?.getScreenCTM()
     const parentInverse = parentMatrix?.inverse()
@@ -156,6 +156,8 @@ export function DesignerCanvas() {
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault()
+    if (scope.runtimePreviewActive)
+      return
     const kind = event.dataTransfer.getData('application/x-mir3-ui-kind')
     if (!isGuiComponentKind(kind))
       return
@@ -184,19 +186,19 @@ export function DesignerCanvas() {
       onDragOver={event => event.preventDefault()}
       onDrop={handleDrop}
     >
-      <If cond={file == null}>
+      <If cond={document == null}>
         <CanvasMessage title={t('studio.gui.canvas.empty')} description={t('studio.gui.canvas.empty_desc')} />
       </If>
-      <If cond={file != null && renderMode === 'blocked'}>
+      <If cond={document != null && renderMode === 'blocked'}>
         <CanvasMessage title={t('studio.gui.canvas.too_large')} description={t('studio.gui.canvas.too_large_desc', { count: nodeCount })} />
       </If>
-      <If cond={file != null && renderMode !== 'blocked'}>
+      <If cond={document != null && renderMode !== 'blocked'}>
         <div
           className="relative shrink-0 overflow-hidden bg-[#111216] shadow-[0_28px_80px_rgba(0,0,0,0.22)] ring-1 ring-white/15"
           data-gui-surface
           style={{ width: viewport.width * scope.zoom, height: viewport.height * scope.zoom }}
         >
-          <CanvasErrorBoundary key={`${file?.path}:${document?.sourceSha256 ?? 'working'}`} fallback={canvasFallback}>
+          <CanvasErrorBoundary key={`${scope.selectedSceneId ?? file?.path ?? 'preview'}:${document?.sourceSha256 ?? scope.runtimeScene?.sequence ?? 'working'}`} fallback={canvasFallback}>
             <CanvasDocument
               document={document!}
               assets={assets}
@@ -279,7 +281,7 @@ function CanvasNode({ nodeId, document, assets, lightweight, selectedNodeId, zoo
     return null
   const nextAncestry = new Set(ancestry)
   nextAncestry.add(nodeId)
-  const path = node.paint?.image?.value || node.paint?.normalImage?.value
+  const path = renderAssetValue(node)?.value
   const size = nodeSize(node, assets)
   const matrix = nodeLocalMatrix(node, size)
   const opacity = Math.min(1, Math.max(0, (node.paint?.opacity?.value ?? 255) / 255))
@@ -289,7 +291,7 @@ function CanvasNode({ nodeId, document, assets, lightweight, selectedNodeId, zoo
       <If cond={node.clippingEnabled?.value === true}>
         <defs><clipPath id={clipId}><rect width={size.width} height={size.height} /></clipPath></defs>
       </If>
-      <NodePaint node={node} href={lightweight || !path ? undefined : assets.hrefs[path]} width={size.width} height={size.height} lightweight={lightweight} />
+      <NodePaint node={node} path={path} href={lightweight || !path ? undefined : assets.hrefs[path]} width={size.width} height={size.height} lightweight={lightweight} />
       <If cond={selectedNodeId === node.id}>
         <rect x={-3} y={-3} width={size.width + 6} height={size.height + 6} fill="none" stroke="var(--color-accent)" strokeWidth={1.5 / zoom} vectorEffect="non-scaling-stroke" />
       </If>
@@ -311,14 +313,14 @@ function CanvasNode({ nodeId, document, assets, lightweight, selectedNodeId, zoo
   )
 }
 
-function NodePaint({ node, href, width, height, lightweight }: { node: Mir3UiNode, href?: string, width: number, height: number, lightweight: boolean }) {
+function NodePaint({ node, path, href, width, height, lightweight }: { node: Mir3UiNode, path?: string, href?: string, width: number, height: number, lightweight: boolean }) {
   const color = node.paint?.color?.value || '#ffffff'
   if (lightweight)
     return <rect width={Math.max(width, 2)} height={Math.max(height, 2)} fill="none" stroke={color} strokeOpacity={0.28} vectorEffect="non-scaling-stroke" />
   return (
     <>
-      <If cond={isContainerPaint(node.kind)}><rect width={width} height={height} rx={3} fill={color} fillOpacity={0.08} stroke={color} strokeOpacity={0.42} strokeDasharray={node.kind === 'Panel' ? undefined : '6 3'} /></If>
-      <If cond={isImagePaint(node.kind)}><ImagePaint node={node} href={href} width={width} height={height} /></If>
+      <If cond={path != null}><ImagePaint node={node} path={path ?? ''} href={href} width={width} height={height} /></If>
+      <If cond={isContainerPaint(node.kind)}><rect width={width} height={height} rx={3} fill={color} fillOpacity={path ? 0 : 0.08} stroke={color} strokeOpacity={0.42} strokeDasharray={node.kind === 'Panel' ? undefined : '6 3'} /></If>
       <If cond={isTextPaint(node.kind)}>
         <g transform={`translate(0 ${height}) scale(1 -1)`}>
           <text x="0" y="0" dominantBaseline="hanging" fill={color} fontSize={node.paint?.fontSize?.value ?? 14}>{node.paint?.text?.value || node.name?.value}</text>
@@ -352,10 +354,6 @@ function isContainerPaint(kind: Mir3UiNode['kind']): boolean {
   return kind === 'Panel' || kind === 'PageView' || kind === 'ListView' || kind === 'ScrollView' || kind === 'QuickCell' || kind === 'TableView'
 }
 
-function isImagePaint(kind: Mir3UiNode['kind']): boolean {
-  return kind === 'Image' || kind === 'Button' || kind === 'CheckBox' || kind === 'Slider' || kind === 'ProgressTimer' || kind === 'LoadingBar'
-}
-
 function isTextPaint(kind: Mir3UiNode['kind']): boolean {
   return kind === 'Text' || kind === 'TextAtlas' || kind === 'RichText' || kind === 'ScrollText' || kind === 'TextInput' || kind === 'MenuItem'
 }
@@ -364,8 +362,7 @@ function isApproximatePaint(kind: Mir3UiNode['kind']): boolean {
   return kind === 'ItemShow' || kind === 'Effect' || kind === 'UIModel' || kind === 'SpineAnim'
 }
 
-function ImagePaint({ node, href, width, height }: { node: Mir3UiNode, href?: string, width: number, height: number }) {
-  const path = node.paint?.image?.value || node.paint?.normalImage?.value
+function ImagePaint({ node, path, href, width, height }: { node: Mir3UiNode, path: string, href?: string, width: number, height: number }) {
   return (
     <>
       <rect width={width} height={height} rx={node.kind === 'Button' ? 5 : 1} fill="rgba(255,255,255,0.045)" stroke={node.kind === 'Button' ? 'rgba(103,158,254,0.65)' : 'rgba(255,255,255,0.18)'} />
@@ -390,7 +387,7 @@ function CanvasMessage({ title, description }: { title: string, description: str
 }
 
 function nodeSize(node: Mir3UiNode, assets: CanvasAssetTable): CanvasNodeSize {
-  const path = node.paint?.image?.value || node.paint?.normalImage?.value
+  const path = renderAssetValue(node)?.value
   return renderedNodeSize(node, path ? assets.dimensions[path] : undefined)
 }
 

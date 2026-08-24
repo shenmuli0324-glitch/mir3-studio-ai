@@ -184,7 +184,7 @@ pub fn build_main_window(app: &tauri::AppHandle<Wry>) -> tauri::Result<tauri::We
 
 // configure invoke handler
 pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![
+    let generated: fn(Invoke<Wry>) -> bool = tauri::generate_handler![
         crate::bridge::install_dependencies,
         crate::bridge::check_dsh_update,
         crate::bridge::launch_harness,
@@ -285,7 +285,62 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::gui_draft_prepare,
         crate::bridge::gui_draft_confirm,
         crate::bridge::gui_draft_apply,
-    ]
+        crate::bridge::gui_runtime_capabilities,
+        crate::bridge::gui_runtime_catalog,
+        crate::bridge::gui_runtime_scene_start,
+        crate::bridge::gui_runtime_scene_event,
+        crate::bridge::gui_runtime_scene_reload,
+        crate::bridge::gui_runtime_scene_stop,
+        crate::bridge::gui_runtime_data_source_set,
+    ];
+    move |invoke| {
+        let command = invoke.message.command().to_string();
+        if command.starts_with("gui_") && !is_trusted_studio_invoke(&invoke) {
+            log::warn!("[ipc] rejected Studio-only command from remote origin: {command}");
+            invoke
+                .resolver
+                .reject("STUDIO_IPC_ORIGIN_DENIED: command is only available to the Studio shell");
+            true
+        } else {
+            generated(invoke)
+        }
+    }
+}
+
+fn is_trusted_studio_invoke(invoke: &Invoke<Wry>) -> bool {
+    let origin = invoke
+        .message
+        .headers()
+        .get("Origin")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    is_trusted_studio_origin(origin)
+}
+
+fn is_trusted_studio_origin(origin: &str) -> bool {
+    origin == "tauri://localhost"
+        || origin == "http://tauri.localhost"
+        || origin == "https://tauri.localhost"
+        || (cfg!(debug_assertions)
+            && (origin == "http://localhost:1420" || origin == "http://127.0.0.1:1420"))
+}
+
+#[cfg(test)]
+mod studio_origin_tests {
+    use super::is_trusted_studio_origin;
+
+    #[test]
+    fn remote_harness_origin_cannot_invoke_gui_commands() {
+        assert!(!is_trusted_studio_origin("http://127.0.0.1:3080"));
+        assert!(!is_trusted_studio_origin("http://127.0.0.1:3081"));
+        assert!(!is_trusted_studio_origin("https://example.com"));
+    }
+
+    #[test]
+    fn packaged_studio_origins_are_allowed() {
+        assert!(is_trusted_studio_origin("tauri://localhost"));
+        assert!(is_trusted_studio_origin("http://tauri.localhost"));
+    }
 }
 
 // configure tauri builder
@@ -297,6 +352,10 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             let project_service = crate::service::project::ProjectService::new(project_data)
                 .map_err(std::io::Error::other)?;
             app.manage(project_service);
+            let runtime_data = crate::config::get_dsh_data_path(&app_handle).join("gui-runtime");
+            let runtime_service = crate::service::gui_runtime::GuiRuntimeService::new(runtime_data)
+                .map_err(std::io::Error::other)?;
+            app.manage(runtime_service);
             build_main_window(&app_handle)?;
             tray(&app_handle)?;
             setup(app_handle.clone());

@@ -1,7 +1,11 @@
 import type { BoundValue, GuiPropertyValue, Mir3UiNode } from './types'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useScope } from '@/hooks/use-scope'
+import { guiAssetMetaQueryOptions } from './api'
+import { useCanvasAssets } from './canvas-assets'
+import { componentDefinition, nodeAssetValue } from './component-catalog'
 import { GuiDesignerScope } from './gui-designer-scope'
 
 export function DesignerInspector() {
@@ -27,6 +31,9 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
   const genericProperties = inspectorProperties(node)
+  const assetSlots = node.kind === 'Unsupported' ? [] : componentDefinition(node.kind).assetSlots
+  const inspectorAssets = useCanvasAssets(scope.activeProject?.id, { [node.id]: node }, true, node.id)
+  const provenance = scope.runtimePreviewActive ? scope.previewDocument?.provenance ?? [] : []
   return (
     <div>
       <section className="border-b border-line p-3">
@@ -46,6 +53,18 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
         <If cond={node.binding?.statement != null}>
           <p className="mt-3 text-[9px] tabular-nums text-muted">{t('studio.gui.inspector.source_line', { line: (node.binding?.statement?.startLine ?? 0) + 1 })}</p>
         </If>
+        <If cond={node.sourceRef?.devRelativePath != null}>
+          <button
+            className="mt-2 block max-w-full truncate text-left text-[9px] text-accent disabled:cursor-default disabled:text-muted"
+            type="button"
+            disabled={!node.sourceRef?.devRelativePath.startsWith('GUIExport/')}
+            onClick={() => void scope.openRuntimeNodeSource(node.id)}
+          >
+            {node.sourceRef?.devRelativePath}
+            <If cond={node.sourceRef?.line != null}>{`:${node.sourceRef?.line}`}</If>
+            <If cond={node.sourceRef?.devRelativePath.startsWith('GUIExport/')}>{` · ${t('studio.gui.inspector.source_jump')}`}</If>
+          </button>
+        </If>
       </section>
       <PropertySection title={t('studio.gui.inspector.position')}>
         <div className="grid grid-cols-2 gap-2">
@@ -64,10 +83,26 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
           <PropertyInput label={t('studio.gui.inspector.text')} value={node.paint?.text?.value ?? ''} writable={scope.nodePropertyWritable(node, 'text') && !scope.parsePending} onCommit={value => scope.updateNodeProperty(node.id, 'text', value)} />
         </PropertySection>
       </If>
-      <If cond={isImageNode(node)}>
+      <If cond={assetSlots.length > 0}>
         <PropertySection title={t('studio.gui.inspector.asset')}>
-          <PropertyInput label={t('studio.gui.inspector.image')} value={node.paint?.image?.value ?? ''} writable={scope.nodePropertyWritable(node, 'image') && !scope.parsePending} onCommit={value => scope.updateNodeProperty(node.id, 'image', value)} />
+          <div className="grid gap-2">
+            {assetSlots.map(slot => (
+              <AssetPropertyInput node={node} property={slot.property} hrefs={inspectorAssets.hrefs} key={slot.property} />
+            ))}
+          </div>
           <p className="mt-2 text-[9px] leading-4 text-muted">{t('studio.gui.inspector.asset_hint')}</p>
+        </PropertySection>
+      </If>
+      <If cond={provenance.length > 0}>
+        <PropertySection title={t('studio.gui.inspector.data_source')}>
+          <div className="grid gap-2">
+            {provenance.map(item => (
+              <div className="rounded-lg bg-panel-2 px-2.5 py-2 ring-1 ring-line" key={`${item.kind}:${item.key}`}>
+                <span className="block text-[9px] font-medium text-accent">{t(`studio.gui.data_source.${item.kind}`)}</span>
+                <span className="mt-1 block break-words text-[9px] leading-4 text-muted">{item.description}</span>
+              </div>
+            ))}
+          </div>
         </PropertySection>
       </If>
       <If cond={genericProperties.length > 0}>
@@ -91,6 +126,9 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
           <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={!scope.canAddNodeBehavior(node)} onClick={() => scope.addNodeBehavior(node.id, 'timeline')}>{t('studio.gui.inspector.add_timeline')}</button>
           <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={!scope.canAddNodeBehavior(node)} onClick={() => scope.addNodeBehavior(node.id, 'action')}>{t('studio.gui.inspector.add_action')}</button>
         </div>
+        <If cond={scope.runtimePreviewActive}>
+          <button className="mt-2 h-8 w-full rounded-lg bg-accent/10 text-[10px] text-accent ring-1 ring-accent/30 hover:bg-accent/15 disabled:opacity-40" type="button" disabled={scope.busy} onClick={() => void scope.sendRuntimeEvent(node.id, 'click')}>{t('studio.gui.inspector.runtime_click')}</button>
+        </If>
       </PropertySection>
       <If cond={node.compatibility !== 'supported'}>
         <div className="m-3 rounded-lg bg-danger/8 px-3 py-2 text-[10px] leading-4 text-danger ring-1 ring-danger/20">
@@ -150,8 +188,77 @@ function GenericPropertyInput({ property, bound, writable, onCommit }: {
 }
 
 function inspectorProperties(node: Mir3UiNode): Array<[string, BoundValue<GuiPropertyValue>]> {
-  const hidden = new Set(['parent', 'name', 'x', 'y', 'width', 'height', 'text', 'image', 'normalImage'])
+  const assetProperties = node.kind === 'Unsupported' ? [] : componentDefinition(node.kind).assetSlots.map(slot => slot.property)
+  const hidden = new Set(['parent', 'name', 'x', 'y', 'width', 'height', 'text', 'normalImage', ...assetProperties])
   return Object.entries(node.properties ?? {}).filter(([property]) => !hidden.has(property))
+}
+
+function AssetPropertyInput({ node, property, hrefs }: { node: Mir3UiNode, property: string, hrefs: Record<string, string> }) {
+  const { t } = useTranslation()
+  const scope = useScope(GuiDesignerScope)
+  const bound = nodeAssetValue(node, property)
+  const path = bound?.value ?? ''
+  const projectId = scope.activeProject?.id ?? ''
+  const meta = useQuery({
+    ...guiAssetMetaQueryOptions(projectId, path),
+    enabled: projectId.length > 0 && path.length > 0,
+    retry: false,
+  })
+  const writable = property === 'image'
+    ? scope.nodePropertyWritable(node, 'image')
+    : scope.nodeGenericPropertyWritable(node, property)
+
+  function commit(value: string) {
+    if (property === 'image') {
+      scope.updateNodeProperty(node.id, 'image', value)
+      return
+    }
+    scope.updateNodeGenericProperty(node.id, property, value)
+  }
+
+  return (
+    <label className="block min-w-0">
+      <span className="mb-1 flex items-center justify-between gap-2 text-[9px] text-muted">
+        <span>{t(`studio.gui.inspector.asset_slot.${property}`)}</span>
+        <span>{bound ? t(`studio.gui.value_source.${bound.source}`) : t('studio.gui.value_source.default')}</span>
+      </span>
+      <If cond={path.length > 0}>
+        <span className="mb-2 flex min-h-14 items-center gap-2 overflow-hidden rounded-lg bg-canvas p-2 ring-1 ring-line">
+          <If
+            cond={hrefs[path] != null}
+            then={<img className="size-10 shrink-0 object-contain" src={hrefs[path]} alt="" />}
+            else={<span className="grid size-10 shrink-0 place-items-center rounded bg-panel-2 text-[9px] text-muted">◇</span>}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[9px] text-ink">{path}</span>
+            <span className={meta.isError ? 'mt-1 block text-[8px] text-danger' : 'mt-1 block text-[8px] text-muted'}>
+              {assetStatus(meta.status, meta.data?.width, meta.data?.height, t)}
+            </span>
+          </span>
+        </span>
+      </If>
+      <input
+        className="h-8 w-full rounded-lg bg-panel-2 px-2 text-[11px] text-ink outline-none ring-1 ring-line focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
+        aria-label={t(`studio.gui.inspector.asset_slot.${property}`)}
+        key={`${property}:${bound?.value ?? ''}`}
+        defaultValue={bound?.value ?? ''}
+        disabled={!writable || scope.parsePending || scope.runtimePreviewActive}
+        onBlur={event => commit(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter')
+            event.currentTarget.blur()
+        }}
+      />
+    </label>
+  )
+}
+
+function assetStatus(status: 'error' | 'pending' | 'success', width: number | undefined, height: number | undefined, t: (key: string, options?: Record<string, unknown>) => string): string {
+  if (status === 'success')
+    return t('studio.gui.inspector.asset_available', { width: width ?? 0, height: height ?? 0 })
+  if (status === 'error')
+    return t('studio.gui.inspector.asset_missing')
+  return t('studio.gui.inspector.asset_loading')
 }
 
 function parsePropertyInput(value: string, current: GuiPropertyValue): GuiPropertyValue {
@@ -180,10 +287,6 @@ function isRawLuaLiteral(value: GuiPropertyValue): value is { luaLiteral: string
 
 function isTextNode(node: Mir3UiNode): boolean {
   return node.kind === 'Text' || node.kind === 'TextAtlas' || node.kind === 'RichText' || node.kind === 'ScrollText' || node.kind === 'TextInput' || node.kind === 'MenuItem'
-}
-
-function isImageNode(node: Mir3UiNode): boolean {
-  return node.kind === 'Image' || node.kind === 'Button' || node.kind === 'CheckBox' || node.kind === 'Slider' || node.kind === 'ProgressTimer' || node.kind === 'LoadingBar'
 }
 
 function PropertySection({ title, children }: { title: string, children: React.ReactNode }) {

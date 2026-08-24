@@ -22,6 +22,24 @@ fn parses_optional_official_corpus_without_panicking() {
         let relative = path.strip_prefix(&root).unwrap_or(path).to_string_lossy();
         let document = parse_document(&source, &relative, "corpus", "utf-8", "\n")
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        serde_json::to_vec(&document)
+            .unwrap_or_else(|error| panic!("{} serialization: {error}", path.display()));
+        for node in &document.nodes {
+            for asset in node.asset_slots.values() {
+                if asset.value.trim().is_empty() {
+                    continue;
+                }
+                assert!(
+                    document
+                        .assets
+                        .iter()
+                        .any(|entry| entry.logical_path == asset.value),
+                    "{} missing asset index entry for {}",
+                    path.display(),
+                    asset.value
+                );
+            }
+        }
         nodes += document.nodes.len();
         diagnostics += document.diagnostics.len();
         unknown += document

@@ -3,7 +3,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { GuiDesignerScope } from '../src/features/gui-designer/gui-designer-scope'
 import { GuiDesignerView } from '../src/views/gui-designer-view'
 import '../src/i18n'
 
@@ -82,6 +84,7 @@ describe('gui designer interaction', () => {
     await openDemoFile(user)
     await user.click(screen.getByRole('button', { name: 'Layers' }))
     await user.click(await screen.findByRole('button', { name: /Button_close/i }))
+    expect((screen.getByLabelText('Image path') as HTMLInputElement).value).toBe('icons/close.png')
 
     const xInput = screen.getByLabelText('X')
     fireEvent.change(xInput, { target: { value: '42' } })
@@ -112,23 +115,134 @@ describe('gui designer interaction', () => {
     renderDesigner()
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: /GUILayout.*Official GUI runtime logic/i }))
+    await user.click(await screen.findByRole('button', { name: /GUILayout.*GUI runtime logic/i }))
     await user.click(await screen.findByRole('button', { name: /demo\.lua.*read-only/i }))
     expect(await screen.findByText('Read-only Lua source')).toBeTruthy()
     expect(screen.getByText('return {}')).toBeTruthy()
     expect(mocks.invoke).toHaveBeenCalledWith('gui_readonly_document_open', expect.objectContaining({ devRelativePath: 'GUILayout/demo.lua' }))
   })
+
+  it('shows descriptions only for real DEV root directories without the official prefix', async () => {
+    installInvokeFixture()
+    renderDesigner()
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('button', { name: /data_config.*Data configuration/i })).toBeTruthy()
+    expect(screen.queryByText(/Official data configuration/i)).toBeNull()
+    await user.click(screen.getByRole('button', { name: /scripts.*Scripts directory/i }))
+    expect(await screen.findByRole('button', { name: /^game_config$/i })).toBeTruthy()
+  })
+
+  it('starts a complete Runtime scene from the Scenes panel', async () => {
+    installInvokeFixture()
+    renderDesigner()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Scenes' }))
+    await user.click(await screen.findByRole('button', { name: /Auction interface/i }))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_start', expect.objectContaining({
+      projectId: 'project-1',
+      request: expect.objectContaining({ sceneId: 'auction' }),
+    })))
+    expect(document.querySelector('[data-gui-canvas-container]')).toBeTruthy()
+  })
+
+  it('keeps Runtime source references and opens the matching GUIExport in Split mode', async () => {
+    installInvokeFixture()
+    renderDesigner()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Scenes' }))
+    await user.click(await screen.findByRole('button', { name: /Auction interface/i }))
+    await user.click(screen.getByRole('button', { name: 'Layers' }))
+    await user.click(await screen.findByRole('button', { name: /RuntimeButton/i }))
+    expect((screen.getByLabelText('Image path') as HTMLInputElement).value).toBe('icons/close.png')
+    expect((screen.getByLabelText('Pressed image') as HTMLInputElement).value).toBe('icons/close_pressed.png')
+    expect((screen.getByLabelText('Disabled image') as HTMLInputElement).value).toBe('icons/close_disabled.png')
+    const sourceJump = await screen.findByRole('button', { name: /GUIExport\/demo\/main\.lua.*Open in Split/i })
+    await user.click(sourceJump)
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_open', expect.objectContaining({ devRelativePath: 'GUIExport/demo/main.lua' })))
+    expect(screen.getByLabelText('Lua source editor')).toBeTruthy()
+  })
+
+  it('keeps the dirty GUI working copy while another Studio menu is visible', async () => {
+    installInvokeFixture()
+    renderPersistentDesigner()
+    const user = userEvent.setup()
+
+    await openDemoFile(user)
+    await user.click(screen.getByRole('button', { name: 'Layers' }))
+    await user.click(await screen.findByRole('button', { name: /Button_close/i }))
+    fireEvent.change(screen.getByLabelText('X'), { target: { value: '77' } })
+    fireEvent.blur(screen.getByLabelText('X'))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_reparse', expect.anything()), { timeout: 1500 })
+
+    await user.click(screen.getByRole('button', { name: 'Show another menu' }))
+    expect(screen.getByText('Another Studio menu')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Show GUI Designer' }))
+    await user.click(screen.getByRole('button', { name: 'Code' }))
+    expect((screen.getByLabelText('Lua source editor') as HTMLTextAreaElement).value).toContain(', 77,')
+  })
 })
 
 function renderDesigner(): void {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  render(<QueryClientProvider client={queryClient}><GuiDesignerView /></QueryClientProvider>)
+  render(<QueryClientProvider client={queryClient}><GuiDesignerScope.Provider><GuiDesignerView /></GuiDesignerScope.Provider></QueryClientProvider>)
+}
+
+function renderPersistentDesigner(): void {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(<QueryClientProvider client={queryClient}><PersistentDesignerHost /></QueryClientProvider>)
+}
+
+function PersistentDesignerHost() {
+  const [visible, setVisible] = useState(true)
+  return (
+    <GuiDesignerScope.Provider>
+      <button type="button" onClick={() => setVisible(false)}>Show another menu</button>
+      <button type="button" onClick={() => setVisible(true)}>Show GUI Designer</button>
+      {visible ? <GuiDesignerView /> : <p>Another Studio menu</p>}
+    </GuiDesignerScope.Provider>
+  )
 }
 
 function installInvokeFixture(): void {
   mocks.invoke.mockImplementation((command: string, args: Record<string, unknown>) => {
     if (command === 'gui_designer_status')
       return Promise.resolve({ projectId: 'project-1', devRoot: '/fixture/客户端/dev', available: true, guiExportAvailable: true, resourceAvailable: true })
+    if (command === 'gui_runtime_capabilities') {
+      return Promise.resolve({
+        available: true,
+        backend: 'sidecar',
+        dataSource: 'builtInMock',
+        projectStaticAvailable: false,
+        tables: [],
+        limits: {},
+        diagnostics: [],
+      })
+    }
+    if (command === 'gui_runtime_catalog') {
+      return Promise.resolve({
+        scenes: [{ id: 'auction', name: 'Auction interface', category: 'auction', layoutPath: 'GUILayout/auction.lua', platform: 'shared', compatibility: 'supported' }],
+      })
+    }
+    if (command === 'gui_runtime_scene_start') {
+      return Promise.resolve({
+        sessionId: 'runtime-1',
+        sequence: 1,
+        scene: runtimeSceneFixture(),
+        fallback: false,
+        diagnostics: [],
+      })
+    }
+    if (command === 'gui_runtime_scene_event') {
+      return Promise.resolve({ sessionId: 'runtime-1', sequence: 2, scene: runtimeSceneFixture(), fallback: false, diagnostics: [] })
+    }
+    if (command === 'gui_runtime_scene_stop')
+      return Promise.resolve({ stopped: true })
+    if (command === 'gui_runtime_data_source_set') {
+      return Promise.resolve({ available: true, backend: 'sidecar', dataSource: 'builtInMock', projectStaticAvailable: false, tables: [], limits: {}, diagnostics: [] })
+    }
     if (command === 'gui_document_list') {
       return Promise.resolve([
         { path: 'GUIExport/demo/main.lua', kind: 'editable', platform: 'mobile', peerPath: 'GUIExport/demo/main_win32.lua' },
@@ -141,10 +255,12 @@ function installInvokeFixture(): void {
       if (parentPath === '') {
         return Promise.resolve({
           parentPath,
-          entries: [treeDirectory('GUIExport', 'GUIExport'), treeDirectory('GUILayout', 'GUILayout'), treeDirectory('res', 'res')],
+          entries: [treeDirectory('GUIExport', 'GUIExport'), treeDirectory('GUILayout', 'GUILayout'), treeDirectory('data_config', 'data_config'), treeDirectory('res', 'res'), treeDirectory('scripts', 'scripts')],
           nextCursor: null,
         })
       }
+      if (parentPath === 'scripts')
+        return Promise.resolve({ parentPath, entries: [treeDirectory('scripts/game_config', 'game_config')], nextCursor: null })
       if (parentPath === 'GUIExport') {
         return Promise.resolve({ parentPath, entries: [treeDirectory('GUIExport/demo', 'GUIExport')], nextCursor: null })
       }
@@ -185,6 +301,8 @@ function installInvokeFixture(): void {
     }
     if (command === 'gui_asset_read')
       return Promise.reject(new Error('GUI_ASSET_NOT_FOUND'))
+    if (command === 'gui_asset_meta')
+      return Promise.reject(new Error('GUI_ASSET_NOT_FOUND'))
     if (command === 'gui_draft_prepare')
       return Promise.resolve({ draftId: 'draft-1', revision: 1, preview: { changes: [] } })
     if (command === 'gui_draft_confirm') {
@@ -203,9 +321,52 @@ function installInvokeFixture(): void {
   })
 }
 
+function runtimeSceneFixture() {
+  return {
+    id: 'scene-auction',
+    profileId: 'auction',
+    viewport: { width: 1136, height: 640, scaleFactor: 1 },
+    roots: ['runtime-root'],
+    nodes: {
+      'runtime-root': {
+        id: 'runtime-root',
+        nodeType: 'Scene',
+        name: 'Scene',
+        parentId: null,
+        children: ['runtime-button'],
+        transform: { x: 0, y: 0, anchorX: 0, anchorY: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+        size: { width: 1136, height: 640 },
+        visible: true,
+        sourceRef: { devRelativePath: 'GUILayout/auction.lua', line: 1, column: 0 },
+        properties: {},
+      },
+      'runtime-button': {
+        id: 'runtime-button',
+        nodeType: 'Button',
+        name: 'RuntimeButton',
+        parentId: 'runtime-root',
+        children: [],
+        transform: { x: 10, y: 20, anchorX: 0, anchorY: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+        size: { width: 80, height: 40 },
+        visible: true,
+        asset: 'icons/close.png',
+        assetSlots: {
+          normal: 'icons/close.png',
+          pressed: 'icons/close_pressed.png',
+          disabled: 'icons/close_disabled.png',
+        },
+        sourceRef: { devRelativePath: 'GUIExport/demo/main.lua', line: 2, column: 0 },
+        properties: {},
+      },
+    },
+    diagnostics: [],
+    provenance: [{ kind: 'sceneMock', key: 'auction', description: 'Simulated scene data' }],
+  }
+}
+
 async function openDemoFile(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(await screen.findByRole('button', { name: /GUIExport.*Official static GUI layout/i }))
-  await user.click(await screen.findByRole('button', { name: /demo.*Official static GUI layout/i }))
+  await user.click(await screen.findByRole('button', { name: /GUIExport.*Static GUI layout/i }))
+  await user.click(await screen.findByRole('button', { name: /^demo$/i }))
   await user.click(await screen.findByRole('button', { name: /main\.lua.*visual editing/i }))
 }
 

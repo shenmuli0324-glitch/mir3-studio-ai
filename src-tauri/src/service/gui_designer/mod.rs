@@ -11,7 +11,8 @@ use mir3_ui::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 const MAX_ASSET_BYTES: u64 = 16 * 1024 * 1024;
@@ -545,8 +546,17 @@ pub fn read_asset_content(
     if metadata.len() > MAX_ASSET_BYTES {
         return Err("GUI_ASSET_TOO_LARGE: 素材不能超过 16 MiB".to_string());
     }
-    let bytes = fs::read(&target)
+    let mut bytes = Vec::with_capacity(metadata.len().min(MAX_ASSET_BYTES) as usize);
+    File::open(&target)
+        .and_then(|file| {
+            file.take(MAX_ASSET_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .map(|_| ())
+        })
         .map_err(|e| format!("GUI_ASSET_READ_FAILED: {}: {e}", target.display()))?;
+    if bytes.len() as u64 > MAX_ASSET_BYTES {
+        return Err("GUI_ASSET_TOO_LARGE: 素材不能超过 16 MiB".to_string());
+    }
     let mime_type = validate_asset_container(&target, &bytes)?;
     Ok(GuiAssetContent {
         logical_path: relative,

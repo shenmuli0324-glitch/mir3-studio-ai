@@ -244,6 +244,8 @@ pub struct Mir3UiNode {
     pub image: BoundValue<String>,
     pub pressed_image: BoundValue<String>,
     pub disabled_image: BoundValue<String>,
+    #[serde(default)]
+    pub asset_slots: BTreeMap<String, BoundValue<String>>,
     pub font_size: BoundValue<f64>,
     pub color: BoundValue<String>,
     pub opacity: BoundValue<f64>,
