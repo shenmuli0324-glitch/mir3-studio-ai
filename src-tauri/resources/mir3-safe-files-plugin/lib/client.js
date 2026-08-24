@@ -104,27 +104,137 @@ window.__ModuleLoader__.load({
       }))
     }
 
+    function SafeXlsGrid(props) {
+      const data = props.data
+      const viewportRef = React.useRef(null)
+      const [scrollTop, setScrollTop] = React.useState(0)
+      const [viewportHeight, setViewportHeight] = React.useState(600)
+      const rowHeight = 32
+      const rowNumberWidth = 56
+      const columnWidth = 140
+      const overscan = 10
+      const start = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
+      const visibleCount = Math.ceil(viewportHeight / rowHeight) + overscan * 2
+      const end = Math.min(data.rowCount, start + visibleCount)
+      const visibleRows = data.rows.slice(start, end)
+
+      React.useEffect(() => {
+        const viewport = viewportRef.current
+        if (!viewport)
+          return undefined
+        function measure() {
+          setViewportHeight(viewport.clientHeight || 600)
+        }
+        const observer = new ResizeObserver(measure)
+        observer.observe(viewport)
+        return () => observer.disconnect()
+      }, [])
+
+      return React.createElement('div', {
+        ref: viewportRef,
+        onScroll: event => setScrollTop(event.currentTarget.scrollTop),
+        style: { flex: 1, overflow: 'auto', position: 'relative' },
+      }, React.createElement('div', {
+        style: {
+          height: data.rowCount * rowHeight,
+          minWidth: rowNumberWidth + data.columnCount * columnWidth,
+          position: 'relative',
+        },
+      }, visibleRows.map((row, visibleIndex) => {
+        const rowIndex = start + visibleIndex
+        const cells = row.map((cell, columnIndex) => ({
+          cell,
+          key: `${data.sheet}:row:${rowIndex}:column:${columnIndex}`,
+        }))
+        return React.createElement('div', {
+          key: `${data.sheet}:row:${rowIndex}`,
+          style: {
+            display: 'flex',
+            height: rowHeight,
+            left: 0,
+            position: 'absolute',
+            right: 0,
+            top: rowIndex * rowHeight,
+          },
+        }, React.createElement('div', {
+          style: {
+            alignItems: 'center',
+            background: '#222',
+            borderBottom: '1px solid #333',
+            borderRight: '1px solid #3b3b3b',
+            color: '#999',
+            display: 'flex',
+            flex: `0 0 ${rowNumberWidth}px`,
+            justifyContent: 'center',
+            left: 0,
+            position: 'sticky',
+            zIndex: 1,
+          },
+        }, String(rowIndex + 1)), cells.map(item => React.createElement('div', {
+          key: item.key,
+          title: item.cell,
+          style: {
+            alignItems: 'center',
+            borderBottom: '1px solid #333',
+            borderRight: '1px solid #333',
+            display: 'flex',
+            flex: `0 0 ${columnWidth}px`,
+            overflow: 'hidden',
+            padding: '0 8px',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
+        }, item.cell)))
+      })))
+    }
+
     function SafeXlsViewer(props) {
       const workbook = props.customData
-      const [sheet, setSheet] = React.useState(workbook.sheets[0] || '')
-      const [page, setPage] = React.useState(null)
+      const [sheet, setSheet] = React.useState(workbook.sheets[0]?.name || '')
+      const [sheetData, setSheetData] = React.useState(null)
       const [error, setError] = React.useState('')
+
+      function handleSheetChange(event) {
+        setSheet(event.target.value)
+        setSheetData(null)
+        setError('')
+      }
 
       React.useEffect(() => {
         let active = true
         if (!sheet)
           return undefined
-        request('safe_xls_sheet_page', { projectId: activeProject.projectId, relativePath: workbook.relativePath, sheet, offset: 0, limit: 100 })
-          .then(result => active && setPage(result))
+        request('safe_xls_sheet_read', {
+          projectId: activeProject.projectId,
+          relativePath: workbook.relativePath,
+          sheet,
+          expectedSha256: workbook.sha256,
+        })
+          .then(result => active && setSheetData(result))
           .catch(reason => active && setError(String(reason)))
         return () => {
           active = false
         }
-      }, [sheet, workbook.relativePath])
+      }, [sheet, workbook.relativePath, workbook.sha256])
 
-      return React.createElement('div', { style: { height: '100%', overflow: 'auto', background: '#151515', color: '#eee' } }, React.createElement('div', { style: { position: 'sticky', top: 0, display: 'flex', gap: 8, alignItems: 'center', padding: 10, background: '#1d1d1d', borderBottom: '1px solid #333', zIndex: 1 } }, badge('BIFF XLS 只读'), React.createElement('select', { value: sheet, onChange: event => setSheet(event.target.value), style: { background: '#222', color: '#eee', border: '1px solid #555', padding: 6 } }, workbook.sheets.map(value => React.createElement('option', { key: value, value }, value)))), error ? React.createElement('div', { style: { padding: 20, color: '#ff7b72' } }, error) : null, page
-        ? React.createElement('table', { style: { borderCollapse: 'collapse', minWidth: '100%', fontSize: 12 } }, React.createElement('tbody', null, page.rows.map((row, rowIndex) => React.createElement('tr', { key: rowIndex }, React.createElement('th', { style: { position: 'sticky', left: 0, padding: 5, border: '1px solid #333', background: '#222', color: '#999' } }, String(page.offset + rowIndex + 1)), row.map((cell, columnIndex) => React.createElement('td', { key: columnIndex, style: { minWidth: 90, maxWidth: 280, padding: 5, border: '1px solid #333', whiteSpace: 'pre-wrap' } }, cell))))))
-        : React.createElement('div', { style: { padding: 20, color: '#999' } }, '正在读取工作表…'))
+      return React.createElement('div', {
+        style: { height: '100%', display: 'flex', flexDirection: 'column', background: '#151515', color: '#eee' },
+      }, React.createElement('div', {
+        style: { display: 'flex', gap: 8, alignItems: 'center', padding: 10, background: '#1d1d1d', borderBottom: '1px solid #333' },
+      }, badge('BIFF XLS 只读'), badge('完整工作表'), React.createElement('select', {
+        value: sheet,
+        onChange: handleSheetChange,
+        style: { background: '#222', color: '#eee', border: '1px solid #555', padding: 6 },
+      }, workbook.sheets.map(value => React.createElement('option', {
+        key: value.name,
+        value: value.name,
+      }, `${value.name} · ${value.rowCount} 行 × ${value.columnCount} 列`))), React.createElement('span', { style: { flex: 1 } }), sheetData
+        ? badge(`${sheetData.rowCount} 行 × ${sheetData.columnCount} 列`)
+        : null), error
+        ? React.createElement('div', { style: { padding: 20, color: '#ff7b72' } }, error)
+        : null, sheetData
+        ? React.createElement(SafeXlsGrid, { data: sheetData })
+        : React.createElement('div', { style: { padding: 20, color: '#999' } }, '正在读取完整工作表…'))
     }
 
     function handleMessage(event) {

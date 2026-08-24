@@ -263,7 +263,7 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::safe_text_patch,
         crate::bridge::safe_lua_patch,
         crate::bridge::safe_xls_open,
-        crate::bridge::safe_xls_sheet_page,
+        crate::bridge::safe_xls_sheet_read,
         crate::bridge::safe_xls_patch,
         crate::bridge::safe_file_status,
         crate::bridge::snapshot_list,

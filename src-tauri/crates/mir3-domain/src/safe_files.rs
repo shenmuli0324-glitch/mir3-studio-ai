@@ -6,8 +6,15 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
+use std::time::UNIX_EPOCH;
 
 const OLE2_MAGIC: &[u8; 8] = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1";
+const MAX_XLS_FILE_BYTES: u64 = 20 * 1024 * 1024;
+const MAX_XLS_ROWS: usize = 20_000;
+const MAX_XLS_COLUMNS: usize = 256;
+const MAX_XLS_CELLS: usize = 500_000;
+const MAX_XLS_CACHE_ENTRIES: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TextEncoding {
@@ -68,20 +75,37 @@ pub struct SafeTextPatchResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SafeXlsSheetMeta {
+    pub name: String,
+    pub row_count: usize,
+    pub column_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SafeXlsWorkbook {
     pub relative_path: String,
     pub sha256: String,
-    pub sheets: Vec<String>,
+    pub sheets: Vec<SafeXlsSheetMeta>,
     pub read_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SafeXlsPage {
+pub struct SafeXlsSheet {
     pub sheet: String,
-    pub offset: usize,
-    pub next_offset: Option<usize>,
+    pub row_count: usize,
+    pub column_count: usize,
     pub rows: Vec<Vec<String>>,
+    pub source_sha256: String,
+}
+
+#[derive(Debug)]
+pub(crate) struct CachedXlsWorkbook {
+    file_len: u64,
+    modified_nanos: u128,
+    workbook: SafeXlsWorkbook,
+    sheets: Vec<SafeXlsSheet>,
 }
 
 impl DomainStore {
@@ -183,54 +207,130 @@ impl DomainStore {
     ) -> Result<SafeXlsWorkbook, String> {
         validate_xls_path(relative_path)?;
         let target = self.safe_file_target(project_id, relative_path)?;
+        let metadata = xls_metadata(&target)?;
+        let cache_key = xls_cache_key(project_id, relative_path);
         let bytes = fs::read(&target)
             .map_err(|e| format!("SAFE_XLS_READ_FAILED: {}: {e}", target.display()))?;
         ensure_ole2(&bytes)?;
-        let workbook = Xls::new(Cursor::new(bytes.clone()))
-            .map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
-        Ok(SafeXlsWorkbook {
+        let sha256 = hash_bytes(&bytes);
+        if let Some(cached) = self.cached_xls(&cache_key, &metadata, Some(&sha256))? {
+            return Ok(cached.workbook.clone());
+        }
+        let mut source =
+            Xls::new(Cursor::new(bytes)).map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
+        let sheet_names = source.sheet_names().to_vec();
+        let mut sheets = Vec::with_capacity(sheet_names.len());
+        let mut sheet_meta = Vec::with_capacity(sheet_names.len());
+        for name in sheet_names {
+            let range = source
+                .worksheet_range(&name)
+                .map_err(|e| format!("SAFE_XLS_SHEET_FAILED: {e}"))?;
+            let rows = crop_effective_rows(
+                range
+                    .rows()
+                    .map(|row| row.iter().map(ToString::to_string).collect()),
+            );
+            let row_count = rows.len();
+            let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
+            validate_xls_dimensions(&name, row_count, column_count)?;
+            let mut rows = rows;
+            for row in &mut rows {
+                row.resize(column_count, String::new());
+            }
+            sheet_meta.push(SafeXlsSheetMeta {
+                name: name.clone(),
+                row_count,
+                column_count,
+            });
+            sheets.push(SafeXlsSheet {
+                sheet: name,
+                row_count,
+                column_count,
+                rows,
+                source_sha256: sha256.clone(),
+            });
+        }
+        let workbook = SafeXlsWorkbook {
             relative_path: relative_path.replace('\\', "/"),
-            sha256: hash_bytes(&bytes),
-            sheets: workbook.sheet_names().to_vec(),
+            sha256,
+            sheets: sheet_meta,
             read_only: true,
-        })
+        };
+        let cached = CachedXlsWorkbook {
+            file_len: metadata.file_len,
+            modified_nanos: metadata.modified_nanos,
+            workbook: workbook.clone(),
+            sheets,
+        };
+        let mut cache = self
+            .xls_cache
+            .lock()
+            .map_err(|_| "SAFE_XLS_CACHE_FAILED: cache lock poisoned".to_string())?;
+        if cache.len() >= MAX_XLS_CACHE_ENTRIES && !cache.contains_key(&cache_key) {
+            cache.clear();
+        }
+        cache.insert(cache_key, Arc::new(cached));
+        Ok(workbook)
     }
 
-    pub fn safe_xls_sheet_page(
+    pub fn safe_xls_sheet_read(
         &self,
         project_id: &str,
         relative_path: &str,
         sheet: &str,
-        offset: usize,
-        limit: usize,
-    ) -> Result<SafeXlsPage, String> {
+        expected_sha256: &str,
+    ) -> Result<SafeXlsSheet, String> {
         validate_xls_path(relative_path)?;
-        if limit == 0 || limit > 200 {
-            return Err("SAFE_XLS_PAGE_INVALID: limit must be between 1 and 200".to_string());
-        }
         let target = self.safe_file_target(project_id, relative_path)?;
-        let bytes = fs::read(&target)
-            .map_err(|e| format!("SAFE_XLS_READ_FAILED: {}: {e}", target.display()))?;
-        ensure_ole2(&bytes)?;
-        let mut workbook =
-            Xls::new(Cursor::new(bytes)).map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
-        let range = workbook
-            .worksheet_range(sheet)
-            .map_err(|e| format!("SAFE_XLS_SHEET_FAILED: {e}"))?;
-        let total = range.height();
-        let rows = range
-            .rows()
-            .skip(offset)
-            .take(limit)
-            .map(|row| row.iter().take(128).map(ToString::to_string).collect())
-            .collect();
-        let end = offset.saturating_add(limit).min(total);
-        Ok(SafeXlsPage {
-            sheet: sheet.to_string(),
-            offset,
-            next_offset: (end < total).then_some(end),
-            rows,
-        })
+        let metadata = xls_metadata(&target)?;
+        let cache_key = xls_cache_key(project_id, relative_path);
+        let cached = match self.cached_xls(&cache_key, &metadata, Some(expected_sha256))? {
+            Some(cached) => cached,
+            None => {
+                let workbook = self.safe_xls_open(project_id, relative_path)?;
+                if workbook.sha256 != expected_sha256 {
+                    return Err(
+                        "SAFE_FILE_SOURCE_CONFLICT: XLS changed since it was opened".to_string()
+                    );
+                }
+                self.cached_xls(&cache_key, &xls_metadata(&target)?, Some(expected_sha256))?
+                    .ok_or_else(|| "SAFE_XLS_CACHE_FAILED: workbook was not cached".to_string())?
+            }
+        };
+        if cached.workbook.sha256 != expected_sha256 {
+            return Err("SAFE_FILE_SOURCE_CONFLICT: XLS changed since it was opened".to_string());
+        }
+        cached
+            .sheets
+            .iter()
+            .find(|value| value.sheet == sheet)
+            .cloned()
+            .ok_or_else(|| format!("SAFE_XLS_SHEET_NOT_FOUND: {sheet}"))
+    }
+
+    fn cached_xls(
+        &self,
+        cache_key: &str,
+        metadata: &XlsMetadata,
+        expected_sha256: Option<&str>,
+    ) -> Result<Option<Arc<CachedXlsWorkbook>>, String> {
+        let mut cache = self
+            .xls_cache
+            .lock()
+            .map_err(|_| "SAFE_XLS_CACHE_FAILED: cache lock poisoned".to_string())?;
+        let matches = cache.get(cache_key).is_some_and(|value| {
+            value.file_len == metadata.file_len
+                && value.modified_nanos == metadata.modified_nanos
+                && expected_sha256
+                    .map(|expected| value.workbook.sha256 == expected)
+                    .unwrap_or(true)
+        });
+        if matches {
+            Ok(cache.get(cache_key).map(Arc::clone))
+        } else {
+            cache.remove(cache_key);
+            Ok(None)
+        }
     }
 
     fn safe_file_target(&self, project_id: &str, relative_path: &str) -> Result<PathBuf, String> {
@@ -246,6 +346,82 @@ impl DomainStore {
         }
         Ok(canonical)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct XlsMetadata {
+    file_len: u64,
+    modified_nanos: u128,
+}
+
+fn xls_metadata(path: &Path) -> Result<XlsMetadata, String> {
+    let metadata = fs::metadata(path)
+        .map_err(|e| format!("SAFE_XLS_METADATA_FAILED: {}: {e}", path.display()))?;
+    if metadata.len() > MAX_XLS_FILE_BYTES {
+        return Err(format!(
+            "SAFE_XLS_FILE_TOO_LARGE: maximum is {} MiB",
+            MAX_XLS_FILE_BYTES / 1024 / 1024
+        ));
+    }
+    let modified_nanos = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |value| value.as_nanos());
+    Ok(XlsMetadata {
+        file_len: metadata.len(),
+        modified_nanos,
+    })
+}
+
+fn xls_cache_key(project_id: &str, relative_path: &str) -> String {
+    format!("{project_id}:{}", relative_path.replace('\\', "/"))
+}
+
+fn crop_effective_rows(rows: impl Iterator<Item = Vec<String>>) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = rows.collect();
+    while rows
+        .last()
+        .is_some_and(|row| row.iter().all(|cell| cell.is_empty()))
+    {
+        rows.pop();
+    }
+    let column_count = rows
+        .iter()
+        .filter_map(|row| {
+            row.iter()
+                .rposition(|cell| !cell.is_empty())
+                .map(|value| value + 1)
+        })
+        .max()
+        .unwrap_or(0);
+    for row in &mut rows {
+        row.truncate(column_count);
+    }
+    rows
+}
+
+fn validate_xls_dimensions(
+    sheet: &str,
+    row_count: usize,
+    column_count: usize,
+) -> Result<(), String> {
+    if row_count > MAX_XLS_ROWS {
+        return Err(format!(
+            "SAFE_XLS_SHEET_TOO_LARGE: {sheet} has {row_count} rows; maximum is {MAX_XLS_ROWS}"
+        ));
+    }
+    if column_count > MAX_XLS_COLUMNS {
+        return Err(format!(
+            "SAFE_XLS_SHEET_TOO_WIDE: {sheet} has {column_count} columns; maximum is {MAX_XLS_COLUMNS}"
+        ));
+    }
+    if row_count.saturating_mul(column_count) > MAX_XLS_CELLS {
+        return Err(format!(
+            "SAFE_XLS_SHEET_TOO_LARGE: {sheet} exceeds {MAX_XLS_CELLS} cells"
+        ));
+    }
+    Ok(())
 }
 
 fn validate_relative(value: &str) -> Result<(), String> {
@@ -604,6 +780,32 @@ mod tests {
         assert!(ensure_ole2(b"PK\x03\x04fake")
             .unwrap_err()
             .contains("XLSX_REJECTED"));
+    }
+
+    #[test]
+    fn xls_effective_range_removes_only_empty_tail() {
+        let rows = vec![
+            vec!["编号".to_string(), "名称".to_string(), String::new()],
+            vec!["1".to_string(), "木立".to_string(), String::new()],
+            vec![String::new(), String::new(), String::new()],
+        ];
+        let cropped = crop_effective_rows(rows.into_iter());
+        assert_eq!(cropped.len(), 2);
+        assert_eq!(cropped[0], vec!["编号", "名称"]);
+        assert_eq!(cropped[1], vec!["1", "木立"]);
+    }
+
+    #[test]
+    fn xls_limits_fail_closed() {
+        assert!(validate_xls_dimensions("大表", MAX_XLS_ROWS + 1, 1)
+            .unwrap_err()
+            .contains("TOO_LARGE"));
+        assert!(validate_xls_dimensions("宽表", 1, MAX_XLS_COLUMNS + 1)
+            .unwrap_err()
+            .contains("TOO_WIDE"));
+        assert!(validate_xls_dimensions("密集表", 2_000, 251)
+            .unwrap_err()
+            .contains("500000"));
     }
 
     #[test]

@@ -4,8 +4,12 @@ use crate::{
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use crate::safe_files::CachedXlsWorkbook;
 
 const SCHEMA_VERSION: i64 = 1;
 
@@ -13,6 +17,7 @@ const SCHEMA_VERSION: i64 = 1;
 #[derive(Debug, Clone)]
 pub struct DomainStore {
     data_root: PathBuf,
+    pub(crate) xls_cache: Arc<Mutex<HashMap<String, Arc<CachedXlsWorkbook>>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -27,6 +32,7 @@ impl DomainStore {
     pub fn new(data_root: impl Into<PathBuf>) -> Result<Self, String> {
         let store = Self {
             data_root: data_root.into(),
+            xls_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         fs::create_dir_all(&store.data_root)
             .map_err(|e| format!("PROJECT_DATA_CREATE_FAILED: {e}"))?;

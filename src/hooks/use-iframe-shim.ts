@@ -65,7 +65,7 @@ const SAFE_FILES_COMMANDS = new Set([
   'safe_text_patch',
   'safe_lua_patch',
   'safe_xls_open',
-  'safe_xls_sheet_page',
+  'safe_xls_sheet_read',
   'safe_xls_patch',
   'safe_file_status',
 ])

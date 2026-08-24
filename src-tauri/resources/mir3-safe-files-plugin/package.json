@@ -1,7 +1,7 @@
 {
   "name": "@mir3-studio/dsh-mir3-safe-files",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Optional format-preserving Draft editors for MIR3 TXT, Lua and BIFF XLS files",
   "license": "MIT",
   "repository": {

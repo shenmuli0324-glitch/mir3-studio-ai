@@ -1,5 +1,12 @@
 # MIR3 Studio AI 更新记录
 
+## 0.2.1 - 2026-08-24
+
+- 将 Safe Files 插件升级到 0.1.1，BIFF `.xls` 改为当前工作表完整读取和连续显示，不再使用分页交互。
+- 增加工作簿解析缓存、源文件变化失效、有效区域裁剪和异常文件保护。
+- XLS 前端改用虚拟滚动，只渲染可视行，同时保持完整工作表连续浏览。
+- Harness、MIR3 Core、插件安装与原生编辑回退流程保持不变。
+
 ## 0.2.0 - 2026-08-24
 
 - 新增可选 Harness 插件 `@mir3-studio/dsh-mir3-safe-files` 0.1.0；通过 Better Sidebar 公共扩展接口接管 TXT、Lua 和 BIFF XLS。

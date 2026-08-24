@@ -3,7 +3,7 @@
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
     Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
-    Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult, SafeXlsPage, SafeXlsWorkbook,
+    Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult, SafeXlsSheet, SafeXlsWorkbook,
     Snapshot, WorkspaceDirectory,
 };
 use serde::Serialize;
@@ -249,18 +249,17 @@ pub fn safe_xls_open(
 }
 
 #[tauri::command]
-pub fn safe_xls_sheet_page(
+pub fn safe_xls_sheet_read(
     service: State<'_, ProjectService>,
     project_id: String,
     relative_path: String,
     sheet: String,
-    offset: usize,
-    limit: usize,
-) -> Result<SafeXlsPage, String> {
+    expected_sha256: String,
+) -> Result<SafeXlsSheet, String> {
     ensure_safe_project(&service, &project_id)?;
     service
         .store()
-        .safe_xls_sheet_page(&project_id, &relative_path, &sheet, offset, limit)
+        .safe_xls_sheet_read(&project_id, &relative_path, &sheet, &expected_sha256)
 }
 
 #[tauri::command]
