@@ -34,6 +34,15 @@ pnpm tauri dev              # full desktop debug
 cargo check && cargo test   # Rust check & unit tests (run in src-tauri)
 ```
 
+## Mandatory Version, Plugin, and Git Delivery Rules
+
+- Every functional change must advance the MIR3 Studio AI product version before packaging. Run `pnpm version:bump -- patch` (or `minor` / `major` when appropriate); never edit only one version file manually.
+- `pnpm version:check` must pass. Product versions in `package.json`, `src/brand.config.json`, `src-tauri/tauri.conf.json`, the root Rust package, `Cargo.lock`, and both READMEs must stay synchronized.
+- Every bundled plugin capability change must advance that plugin's own SemVer and add a matching top entry to its local `CHANGELOG.md`. Bundled plugins must include `README.md` and `CHANGELOG.md`, and their settings row must expose the local changelog without network access.
+- All plugin work must use Harness's public plugin lifecycle and loader contracts. Do not patch Harness/Core source or official `node_modules`; do not replace Harness Workspace, Session, file, editor, terminal, Profile, MCP Client, or Agent systems. Extend them through injection, Profile-local dependencies, and managed Cordis patch entries.
+- `pnpm plugin:audit` is mandatory after bundled plugin changes. Core/plugin upgrades are accepted only after the original Harness startup, workbench, settings, Profile, and plugin flows pass regression tests.
+- At the end of every completed development task: run the relevant frontend/Rust/release checks, review the diff, commit the scoped changes, and push the current branch. Never include unrelated user files or local artifacts in the commit.
+
 ## Basics
 
 - No `useCallback` / `useMemo` — project has `react-compiler` built in

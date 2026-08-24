@@ -195,7 +195,9 @@ pub fn terminate_stale_core_processes(app_handle: &tauri::AppHandle) {
                 continue;
             };
             found += 1;
-            log::warn!("Terminating stale MIR3 AI Core service process {pid} (from dsh install dir)");
+            log::warn!(
+                "Terminating stale MIR3 AI Core service process {pid} (from dsh install dir)"
+            );
             kill_pid_tree(pid);
         }
         if found > 0 {
@@ -250,7 +252,9 @@ pub fn sweep_orphan_core(app_handle: &tauri::AppHandle) {
     // 结束，随后的 PID/端口双重确认自然落空，仅清理陈旧标记。
     terminate_stale_core_processes(app_handle);
     let pid_file = core_pid_path(app_handle);
-    let Ok(text) = fs::read_to_string(&pid_file) else { return; };
+    let Ok(text) = fs::read_to_string(&pid_file) else {
+        return;
+    };
     let mut lines = text.lines();
     let (Some(pid), Some(port)) = (
         lines.next().and_then(|l| l.trim().parse::<u32>().ok()),
@@ -269,7 +273,9 @@ pub fn sweep_orphan_core(app_handle: &tauri::AppHandle) {
         // 端口占用者不是我们落盘的进程（或探测不到）：可能是其他程序，不动
         return;
     }
-    log::warn!("Sweeping orphaned MIR3 AI Core process {pid} (port {port}) left by a previous session");
+    log::warn!(
+        "Sweeping orphaned MIR3 AI Core process {pid} (port {port}) left by a previous session"
+    );
     kill_pid_tree(pid);
     let _ = fs::remove_file(&pid_file);
 }
@@ -365,7 +371,9 @@ fn relaunch_via_shell_escape(app_handle: &tauri::AppHandle) {
             std::process::exit(0);
         }
         Err(e) => {
-            log::warn!("RedirectionGuard(448) detected but explorer spawn failed ({e}), falling back");
+            log::warn!(
+                "RedirectionGuard(448) detected but explorer spawn failed ({e}), falling back"
+            );
         }
     }
 }
@@ -493,6 +501,9 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     if let Err(e) = crate::service::plugin::ensure_profile_npmrc(&app_handle) {
         log::warn!("ensure profile .npmrc failed: {e}");
     }
+    // 第一方 MIR3 插件、Skill 与项目绑定 MCP 为产品能力，启动前幂等安装；
+    // 不进入可跳过的社区预装流程。
+    crate::service::plugin::system::ensure(&app_handle)?;
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert(
         config::core_compat::CORE_HOME_ENV.to_string(),
@@ -501,6 +512,28 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     envs.insert("DSH_TELEMETRY_DISABLED".to_string(), "1".to_string());
     envs.insert("NO_COLOR".to_string(), "1".to_string());
     envs.insert("DSH_WEB_PORT".to_string(), setting.port.to_string());
+    envs.insert(
+        "MIR3_STUDIO_HOME".to_string(),
+        dsh_home.to_string_lossy().into_owned(),
+    );
+    if let Some(project) = app_handle
+        .state::<crate::service::project::ProjectService>()
+        .store()
+        .active_project()?
+    {
+        envs.insert("MIR3_ACTIVE_PROJECT_ID".to_string(), project.id);
+        envs.insert("MIR3_ACTIVE_PROJECT_ROOT".to_string(), project.root);
+        envs.insert(
+            "MIR3_ACTIVE_WORKSPACE_ROOT".to_string(),
+            project.active_workspace_root,
+        );
+    }
+    if let Some(path) = crate::service::project::mcp_binary_path(&app_handle) {
+        envs.insert(
+            "MIR3_MCP_BIN".to_string(),
+            path.to_string_lossy().into_owned(),
+        );
+    }
 
     // 扩展 PATH，让 dsh 及其子进程能找到 node；Windows 上再注入 Git Bash 的
     // bin 目录：persistent bash（--noprofile --norc）不执行 profile 脚本、PATH
@@ -579,7 +612,9 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
                     if GetExitCodeProcess(process_handle, &mut exit_code) != 0 {
                         log::warn!("Owned MIR3 AI Core process {pid} exited with code {exit_code}");
                     } else {
-                        log::warn!("Owned MIR3 AI Core process {pid} exited (exit code unavailable)");
+                        log::warn!(
+                            "Owned MIR3 AI Core process {pid} exited (exit code unavailable)"
+                        );
                     }
                     let _ = OWNED_PROCESS_ID.compare_exchange(
                         pid,
@@ -721,6 +756,7 @@ pub async fn install(
     log::debug!("Main window obtained");
     // 3 个任务 × 下载/解压 2 个阶段
     let mut tracker = download::ProgressTracker::new(&window, 6);
+    let bundled_baseline = download::BaselineBundle::load(app_handle)?;
     let tasks: Vec<Box<dyn download::Installable>> = vec![
         Box::new(download::Nodejs),
         Box::new(download::Dsh),
@@ -749,7 +785,8 @@ pub async fn install(
                     || config::get_dsh_pkg_commit(app_handle).as_deref()
                         != Some(info.commit.as_str())
             });
-        if task.check_installed(app_handle) && !outdated {
+        let installed = task.check_installed(app_handle);
+        if installed && !outdated {
             log::debug!(
                 "Task {} already installed and up to date, skipping",
                 index + 1
@@ -769,77 +806,97 @@ pub async fn install(
                 task.title()
             ),
         );
-        // 下载 URL 对 dsh 也是完全确定可算的（DSH_CORE_URL + 平台文件名），
-        // 无需依赖 GitHub API 元数据；api.github.com 限流/被代理拦截时
-        // （mac 首次启动常见）仍能拿到真实下载地址，避免整次安装被瞬时失败卡死。
-        // dsh 核心默认先走 GitHub 官方直连，失败自动切换 ghfast.top 镜像兜底
-        // （下载层会在界面上告知用户）；其余任务保持单一官方源。
-        let (urls, name) = if index == 1 {
-            let urls = config::get_dsh_download_urls()?;
-            let name = urls
-                .first()
-                .and_then(|u| u.rsplit('/').next())
-                .unwrap_or("")
-                .to_string();
-            (urls, name)
-        } else {
-            let url = task.get_download_url()?;
-            let name = url.rsplit('/').next().unwrap_or("").to_string();
-            (vec![url], name)
+        let component = match index {
+            0 => download::BaselineComponent::Node,
+            1 => download::BaselineComponent::Core,
+            2 => download::BaselineComponent::Pnpm,
+            _ => return Err("INSTALL_TASK_INVALID: unknown install task".to_string()),
         };
-        // 取文件名用于解压类型判定；下载 URL 正常必含 '/'，但这里不 panic，
-        // 防御性兜底为空串（后续 ensure_extract 会因无法判定类型而报错返回，
-        // 不再让进程崩溃）。
-        log::debug!("Download URL: {}", urls.join(" -> "));
-        log::debug!("File name: {}", name);
-        let buffer = download::download_file_from_sources(&tracker, urls).await?;
-        log::info!("Download completed, file size: {} bytes", buffer.len());
-        let expected_digest = match index {
-            0 => download::fetch_node_sha256(task.get_download_url()?.as_str()).await?,
-            1 => {
-                // dsh 的 SHA-256 digest 只能来自 GitHub release asset 元数据
-                // （安全设计，见 dsh_INTEGRITY_UNAVAILABLE）。首次安装时该元数据
-                // 可能因 api.github.com 限流/网络抖动而缺失（mac 首次启动常见，
-                // issue #31），这里带退避重取，避免启动被瞬时失败卡死。
-                if dsh_latest.is_none() {
-                    for attempt in 0..3 {
-                        match download::fetch_latest_dsh_pkg_info().await {
-                            Ok(info) => {
-                                dsh_latest = Some(info);
-                                break;
-                            }
-                            Err(e) if attempt < 2 => {
-                                log::warn!(
-                                    "Retrying dsh release metadata fetch ({}/3), will retry: {}",
-                                    attempt + 1,
-                                    e
-                                );
-                                tokio::time::sleep(std::time::Duration::from_millis(
-                                    500 * (attempt as u64 + 1),
-                                ))
-                                .await;
-                            }
-                            Err(e) => {
-                                return Err(format!(
-                                    "DSH_INTEGRITY_UNAVAILABLE: 无法获取 MIR3 AI Core 发行版的完整性校验信息（{}），请检查网络后重试",
-                                    e
-                                ));
+        // 基线只用于补齐缺失组件，不会把用户已安装或已更新的 Core 降级。
+        let bundled = if installed {
+            None
+        } else {
+            bundled_baseline
+                .as_ref()
+                .map(|bundle| bundle.read(component))
+                .transpose()?
+        };
+        let (name, buffer, used_baseline) = if let Some(payload) = bundled {
+            tracker.update(
+                100.0,
+                format!("正在安装内置 {} 基线", task.title()),
+                format!("Use bundled baseline archive: {}", payload.archive),
+            );
+            log::info!(
+                "Using installer-embedded baseline for task {}: {}",
+                index + 1,
+                payload.archive
+            );
+            (payload.archive, payload.bytes, true)
+        } else {
+            // 没有内置基线的旧包、修复安装和显式 Core 更新保留联网路径。
+            let (urls, name) = if index == 1 {
+                let urls = config::get_dsh_download_urls()?;
+                let name = urls
+                    .first()
+                    .and_then(|u| u.rsplit('/').next())
+                    .unwrap_or("")
+                    .to_string();
+                (urls, name)
+            } else {
+                let url = task.get_download_url()?;
+                let name = url.rsplit('/').next().unwrap_or("").to_string();
+                (vec![url], name)
+            };
+            log::debug!("Download URL: {}", urls.join(" -> "));
+            log::debug!("File name: {}", name);
+            let buffer = download::download_file_from_sources(&tracker, urls).await?;
+            log::info!("Download completed, file size: {} bytes", buffer.len());
+            let expected_digest = match index {
+                0 => download::fetch_node_sha256(task.get_download_url()?.as_str()).await?,
+                1 => {
+                    if dsh_latest.is_none() {
+                        for attempt in 0..3 {
+                            match download::fetch_latest_dsh_pkg_info().await {
+                                Ok(info) => {
+                                    dsh_latest = Some(info);
+                                    break;
+                                }
+                                Err(e) if attempt < 2 => {
+                                    log::warn!(
+                                        "Retrying dsh release metadata fetch ({}/3), will retry: {}",
+                                        attempt + 1,
+                                        e
+                                    );
+                                    tokio::time::sleep(std::time::Duration::from_millis(
+                                        500 * (attempt as u64 + 1),
+                                    ))
+                                    .await;
+                                }
+                                Err(e) => {
+                                    return Err(format!(
+                                        "DSH_INTEGRITY_UNAVAILABLE: 无法获取 MIR3 AI Core 发行版的完整性校验信息（{}），请检查网络后重试",
+                                        e
+                                    ));
+                                }
                             }
                         }
                     }
+                    dsh_latest
+                        .as_ref()
+                        .and_then(|info| info.digest.clone())
+                        .ok_or_else(|| {
+                            "DSH_INTEGRITY_UNAVAILABLE: trusted release digest is required"
+                                .to_string()
+                        })?
                 }
-                dsh_latest
-                    .as_ref()
-                    .and_then(|info| info.digest.clone())
-                    .ok_or_else(|| {
-                        "DSH_INTEGRITY_UNAVAILABLE: trusted release digest is required".to_string()
-                    })?
-            }
-            2 => config::PNPM_SHA256.to_string(),
-            _ => return Err("INSTALL_TASK_INVALID: unknown install task".to_string()),
+                2 => config::PNPM_SHA256.to_string(),
+                _ => unreachable!(),
+            };
+            download::verify_sha256(&buffer, &expected_digest)?;
+            log::info!("Download integrity verified for task {}", index + 1);
+            (name, buffer, false)
         };
-        download::verify_sha256(&buffer, &expected_digest)?;
-        log::info!("Download integrity verified for task {}", index + 1);
         tracker.end_phase();
 
         // 2. 解压
@@ -849,14 +906,25 @@ pub async fn install(
         );
         let dest = task.get_install_path(app_handle);
         log::debug!("Installation path: {:?}", dest);
-        download::ensure_extract(&tracker, name, buffer, dest).await?;
+        download::ensure_extract_with_backup_policy(
+            &tracker,
+            name,
+            buffer,
+            dest,
+            index == 1 && installed,
+        )
+        .await?;
         log::info!("Extraction completed");
         tracker.end_phase();
 
         // 记录本次安装对应的 release tag 与 commit，供下次启动比对
         if index == 1 {
             dsh_updated = true;
-            if let Some(info) = &dsh_latest {
+            if used_baseline {
+                if let Some(bundle) = bundled_baseline.as_ref() {
+                    bundle.record_core_install(app_handle);
+                }
+            } else if let Some(info) = &dsh_latest {
                 config::set_dsh_pkg_commit(app_handle, info.commit.clone());
                 config::set_dsh_pkg_tag(app_handle, info.tag.clone());
             }
@@ -871,6 +939,77 @@ pub async fn install(
     );
 
     Ok(dsh_updated)
+}
+
+fn core_update_backup_path(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
+    let active = config::get_dsh_install_path(app_handle);
+    active
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(format!(".{}.backup", config::DSH_CORE_DIR))
+}
+
+/// MIR3 Core Plugin 已成功 apply 后提交更新：清理旧目录并把当前版本推进为 LKG。
+pub async fn finalize_core_update(app_handle: &tauri::AppHandle) -> Result<bool, String> {
+    let backup = core_update_backup_path(app_handle);
+    let had_backup = backup.exists();
+    if had_backup && !download::remove_dir_with_retry(&backup).await {
+        return Err(format!(
+            "CORE_UPDATE_BACKUP_CLEAN_FAILED: {}",
+            backup.display()
+        ));
+    }
+    let mut setting = config::get_store_dat_setting(app_handle);
+    setting.last_known_good_core_tag = setting.dsh_pkg_tag.clone();
+    setting.last_known_good_core_commit = setting.dsh_pkg_commit.clone();
+    config::set_store_dat_setting(app_handle, setting);
+    Ok(had_backup)
+}
+
+/// 新 Core 在插件 ready 前失败时恢复更新前目录与最后已知可用版本记录。
+pub async fn rollback_core_update(app_handle: &tauri::AppHandle) -> Result<bool, String> {
+    let backup = core_update_backup_path(app_handle);
+    if !backup.is_dir() {
+        return Ok(false);
+    }
+    if has_owned_process() {
+        stop(app_handle.clone()).await?;
+    }
+    let active = config::get_dsh_install_path(app_handle);
+    let failed = active
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(format!(
+            ".{}.failed-{}",
+            config::DSH_CORE_DIR,
+            std::process::id()
+        ));
+    if failed.exists() && !download::remove_dir_with_retry(&failed).await {
+        return Err(format!("CORE_ROLLBACK_CLEAN_FAILED: {}", failed.display()));
+    }
+    if active.exists() {
+        download::rename_with_retry(&active, &failed)
+            .await
+            .map_err(|e| format!("CORE_ROLLBACK_QUARANTINE_FAILED: {e}"))?;
+    }
+    if let Err(e) = download::rename_with_retry(&backup, &active).await {
+        if failed.exists() {
+            let _ = download::rename_with_retry(&failed, &active).await;
+        }
+        return Err(format!("CORE_ROLLBACK_RESTORE_FAILED: {e}"));
+    }
+    if failed.exists() && !download::remove_dir_with_retry(&failed).await {
+        log::warn!(
+            "Failed to remove rejected Core candidate: {}",
+            failed.display()
+        );
+    }
+    let mut setting = config::get_store_dat_setting(app_handle);
+    setting.dsh_pkg_tag = setting.last_known_good_core_tag.clone();
+    setting.dsh_pkg_commit = setting.last_known_good_core_commit.clone();
+    setting.active_core = Some("app".to_string());
+    config::set_store_dat_setting(app_handle, setting);
+    Ok(true)
 }
 
 /// 健康检查（通过 Rust 代理，避免 WebView CORS 问题）

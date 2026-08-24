@@ -37,13 +37,14 @@ export const harnessUpdater = defineStore({
         return
       this.updating = true
       let unlistenInstall: UnlistenFn | null = null
+      let changed = false
       try {
         unlistenInstall = await harness.listenInstallProgress()
         harness.prepareInstall(i18next.t('status.updating'))
         // 返回是否真正落盘更新：false 表示未发生安装（已是最新，或 GitHub
         // 限流拿不到可信摘要而保持本地安装）。此时绝不重启页面、也不丢弃
         // “有新版本”提示——否则用户会看到“页面刷新了、版本却没变、提示也没了”。
-        const changed = await invoke<boolean>('install_dependencies')
+        changed = await invoke<boolean>('install_dependencies')
         if (!changed) {
           // 回到就绪态（若当前停在安装/更新界面，则恢复到原 iframe 视图）
           harness.status = 'ready'
@@ -62,10 +63,26 @@ export const harnessUpdater = defineStore({
           return
         }
         await harness.launchAndWait()
+        await harness.waitForCorePluginReady()
         this.updateInfo = null
       }
       catch (err) {
         console.error('[MIR3 AI Core] update failed:', err)
+        if (changed) {
+          try {
+            const rolledBack = await invoke<boolean>('rollback_core_update')
+            if (rolledBack) {
+              await harness.launchAndWait()
+              await harness.waitForCorePluginReady()
+              this.updateInfo = null
+              toast(i18next.t('update.rolled_back'), { variant: 'warning' })
+              return
+            }
+          }
+          catch (rollbackError) {
+            console.error('[MIR3 AI Core] automatic rollback failed:', rollbackError)
+          }
+        }
         harness.fail(String(err))
       }
       finally {

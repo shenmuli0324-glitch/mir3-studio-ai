@@ -10,6 +10,7 @@ pub mod core;
 pub mod lifecycle;
 pub mod plugin;
 pub mod profile;
+pub mod project;
 pub mod system_os;
 pub mod updater;
 
@@ -19,5 +20,6 @@ pub use core::*;
 pub use lifecycle::*;
 pub use plugin::*;
 pub use profile::*;
+pub use project::*;
 pub use system_os::*;
 pub use updater::*;

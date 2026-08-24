@@ -3,7 +3,9 @@ import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 
 const root = resolve(import.meta.dirname, '..')
-const excludedDirectories = new Set(['.git', 'dist', 'node_modules', 'target'])
+// 构建产物可能包含安装器压缩元数据，不属于源码品牌审计范围；安装器文件名和
+// 当前配置由发布测试单独校验。
+const excludedDirectories = new Set(['.git', 'artifacts', 'dist', 'node_modules', 'target'])
 const legalFiles = new Set([
   'LICENSE',
   'LICENSE.details',

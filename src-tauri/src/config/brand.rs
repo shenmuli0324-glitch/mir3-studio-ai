@@ -46,7 +46,8 @@ mod tests {
         assert_eq!(package["version"], brand.version);
         assert_eq!(brand.cli_command, "mir3");
         assert_eq!(brand.windows_cli_dir, "mir3-studio-ai");
-        assert!(include_str!("../../Cargo.toml")
-            .contains(&format!("version = \"{}\"", brand.version)));
+        assert!(
+            include_str!("../../Cargo.toml").contains(&format!("version = \"{}\"", brand.version))
+        );
     }
 }

@@ -7,13 +7,13 @@ use tauri::{
     ipc::Invoke,
     menu::{Menu, MenuEvent, MenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
-    Runtime, WebviewUrl, WebviewWindowBuilder, Wry,
+    Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Wry,
 };
 
-use crate::utils::show_main_window;
-use crate::desktop::window::{on_download, on_new_window};
 #[cfg(windows)]
 use crate::desktop::window::on_page_load;
+use crate::desktop::window::{on_download, on_new_window};
+use crate::utils::show_main_window;
 
 /// setup app
 pub fn setup(app_handle: tauri::AppHandle) {
@@ -190,6 +190,8 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::launch_harness,
         crate::bridge::shutdown_harness,
         crate::bridge::restart_harness,
+        crate::bridge::mark_core_ready,
+        crate::bridge::rollback_core_update,
         crate::bridge::get_dsh_status,
         crate::bridge::get_preinstall_plugins,
         crate::bridge::get_preinstall_pending,
@@ -237,6 +239,33 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::read_clipboard_image,
         crate::desktop::notification::show_native_notification,
         crate::bridge::log_frontend,
+        crate::bridge::project_pick_directory,
+        crate::bridge::workspace_pick_directory,
+        crate::bridge::project_import,
+        crate::bridge::project_list,
+        crate::bridge::project_get_active,
+        crate::bridge::project_activate,
+        crate::bridge::project_relink,
+        crate::bridge::project_remove,
+        crate::bridge::project_validate,
+        crate::bridge::workspace_select,
+        crate::bridge::workspace_list,
+        crate::bridge::scan_start,
+        crate::bridge::scan_cancel,
+        crate::bridge::scan_status,
+        crate::bridge::index_stats,
+        crate::bridge::index_search,
+        crate::bridge::draft_list,
+        crate::bridge::draft_preview,
+        crate::bridge::draft_apply,
+        crate::bridge::draft_discard,
+        crate::bridge::snapshot_list,
+        crate::bridge::snapshot_create,
+        crate::bridge::snapshot_restore,
+        crate::bridge::knowledge_list,
+        crate::bridge::knowledge_get,
+        crate::bridge::knowledge_set_status,
+        crate::bridge::diagnostics_get,
     ]
 }
 
@@ -245,6 +274,10 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
         .setup(|app| {
             let app_handle = app.handle().clone();
+            let project_data = crate::config::get_dsh_data_path(&app_handle).join("projects");
+            let project_service = crate::service::project::ProjectService::new(project_data)
+                .map_err(std::io::Error::other)?;
+            app.manage(project_service);
             build_main_window(&app_handle)?;
             tray(&app_handle)?;
             setup(app_handle.clone());

@@ -1,9 +1,15 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.1.0"
+version = "0.1.1"
 description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"
+
+[workspace]
+members = [
+  "crates/mir3-domain",
+  "crates/mir3-mcp"
+]
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
@@ -60,9 +66,10 @@ tar = "0.4"
 async-trait = "0.1"
 tokio = { version = "1", features = [ "full" ] }
 semver = "1"
+mir3-domain = { path = "crates/mir3-domain" }
+rfd = "0.16"
 
 [target.'cfg(windows)'.dependencies]
-rfd = "0.16"
 webview2-com = "0.38"
 windows-core = "0.61"
 windows-sys = { version = "0.61", features = [

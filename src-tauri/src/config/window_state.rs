@@ -10,7 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Manager, PhysicalPosition, PhysicalSize, Position, Runtime, Size, WebviewWindow, Window,
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, Position, Runtime, Size, WebviewWindow,
+    Window,
 };
 use tauri_plugin_store::StoreExt;
 
@@ -93,7 +94,9 @@ pub fn save_geometry<R: Runtime>(window: &Window<R>) {
         x: pos.map(|p| p.x),
         y: pos.map(|p| p.y),
         width: size.map(|s| s.width).unwrap_or(DEFAULT_WINDOW_WIDTH as u32),
-        height: size.map(|s| s.height).unwrap_or(DEFAULT_WINDOW_HEIGHT as u32),
+        height: size
+            .map(|s| s.height)
+            .unwrap_or(DEFAULT_WINDOW_HEIGHT as u32),
     };
     save_window_state(window.app_handle(), &state);
 }
@@ -136,12 +139,14 @@ fn resolve_geometry<R: Runtime>(
     let (x, y) = match (saved.x, saved.y) {
         (Some(sx), Some(sy)) => {
             // 窗口矩形是否与可见屏幕并集有交集
-            let intersects = sx < max_x && sx + w as i32 > min_x
-                && sy < max_y && sy + h as i32 > min_y;
+            let intersects =
+                sx < max_x && sx + w as i32 > min_x && sy < max_y && sy + h as i32 > min_y;
             if intersects {
                 // 夹紧坐标到并集内，保证窗口至少部分可见
-                let nx = (sx as i64).clamp(min_x as i64, (max_x as i64 - w as i64).max(min_x as i64));
-                let ny = (sy as i64).clamp(min_y as i64, (max_y as i64 - h as i64).max(min_y as i64));
+                let nx =
+                    (sx as i64).clamp(min_x as i64, (max_x as i64 - w as i64).max(min_x as i64));
+                let ny =
+                    (sy as i64).clamp(min_y as i64, (max_y as i64 - h as i64).max(min_y as i64));
                 (nx as i32, ny as i32)
             } else {
                 // 保存的位置不可见：回落到主屏居中

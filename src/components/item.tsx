@@ -17,13 +17,14 @@ export interface ItemProps {
   right?: ReactNode
   footer?: ReactNode
   onClick?: MouseEventHandler<HTMLDivElement>
+  interactive?: boolean
   className?: string
 }
 
-export function Item({ left, right, footer, onClick, className }: ItemProps) {
+export function Item({ left, right, footer, onClick, interactive, className }: ItemProps) {
   return (
     <Card
-      className={cn('rounded-md bg-panel2 py-3', onClick && 'cursor-pointer', className)}
+      className={cn('rounded-md bg-panel2 py-3', interactive && 'cursor-pointer', className)}
       onClick={onClick}
     >
       <Card.Content className="flex flex-col gap-1.5">

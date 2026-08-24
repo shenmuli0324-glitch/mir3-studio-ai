@@ -110,8 +110,15 @@ async fn download_with_retry<'a, R: Runtime>(
             );
             tokio::time::sleep(delay).await;
         }
-        match download_attempt(&client, tracker, url, attempt, MAX_DOWNLOAD_ATTEMPTS, &mut buffer)
-            .await
+        match download_attempt(
+            &client,
+            tracker,
+            url,
+            attempt,
+            MAX_DOWNLOAD_ATTEMPTS,
+            &mut buffer,
+        )
+        .await
         {
             Ok(()) => {
                 log::info!("Download completed, {} bytes total", buffer.len());
@@ -218,7 +225,12 @@ async fn download_attempt<'a, R: Runtime>(
         );
     }
 
-    log::info!("Download attempt {}/{} succeeded, {} bytes in buffer", attempt, max_attempts, buffer.len());
+    log::info!(
+        "Download attempt {}/{} succeeded, {} bytes in buffer",
+        attempt,
+        max_attempts,
+        buffer.len()
+    );
     Ok(())
 }
 
@@ -383,7 +395,12 @@ pub(crate) async fn rename_with_retry(from: &Path, to: &Path) -> Result<(), std:
 }
 
 /// 将已经完整解压并验证结构的临时目录切换为正式目录；切换失败时恢复旧版本。
-async fn commit_staged_install(staging: &Path, dest: &Path, backup: &Path) -> Result<(), String> {
+async fn commit_staged_install(
+    staging: &Path,
+    dest: &Path,
+    backup: &Path,
+    keep_backup: bool,
+) -> Result<(), String> {
     // 上次若恰好在“旧目录改名为备份”后崩溃，先恢复旧版本再进行本次切换。
     if !dest.exists() && backup.exists() {
         rename_with_retry(backup, dest).await.map_err(|e| {
@@ -415,7 +432,7 @@ async fn commit_staged_install(staging: &Path, dest: &Path, backup: &Path) -> Re
             dest.display()
         ));
     }
-    if had_previous {
+    if had_previous && !keep_backup {
         if let Err(e) = remove_path_if_exists(backup).await {
             // 新版本已经切换成功，备份清理失败不应把成功安装误报为失败。
             log::warn!("Failed to remove previous installation backup: {e}");
@@ -439,6 +456,18 @@ pub async fn ensure_extract<'a, R: Runtime>(
     name: String,
     buffer: Vec<u8>,
     dest: PathBuf,
+) -> Result<(), String> {
+    ensure_extract_with_backup_policy(tracker, name, buffer, dest, false).await
+}
+
+/// 与 `ensure_extract` 相同，但在成功切换后保留旧目录，直到 MIR3 Core Plugin
+/// 发出 ready 信号。仅用于 Core 更新，首次基线安装及 Node/pnpm 不保留备份。
+pub async fn ensure_extract_with_backup_policy<'a, R: Runtime>(
+    tracker: &'a ProgressTracker<'a, R>,
+    name: String,
+    buffer: Vec<u8>,
+    dest: PathBuf,
+    keep_backup: bool,
 ) -> Result<(), String> {
     log::info!("Starting file extraction: {} -> {:?}", name, dest);
     use super::extractor::{extract_tgz, extract_zip};
@@ -478,7 +507,7 @@ pub async fn ensure_extract<'a, R: Runtime>(
             format!("已写入: {}", "100%"),
             format!("File written: {}", staging.display()),
         );
-        commit_staged_install(&staging, &dest, &backup).await?;
+        commit_staged_install(&staging, &dest, &backup, keep_backup).await?;
         log::info!("File write completed: {}", dest.display());
         return Ok(());
     }
@@ -526,7 +555,7 @@ pub async fn ensure_extract<'a, R: Runtime>(
         }
     }
 
-    commit_staged_install(&staging, &dest, &backup).await?;
+    commit_staged_install(&staging, &dest, &backup, keep_backup).await?;
     Ok(())
 }
 
@@ -557,10 +586,7 @@ fn github_client() -> Result<reqwest::Client, String> {
 /// 带 GitHub 未认证限流（403）冷却：冷却期内直接返回 Err（由调用方走兜底来源），
 /// 命中 403 时记录冷却开始。返回的 `reqwest::Response` 已通过 `error_for_status`，
 /// 403 已被拦截并标记冷却，不会作为普通错误继续向下传输。
-async fn github_api_get(
-    client: &reqwest::Client,
-    url: &str,
-) -> Result<reqwest::Response, String> {
+async fn github_api_get(client: &reqwest::Client, url: &str) -> Result<reqwest::Response, String> {
     if crate::service::download::github_api::rate_limited() {
         return Err("GitHub API rate limited (cached, using fallback sources)".to_string());
     }
@@ -578,11 +604,11 @@ async fn fetch_releases_latest(client: &reqwest::Client) -> Result<serde_json::V
         client,
         &format!("{}/releases/latest", config::core_compat::CORE_RELEASE_API),
     )
-        .await
-        .map_err(|e| format!("Latest release request failed: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse latest release response: {e}"))
+    .await
+    .map_err(|e| format!("Latest release request failed: {e}"))?
+    .json()
+    .await
+    .map_err(|e| format!("Failed to parse latest release response: {e}"))
 }
 
 /// 通过 commits 端点把 release tag 解析为完整 commit hash。
@@ -591,11 +617,11 @@ async fn fetch_tag_commit(client: &reqwest::Client, tag: &str) -> Result<String,
         client,
         &format!("{}/commits/{tag}", config::core_compat::CORE_RELEASE_API),
     )
-        .await
-        .map_err(|e| format!("Release commit request failed: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse release commit response: {e}"))?;
+    .await
+    .map_err(|e| format!("Release commit request failed: {e}"))?
+    .json()
+    .await
+    .map_err(|e| format!("Failed to parse release commit response: {e}"))?;
     commit
         .get("sha")
         .and_then(|v| v.as_str())
@@ -617,7 +643,10 @@ fn commit_fallback_from_tag(tag: &str) -> String {
 async fn fetch_latest_dsh_tag_from_atom() -> Result<String, String> {
     let client = github_client()?;
     let body = client
-        .get(format!("{}/releases.atom", config::core_compat::CORE_RELEASE_REPO))
+        .get(format!(
+            "{}/releases.atom",
+            config::core_compat::CORE_RELEASE_REPO
+        ))
         .send()
         .await
         .map_err(|e| format!("DSH_ATOM: {e}"))?
@@ -740,9 +769,7 @@ pub async fn fetch_latest_dsh_pkg_info() -> Result<LatestDshPkg, String> {
         Ok(sha) => sha,
         Err(e) => {
             if crate::service::download::github_api::rate_limited() {
-                log::debug!(
-                    "GitHub API commit resolution rate-limited, using build-id fallback"
-                );
+                log::debug!("GitHub API commit resolution rate-limited, using build-id fallback");
             } else {
                 log::warn!(
                     "Failed to resolve commit for tag {} ({}), using build-id fallback",
@@ -757,14 +784,15 @@ pub async fn fetch_latest_dsh_pkg_info() -> Result<LatestDshPkg, String> {
     // 4. 资产 URL 与摘要：仅 API 可达时资产/摘要可信；否则 URL 平台确定性回退、digest=None
     let (asset_url, mut digest) = match api_release.as_ref() {
         Some(release) => {
-            let asset = release.get("assets").and_then(|value| value.as_array()).and_then(
-                |assets| {
+            let asset = release
+                .get("assets")
+                .and_then(|value| value.as_array())
+                .and_then(|assets| {
                     assets.iter().find(|asset| {
                         asset.get("name").and_then(|value| value.as_str())
                             == Some(expected_name.as_str())
                     })
-                },
-            );
+                });
             let asset_url = asset
                 .and_then(|a| a.get("browser_download_url").and_then(|v| v.as_str()))
                 .map(|u| u.to_string())
@@ -828,23 +856,26 @@ pub async fn fetch_dsh_pkg_asset(tag: &str) -> Result<LatestDshPkg, String> {
     // 1. 优先 API 拉该 tag 的 release（含资产 + 可信摘要）
     let release = github_api_get(
         &client,
-        &format!("{}/releases/tags/{tag}", config::core_compat::CORE_RELEASE_API),
+        &format!(
+            "{}/releases/tags/{tag}",
+            config::core_compat::CORE_RELEASE_API
+        ),
     )
-        .await
-        .map_err(|e| format!("Release {tag} request failed: {e}"))?;
+    .await
+    .map_err(|e| format!("Release {tag} request failed: {e}"))?;
     let json: serde_json::Value = release
         .json()
         .await
         .map_err(|e| format!("Failed to parse release {tag} response: {e}"))?;
 
-    let asset = json.get("assets").and_then(|value| value.as_array()).and_then(
-        |assets| {
+    let asset = json
+        .get("assets")
+        .and_then(|value| value.as_array())
+        .and_then(|assets| {
             assets.iter().find(|asset| {
-                asset.get("name").and_then(|value| value.as_str())
-                    == Some(expected_name.as_str())
+                asset.get("name").and_then(|value| value.as_str()) == Some(expected_name.as_str())
             })
-        },
-    );
+        });
     let asset_url = asset
         .and_then(|a| a.get("browser_download_url").and_then(|v| v.as_str()))
         .map(|u| u.to_string())
@@ -979,7 +1010,10 @@ pub async fn fetch_dsh_pkg_tags() -> Result<Vec<(String, String)>, String> {
     let client = github_client()?;
     let tags: serde_json::Value = github_api_get(
         &client,
-        &format!("{}/tags?per_page=100", config::core_compat::CORE_RELEASE_API),
+        &format!(
+            "{}/tags?per_page=100",
+            config::core_compat::CORE_RELEASE_API
+        ),
     )
     .await
     .map_err(|e| format!("Release tags request failed: {e}"))?
@@ -1019,7 +1053,9 @@ mod tests {
         assert!(validate_download_url("https://example.com/file.zip").is_err());
         // 国内镜像源（含 npmmirror 302 后的最终落地域名）
         assert!(validate_download_url("https://npmmirror.com/mirrors/node/v22/file.zip").is_ok());
-        assert!(validate_download_url("https://cdn.npmmirror.com/binaries/node/v22/file.zip").is_ok());
+        assert!(
+            validate_download_url("https://cdn.npmmirror.com/binaries/node/v22/file.zip").is_ok()
+        );
         assert!(validate_download_url("https://registry.npmmirror.com/pnpm/-/pnpm.tgz").is_ok());
         let mirrored_core = format!(
             "{}{}",
@@ -1044,7 +1080,7 @@ mod tests {
         fs::write(dest.join("version.txt"), "old").expect("write previous version");
         fs::write(staging.join("version.txt"), "new").expect("write staged version");
 
-        commit_staged_install(&staging, &dest, &backup)
+        commit_staged_install(&staging, &dest, &backup, false)
             .await
             .expect("commit staged install");
 
@@ -1056,11 +1092,41 @@ mod tests {
         fs::rename(&dest, &backup).expect("simulate interrupted switch");
         fs::create_dir_all(&staging).expect("create next staged install");
         fs::write(staging.join("version.txt"), "next").expect("write next version");
-        commit_staged_install(&staging, &dest, &backup)
+        commit_staged_install(&staging, &dest, &backup, false)
             .await
             .expect("recover and commit");
-        assert_eq!(fs::read_to_string(dest.join("version.txt")).unwrap(), "next");
+        assert_eq!(
+            fs::read_to_string(dest.join("version.txt")).unwrap(),
+            "next"
+        );
         assert!(!backup.exists());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[tokio::test]
+    async fn staged_core_update_retains_previous_until_plugin_ready() {
+        let unique = format!("{}-keep", std::process::id());
+        let root = std::env::temp_dir().join(format!("dsh-atomic-install-{unique}"));
+        let dest = root.join("dsh");
+        let staging = root.join("dsh.installing");
+        let backup = root.join(".dsh.backup");
+        fs::create_dir_all(&dest).unwrap();
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(dest.join("version.txt"), "known-good").unwrap();
+        fs::write(staging.join("version.txt"), "candidate").unwrap();
+
+        commit_staged_install(&staging, &dest, &backup, true)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(dest.join("version.txt")).unwrap(),
+            "candidate"
+        );
+        assert_eq!(
+            fs::read_to_string(backup.join("version.txt")).unwrap(),
+            "known-good"
+        );
         fs::remove_dir_all(root).ok();
     }
 
@@ -1098,10 +1164,7 @@ mod tests {
             Some("sha256:4d5416766eb4a66e81b83532abeea64de7e7e2e0bac69a4f0c0508e1d91936c0")
         );
         // 文件名不存在 → None
-        assert_eq!(
-            parse_digest_from_expanded_assets(&html, linux_asset),
-            None
-        );
+        assert_eq!(parse_digest_from_expanded_assets(&html, linux_asset), None);
         // 摘要缺失 → None
         assert_eq!(
             parse_digest_from_expanded_assets("<p>no digest here</p>", windows_asset),

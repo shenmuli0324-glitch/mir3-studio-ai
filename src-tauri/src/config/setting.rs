@@ -16,6 +16,14 @@ pub struct Setting {
     /// 用于甄别“记录滞后于文件”与“同版本热修”两种不一致）
     #[serde(default)]
     pub dsh_pkg_tag: Option<String>,
+    /// 安装包内置运行时基线 id；仅在从受锁定资源安装 Core 时写入。
+    #[serde(default)]
+    pub runtime_baseline_id: Option<String>,
+    /// 最近一次通过完整 HTTP 健康检查的 Core tag/commit，用于更新失败回退。
+    #[serde(default)]
+    pub last_known_good_core_tag: Option<String>,
+    #[serde(default)]
+    pub last_known_good_core_commit: Option<String>,
     /// 命令行集成开关：安装后在用户 PATH 中注册 `mir3` 命令
     #[serde(default = "default_cli_link_enabled")]
     pub cli_link_enabled: bool,
@@ -65,6 +73,9 @@ impl Default for Setting {
             language: "zh-CN".to_string(),
             dsh_pkg_commit: None,
             dsh_pkg_tag: None,
+            runtime_baseline_id: None,
+            last_known_good_core_tag: None,
+            last_known_good_core_commit: None,
             cli_link_enabled: default_cli_link_enabled(),
             preinstall_done: false,
             preset_hash: None,

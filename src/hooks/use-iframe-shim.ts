@@ -1,10 +1,13 @@
 import type { RefObject } from 'react'
+import type { Mir3Project } from '@/features/projects/types'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
+import { postProjectActivation } from '@/features/projects/workspace-bridge'
+import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
 
 interface NativeNotificationMessage {
@@ -38,6 +41,14 @@ interface ClipboardImageRequest {
   source?: 'dsh-clipboard-image-bridge'
   type?: 'dsh://clipboard-image:read'
   id?: string
+}
+
+interface Mir3PluginMessage {
+  source?: 'mir3-core-plugin'
+  type?: 'mir3/plugin.ready' | 'mir3/workspace.pick' | 'mir3/project.activated' | 'mir3/project.error'
+  version?: number
+  requestId?: string
+  payload?: { projectId?: string, code?: string, message?: string }
 }
 
 export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
@@ -137,9 +148,51 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
       })
   }
 
+  function handleMir3Plugin(event: MessageEvent<Mir3PluginMessage>) {
+    const data = event.data
+    if (!data || typeof data !== 'object' || data.source !== 'mir3-core-plugin' || data.version !== 1)
+      return
+    if (event.source !== iframeRef.current?.contentWindow)
+      return
+    const iframeOrigin = getIframeOrigin(iframeRef)
+    if (!iframeOrigin || event.origin !== iframeOrigin)
+      return
+    if (data.type === 'mir3/project.error') {
+      console.error('[MIR3 Core Plugin] project activation failed:', data.payload?.code, data.payload?.message)
+      return
+    }
+    if (data.type === 'mir3/plugin.ready') {
+      store.harness.markCorePluginReady()
+      void invoke<boolean>('mark_core_ready')
+        .catch(error => console.error('[MIR3 Core Plugin] failed to commit ready Core:', error))
+      void invoke<Mir3Project | null>('project_get_active')
+        .then((project) => {
+          if (project)
+            postProjectActivation(iframeRef, project)
+        })
+        .catch(error => console.error('[MIR3 Core Plugin] failed to read active project:', error))
+      return
+    }
+    if (data.type !== 'mir3/workspace.pick')
+      return
+    void (async () => {
+      const project = await invoke<Mir3Project | null>('project_get_active')
+      if (!project)
+        throw new Error('No active MIR3 project')
+      const path = await invoke<string | null>('workspace_pick_directory', { projectId: project.id })
+      if (!path)
+        return
+      const updated = await invoke<Mir3Project>('workspace_select', { projectId: project.id, path })
+      await queryClient.invalidateQueries({ queryKey: ['mir3-active-project'] })
+      await queryClient.invalidateQueries({ queryKey: ['mir3-projects'] })
+      postProjectActivation(iframeRef, updated)
+    })().catch(error => console.error('[MIR3 Core Plugin] workspace selection failed:', error))
+  }
+
   useEvent('message', handleMessage)
   useEvent('message', handlePluginError)
   useEvent('message', handleClipboardImage)
+  useEvent('message', handleMir3Plugin)
 
   // 系统通知点击 → 通知 iframe 聚焦对应会话
   useEffect(() => {

@@ -31,6 +31,10 @@ export interface DshPlugin {
   recommended: boolean
   /** 预设清单中的「修复」标记 */
   fix: boolean
+  /** Studio 随包维护的第一方必需插件，不提供普通升级/卸载操作 */
+  system: boolean
+  /** 第一方插件随安装包提供的本地更新记录 */
+  changelog?: string
   /** 异常信息（安装/升级/卸载失败或页面运行期上报）；undefined = 正常 */
   error?: PluginErrorInfo | null
 }

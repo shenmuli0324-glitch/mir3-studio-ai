@@ -6,8 +6,7 @@ pub const CORE_PACKAGE: &str = "@deepseek-ai/dsh";
 pub const CORE_SCOPE: &str = "@deepseek-ai";
 pub const CORE_PACKAGE_NAME: &str = "dsh";
 pub const CORE_ENTRY_RELATIVE: &str = "node_modules/@deepseek-ai/dsh/lib/bin.js";
-pub const WEB_PROFILE_BUNDLES: [&str; 2] =
-    ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
+pub const WEB_PROFILE_BUNDLES: [&str; 2] = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
 pub const CORE_RELEASE_REPO: &str = "https://github.com/hairyf/deepseek-harness-pkg";
 pub const CORE_RELEASE_API: &str = "https://api.github.com/repos/hairyf/deepseek-harness-pkg";
 pub const CORE_RELEASE_BASE: &str =

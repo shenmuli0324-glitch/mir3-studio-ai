@@ -1,3 +1,4 @@
+import type { DshPlugin } from '../hooks/use-dsh-plugins'
 import { CircleExclamation } from '@gravity-ui/icons'
 import { Button, Chip, Label, Spinner, Tooltip } from '@heroui/react'
 import { useOverlay } from '@overlastic/react'
@@ -15,6 +16,7 @@ import { Item } from './item'
 import { Modal } from './modal'
 import { PanelHeader } from './panel-header'
 import { PanelState } from './panel-state'
+import { PluginChangelogDialog } from './plugin-changelog-dialog'
 
 /**
  * 「插件」面板：展示已安装插件，作为「插件出问题时」的卸载/升级入口。
@@ -33,6 +35,7 @@ export function ConfigPlugin() {
   const { plugins, loading, error } = useDshPlugins()
 
   const [dialogHolder, openDialog] = useOverlay(Modal, { type: 'holder' })
+  const [changelogHolder, openChangelog] = useOverlay(PluginChangelogDialog, { type: 'holder' })
 
   /** 行内操作进行中状态：id + 操作类型（update/remove），保证单例运行 */
   const [busy, setBusy] = useState<{ id: string, action: 'update' | 'remove' } | null>(null)
@@ -117,6 +120,21 @@ export function ConfigPlugin() {
     }
   }
 
+  async function onPluginClick(plugin: DshPlugin) {
+    if (!plugin.system)
+      return
+    try {
+      await openChangelog({
+        pluginName: plugin.name,
+        version: plugin.version,
+        changelog: plugin.changelog ?? '',
+      })
+    }
+    catch {
+      // 用户关闭更新记录弹窗，无需额外处理。
+    }
+  }
+
   return (
     <div>
       <PanelHeader className="sticky top-0 bg-canvas z-10 pb-3" title={t('plugins.title')} description={t('plugins.panel_tooltip')} />
@@ -133,6 +151,8 @@ export function ConfigPlugin() {
             {plugins.map(plugin => (
               <Item
                 key={plugin.id}
+                interactive={plugin.system}
+                onClick={() => void onPluginClick(plugin)}
                 left={(
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-1">
@@ -177,8 +197,18 @@ export function ConfigPlugin() {
                 )}
                 right={(
                   <>
-                    {/* 更新入口仅在插件异常时显示（需求 2：异常插件的修复入口） */}
-                    <If cond={plugin.error != null}>
+                    <If cond={plugin.system}>
+                      <Chip className="rounded-md" variant="soft" color="accent" size="sm">
+                        {t('plugins.system')}
+                      </Chip>
+                    </If>
+                    <If cond={plugin.system}>
+                      <Chip className="rounded-md" variant="primary" color="accent" size="sm">
+                        {t('plugins.view_changelog')}
+                      </Chip>
+                    </If>
+                    {/* 系统插件由 Studio 随版本维护，普通管理界面不提供变更入口。 */}
+                    <If cond={!plugin.system && plugin.error != null}>
                       <Chip
                         className={`rounded-md${busy ? ' cursor-not-allowed opacity-50' : ' cursor-pointer'}`}
                         variant="primary"
@@ -192,18 +222,20 @@ export function ConfigPlugin() {
                         </span>
                       </Chip>
                     </If>
-                    <Chip
-                      className={`rounded-md${busy ? ' cursor-not-allowed opacity-50' : ' cursor-pointer'}`}
-                      variant="primary"
-                      color="danger"
-                      size="sm"
-                      onClick={() => onRemove(plugin.id, plugin.name)}
-                    >
-                      <span className="flex items-center gap-1">
-                        <If cond={busy?.id === plugin.id && busy.action === 'remove'} then={<Spinner size="sm" color="current" />} />
-                        {t('plugins.uninstall')}
-                      </span>
-                    </Chip>
+                    <If cond={!plugin.system}>
+                      <Chip
+                        className={`rounded-md${busy ? ' cursor-not-allowed opacity-50' : ' cursor-pointer'}`}
+                        variant="primary"
+                        color="danger"
+                        size="sm"
+                        onClick={() => onRemove(plugin.id, plugin.name)}
+                      >
+                        <span className="flex items-center gap-1">
+                          <If cond={busy?.id === plugin.id && busy.action === 'remove'} then={<Spinner size="sm" color="current" />} />
+                          {t('plugins.uninstall')}
+                        </span>
+                      </Chip>
+                    </If>
                   </>
                 )}
               />
@@ -213,6 +245,7 @@ export function ConfigPlugin() {
       </PanelState>
 
       {dialogHolder}
+      {changelogHolder}
     </div>
   )
 }

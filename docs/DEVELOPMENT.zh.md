@@ -26,6 +26,10 @@ pnpm tauri dev    # 调试模式运行桌面端
 pnpm tauri build  # 构建安装包
 ```
 
+`pnpm tauri build` 会根据 `runtime-baseline.lock.json` 下载、校验并嵌入当前目标平台的运行时基线。正式构建只接受 `approved` 平台；`testing` 候选只能在收集真实平台验收证据时显式设置 `MIR3_BASELINE_ALLOW_UNVALIDATED=1`。任何 Core、Node、pnpm、下载地址或 SHA-256 变化都必须重新进行该平台验收，详见 [运行时基线发布约定](./runtime-baseline-policy.md)。
+
+功能开发完成后先运行 `pnpm version:bump -- patch` 自动同步应用版本，再执行 `pnpm release:check`。内置插件还必须独立升级 SemVer、维护本地更新记录并遵守 [Harness 插件开发约定](./harness-plugin-development-policy.md)。所有测试完成后提交并推送当前 Git 分支。
+
 后端检查（在 `src-tauri/` 下执行）：
 
 ```bash

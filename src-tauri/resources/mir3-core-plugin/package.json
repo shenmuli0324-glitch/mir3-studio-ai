@@ -1,0 +1,23 @@
+{
+  "name": "@mir3-studio/dsh-mir3-core",
+  "type": "module",
+  "version": "0.2.0",
+  "description": "First-party MIR3 Studio project and Harness workspace bridge",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "lib/index.js",
+  "files": ["CHANGELOG.md", "README.md", "lib"],
+  "dsh": {
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-runtime"],
+      "platform": "web"
+    }
+  }
+}

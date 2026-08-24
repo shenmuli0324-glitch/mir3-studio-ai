@@ -1,5 +1,5 @@
-pub mod builder;
 pub mod brand;
+pub mod builder;
 pub mod compat;
 pub mod nav;
 pub mod notification;

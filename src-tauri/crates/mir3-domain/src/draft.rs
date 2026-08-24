@@ -1,0 +1,567 @@
+use crate::{now_millis, path_is_within, DomainStore};
+use rusqlite::{params, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use similar::TextDiff;
+use std::fs;
+use std::path::{Component, Path, PathBuf};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DraftStatus {
+    Open,
+    Applied,
+    Discarded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Draft {
+    pub id: String,
+    pub intent: String,
+    pub revision: i64,
+    pub status: DraftStatus,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftChangeInput {
+    pub path: String,
+    pub content: Option<String>,
+    #[serde(default)]
+    pub deleted: bool,
+    pub expected_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftChangePreview {
+    pub path: String,
+    pub deleted: bool,
+    pub base_sha256: Option<String>,
+    pub new_sha256: Option<String>,
+    pub unified_diff: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftPreview {
+    pub draft: Draft,
+    pub changes: Vec<DraftChangePreview>,
+    pub diff_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub id: String,
+    pub draft_id: Option<String>,
+    pub files: Vec<SnapshotFile>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotFile {
+    pub path: String,
+    pub existed: bool,
+    pub sha256: Option<String>,
+}
+
+impl DomainStore {
+    pub fn open_draft(&self, project_id: &str, intent: &str) -> Result<Draft, String> {
+        let trimmed = intent.trim();
+        if trimmed.is_empty() {
+            return Err("DRAFT_INTENT_EMPTY: intent is required".to_string());
+        }
+        let now = now_millis();
+        let id = generated_id("draft", project_id, trimmed, now);
+        let draft = Draft {
+            id,
+            intent: trimmed.to_string(),
+            revision: 0,
+            status: DraftStatus::Open,
+            created_at: now,
+            updated_at: now,
+        };
+        self.project_connection(project_id)?
+            .execute(
+                "INSERT INTO drafts(id,intent,revision,status,created_at,updated_at) VALUES(?1,?2,0,'open',?3,?3)",
+                params![draft.id, draft.intent, now],
+            )
+            .map_err(|e| format!("DRAFT_CREATE_FAILED: {e}"))?;
+        fs::create_dir_all(self.project_dir(project_id)?.join("drafts").join(&draft.id))
+            .map_err(|e| format!("DRAFT_DIRECTORY_FAILED: {e}"))?;
+        Ok(draft)
+    }
+
+    pub fn list_drafts(&self, project_id: &str) -> Result<Vec<Draft>, String> {
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare("SELECT id,intent,revision,status,created_at,updated_at FROM drafts ORDER BY updated_at DESC")
+            .map_err(|e| format!("DRAFT_LIST_FAILED: {e}"))?;
+        let rows = statement
+            .query_map([], row_to_draft)
+            .map_err(|e| format!("DRAFT_LIST_FAILED: {e}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("DRAFT_LIST_FAILED: {e}"))
+    }
+
+    pub fn get_draft(&self, project_id: &str, draft_id: &str) -> Result<Draft, String> {
+        self.project_connection(project_id)?
+            .query_row(
+                "SELECT id,intent,revision,status,created_at,updated_at FROM drafts WHERE id=?1",
+                [draft_id],
+                row_to_draft,
+            )
+            .optional()
+            .map_err(|e| format!("DRAFT_GET_FAILED: {e}"))?
+            .ok_or_else(|| format!("DRAFT_NOT_FOUND: {draft_id}"))
+    }
+
+    /// MCP 可调用的 Draft 写入：只写外置数据库和 Draft 目录，不改正式项目。
+    pub fn patch_draft(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        expected_revision: i64,
+        changes: &[DraftChangeInput],
+    ) -> Result<DraftPreview, String> {
+        let draft = self.get_draft(project_id, draft_id)?;
+        if draft.status != DraftStatus::Open {
+            return Err("DRAFT_NOT_OPEN: only open drafts can be patched".to_string());
+        }
+        if draft.revision != expected_revision {
+            return Err(format!(
+                "DRAFT_REVISION_CONFLICT: expected {expected_revision}, current {}",
+                draft.revision
+            ));
+        }
+        if changes.is_empty() {
+            return Err("DRAFT_CHANGES_EMPTY: at least one change is required".to_string());
+        }
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        let mut connection = self.project_connection(project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|e| format!("DRAFT_TRANSACTION_FAILED: {e}"))?;
+        for change in changes {
+            validate_relative_path(&change.path)?;
+            let target = safe_project_target(&root, &change.path)?;
+            let existing = fs::read(&target).ok();
+            let base_hash = existing.as_deref().map(hash_bytes);
+            if change.expected_sha256.is_some() && change.expected_sha256 != base_hash {
+                return Err(format!(
+                    "DRAFT_BASE_CONFLICT: {} changed since it was indexed",
+                    change.path
+                ));
+            }
+            if !change.deleted && change.content.is_none() {
+                return Err(format!("DRAFT_CONTENT_MISSING: {}", change.path));
+            }
+            transaction
+                .execute(
+                    "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted) VALUES(?1,?2,?3,?4,?5)
+                     ON CONFLICT(draft_id,path) DO UPDATE SET base_sha256=excluded.base_sha256,content=excluded.content,deleted=excluded.deleted",
+                    params![
+                        draft_id,
+                        change.path.replace('\\', "/"),
+                        base_hash,
+                        change.content.as_deref().map(str::as_bytes),
+                        i64::from(change.deleted),
+                    ],
+                )
+                .map_err(|e| format!("DRAFT_PATCH_FAILED: {e}"))?;
+        }
+        let next_revision = draft.revision + 1;
+        transaction
+            .execute(
+                "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1",
+                params![draft_id, next_revision, now_millis()],
+            )
+            .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
+        transaction
+            .commit()
+            .map_err(|e| format!("DRAFT_COMMIT_FAILED: {e}"))?;
+        self.preview_draft(project_id, draft_id)
+    }
+
+    pub fn preview_draft(&self, project_id: &str, draft_id: &str) -> Result<DraftPreview, String> {
+        let draft = self.get_draft(project_id, draft_id)?;
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare("SELECT path,base_sha256,content,deleted FROM draft_changes WHERE draft_id=?1 ORDER BY path")
+            .map_err(|e| format!("DRAFT_PREVIEW_FAILED: {e}"))?;
+        let rows = statement
+            .query_map([draft_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<Vec<u8>>>(2)?,
+                    row.get::<_, i64>(3)? != 0,
+                ))
+            })
+            .map_err(|e| format!("DRAFT_PREVIEW_FAILED: {e}"))?;
+        let mut changes = Vec::new();
+        let mut digest = Sha256::new();
+        digest.update(project_id.as_bytes());
+        digest.update(draft_id.as_bytes());
+        digest.update(draft.revision.to_le_bytes());
+        for row in rows {
+            let (path, base_sha256, content, deleted) =
+                row.map_err(|e| format!("DRAFT_PREVIEW_FAILED: {e}"))?;
+            let target = safe_project_target(&root, &path)?;
+            let old = fs::read(&target).unwrap_or_default();
+            let new_hash = (!deleted).then(|| hash_bytes(content.as_deref().unwrap_or_default()));
+            let unified_diff = text_diff(&path, &old, content.as_deref(), deleted);
+            digest.update(path.as_bytes());
+            digest.update(base_sha256.as_deref().unwrap_or("").as_bytes());
+            digest.update(new_hash.as_deref().unwrap_or("").as_bytes());
+            digest.update([u8::from(deleted)]);
+            changes.push(DraftChangePreview {
+                path,
+                deleted,
+                base_sha256,
+                new_sha256: new_hash,
+                unified_diff,
+            });
+        }
+        Ok(DraftPreview {
+            draft,
+            changes,
+            diff_hash: format!("{:x}", digest.finalize()),
+        })
+    }
+
+    /// 仅供 Tauri 人工确认路径调用；MCP 不暴露此方法。
+    pub fn apply_draft(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        expected_revision: i64,
+        expected_diff_hash: &str,
+    ) -> Result<Snapshot, String> {
+        let preview = self.preview_draft(project_id, draft_id)?;
+        if preview.draft.status != DraftStatus::Open {
+            return Err("DRAFT_NOT_OPEN: draft is no longer open".to_string());
+        }
+        if preview.draft.revision != expected_revision || preview.diff_hash != expected_diff_hash {
+            return Err("DRAFT_CONFIRMATION_STALE: preview changed; review it again".to_string());
+        }
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        for change in &preview.changes {
+            let target = safe_project_target(&root, &change.path)?;
+            let current = fs::read(&target).ok().as_deref().map(hash_bytes);
+            if current != change.base_sha256 {
+                return Err(format!(
+                    "DRAFT_BASE_CONFLICT: {} changed after preview",
+                    change.path
+                ));
+            }
+        }
+        let paths: Vec<String> = preview
+            .changes
+            .iter()
+            .map(|change| change.path.clone())
+            .collect();
+        let snapshot = self.create_snapshot(project_id, Some(draft_id), &paths)?;
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT path,content,deleted FROM draft_changes WHERE draft_id=?1 ORDER BY path",
+            )
+            .map_err(|e| format!("DRAFT_APPLY_FAILED: {e}"))?;
+        let rows = statement
+            .query_map([draft_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<Vec<u8>>>(1)?,
+                    row.get::<_, i64>(2)? != 0,
+                ))
+            })
+            .map_err(|e| format!("DRAFT_APPLY_FAILED: {e}"))?;
+        let operations = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("DRAFT_APPLY_FAILED: {e}"))?;
+        for (path, content, deleted) in operations {
+            let target = safe_project_target(&root, &path)?;
+            let result = if deleted {
+                if target.exists() {
+                    fs::remove_file(&target)
+                } else {
+                    Ok(())
+                }
+            } else {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| format!("DRAFT_APPLY_FAILED: {}: {e}", parent.display()))?;
+                }
+                let temporary = target.with_extension(format!("mir3-tmp-{}", std::process::id()));
+                fs::write(&temporary, content.unwrap_or_default())
+                    .and_then(|_| fs::rename(&temporary, &target))
+            };
+            if let Err(error) = result {
+                let _ = self.restore_snapshot(project_id, &snapshot.id);
+                return Err(format!("DRAFT_APPLY_FAILED: {}: {error}", target.display()));
+            }
+        }
+        self.project_connection(project_id)?
+            .execute(
+                "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1",
+                params![draft_id, now_millis()],
+            )
+            .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
+        Ok(snapshot)
+    }
+
+    pub fn discard_draft(&self, project_id: &str, draft_id: &str) -> Result<Draft, String> {
+        let draft = self.get_draft(project_id, draft_id)?;
+        if draft.status != DraftStatus::Open {
+            return Err("DRAFT_NOT_OPEN: only open drafts can be discarded".to_string());
+        }
+        self.project_connection(project_id)?
+            .execute(
+                "UPDATE drafts SET status='discarded',updated_at=?2 WHERE id=?1",
+                params![draft_id, now_millis()],
+            )
+            .map_err(|e| format!("DRAFT_DISCARD_FAILED: {e}"))?;
+        self.get_draft(project_id, draft_id)
+    }
+
+    pub fn create_snapshot(
+        &self,
+        project_id: &str,
+        draft_id: Option<&str>,
+        paths: &[String],
+    ) -> Result<Snapshot, String> {
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        let now = now_millis();
+        let id = generated_id("snapshot", project_id, draft_id.unwrap_or("manual"), now);
+        let directory = self.project_dir(project_id)?.join("snapshots").join(&id);
+        fs::create_dir_all(directory.join("files"))
+            .map_err(|e| format!("SNAPSHOT_CREATE_FAILED: {e}"))?;
+        let mut files = Vec::new();
+        for relative in paths {
+            validate_relative_path(relative)?;
+            let source = safe_project_target(&root, relative)?;
+            let existed = source.is_file();
+            let bytes = existed
+                .then(|| fs::read(&source))
+                .transpose()
+                .map_err(|e| format!("SNAPSHOT_READ_FAILED: {}: {e}", source.display()))?;
+            if let Some(bytes) = &bytes {
+                let target = directory.join("files").join(relative);
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| format!("SNAPSHOT_CREATE_FAILED: {e}"))?;
+                }
+                fs::write(target, bytes).map_err(|e| format!("SNAPSHOT_WRITE_FAILED: {e}"))?;
+            }
+            files.push(SnapshotFile {
+                path: relative.clone(),
+                existed,
+                sha256: bytes.as_deref().map(hash_bytes),
+            });
+        }
+        let snapshot = Snapshot {
+            id: id.clone(),
+            draft_id: draft_id.map(str::to_string),
+            files,
+            created_at: now,
+        };
+        let manifest = serde_json::to_string_pretty(&snapshot)
+            .map_err(|e| format!("SNAPSHOT_SERIALIZE_FAILED: {e}"))?;
+        fs::write(directory.join("manifest.json"), format!("{manifest}\n"))
+            .map_err(|e| format!("SNAPSHOT_WRITE_FAILED: {e}"))?;
+        self.project_connection(project_id)?
+            .execute(
+                "INSERT INTO snapshots(id,draft_id,manifest,created_at) VALUES(?1,?2,?3,?4)",
+                params![id, draft_id, manifest, now],
+            )
+            .map_err(|e| format!("SNAPSHOT_DATABASE_FAILED: {e}"))?;
+        Ok(snapshot)
+    }
+
+    pub fn list_snapshots(&self, project_id: &str) -> Result<Vec<Snapshot>, String> {
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare("SELECT manifest FROM snapshots ORDER BY created_at DESC")
+            .map_err(|e| format!("SNAPSHOT_LIST_FAILED: {e}"))?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("SNAPSHOT_LIST_FAILED: {e}"))?;
+        let mut snapshots = Vec::new();
+        for row in rows {
+            let manifest = row.map_err(|e| format!("SNAPSHOT_LIST_FAILED: {e}"))?;
+            snapshots.push(
+                serde_json::from_str(&manifest).map_err(|e| format!("SNAPSHOT_INVALID: {e}"))?,
+            );
+        }
+        Ok(snapshots)
+    }
+
+    pub fn restore_snapshot(
+        &self,
+        project_id: &str,
+        snapshot_id: &str,
+    ) -> Result<Snapshot, String> {
+        let snapshot = self
+            .list_snapshots(project_id)?
+            .into_iter()
+            .find(|snapshot| snapshot.id == snapshot_id)
+            .ok_or_else(|| format!("SNAPSHOT_NOT_FOUND: {snapshot_id}"))?;
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        let directory = self
+            .project_dir(project_id)?
+            .join("snapshots")
+            .join(snapshot_id)
+            .join("files");
+        for file in &snapshot.files {
+            let target = safe_project_target(&root, &file.path)?;
+            if file.existed {
+                let source = directory.join(&file.path);
+                let bytes = fs::read(&source)
+                    .map_err(|e| format!("SNAPSHOT_READ_FAILED: {}: {e}", source.display()))?;
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
+                }
+                fs::write(&target, bytes).map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
+            } else if target.exists() {
+                fs::remove_file(&target).map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
+            }
+        }
+        Ok(snapshot)
+    }
+}
+
+fn row_to_draft(row: &rusqlite::Row<'_>) -> rusqlite::Result<Draft> {
+    let status: String = row.get(3)?;
+    Ok(Draft {
+        id: row.get(0)?,
+        intent: row.get(1)?,
+        revision: row.get(2)?,
+        status: match status.as_str() {
+            "applied" => DraftStatus::Applied,
+            "discarded" => DraftStatus::Discarded,
+            _ => DraftStatus::Open,
+        },
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+    })
+}
+
+fn generated_id(prefix: &str, project_id: &str, seed: &str, now: i64) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(project_id.as_bytes());
+    hasher.update(seed.as_bytes());
+    hasher.update(now.to_le_bytes());
+    let suffix = format!("{:x}", hasher.finalize());
+    format!("{prefix}-{now}-{}", &suffix[..10])
+}
+
+fn validate_relative_path(value: &str) -> Result<(), String> {
+    let path = Path::new(value);
+    if value.trim().is_empty() || path.is_absolute() {
+        return Err("DRAFT_PATH_INVALID: path must be relative".to_string());
+    }
+    if path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err("DRAFT_PATH_INVALID: path traversal is not allowed".to_string());
+    }
+    Ok(())
+}
+
+fn safe_project_target(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    validate_relative_path(relative)?;
+    let canonical_root =
+        fs::canonicalize(root).map_err(|e| format!("PROJECT_PATH_INVALID: {e}"))?;
+    let candidate = canonical_root.join(relative);
+    let mut existing = candidate.as_path();
+    while !existing.exists() {
+        existing = existing
+            .parent()
+            .ok_or_else(|| "DRAFT_PATH_INVALID: missing parent".to_string())?;
+    }
+    let canonical_existing =
+        fs::canonicalize(existing).map_err(|e| format!("DRAFT_PATH_INVALID: {e}"))?;
+    if !path_is_within(&canonical_root, &canonical_existing) {
+        return Err("DRAFT_PATH_OUTSIDE: path escapes project root".to_string());
+    }
+    Ok(candidate)
+}
+
+fn hash_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+fn text_diff(path: &str, old: &[u8], new: Option<&[u8]>, deleted: bool) -> Option<String> {
+    let old = std::str::from_utf8(old).ok()?;
+    let new = if deleted {
+        ""
+    } else {
+        std::str::from_utf8(new?).ok()?
+    };
+    Some(
+        TextDiff::from_lines(old, new)
+            .unified_diff()
+            .header(&format!("a/{path}"), &format!("b/{path}"))
+            .to_string(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn draft_never_changes_project_until_apply_and_snapshot_restores() {
+        let base = std::env::temp_dir().join(format!("mir3-draft-{}", std::process::id()));
+        let project = base.join("木立");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎")).unwrap();
+        let target = project.join("客户端/dev/Main.lua");
+        fs::write(&target, "return 1\n").unwrap();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        let draft = store.open_draft(&imported.id, "修改入口").unwrap();
+        let preview = store
+            .patch_draft(
+                &imported.id,
+                &draft.id,
+                0,
+                &[DraftChangeInput {
+                    path: "客户端/dev/Main.lua".to_string(),
+                    content: Some("return 2\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "return 1\n");
+        let snapshot = store
+            .apply_draft(
+                &imported.id,
+                &draft.id,
+                preview.draft.revision,
+                &preview.diff_hash,
+            )
+            .unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "return 2\n");
+        store.restore_snapshot(&imported.id, &snapshot.id).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "return 1\n");
+        fs::remove_dir_all(base).ok();
+    }
+}

@@ -1,10 +1,10 @@
 mod bridge;
 mod config;
-mod utils;
 pub mod desktop;
 mod logger;
 mod service;
 mod task;
+mod utils;
 
 pub fn run() {
     // 初始化日志系统

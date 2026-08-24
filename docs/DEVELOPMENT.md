@@ -26,6 +26,10 @@ pnpm tauri dev    # run the desktop app in debug mode
 pnpm tauri build  # build installers
 ```
 
+`pnpm tauri build` downloads, verifies, and embeds the target platform runtime described by `runtime-baseline.lock.json`. Production builds accept only an `approved` platform. A `testing` candidate requires the explicit `MIR3_BASELINE_ALLOW_UNVALIDATED=1` override and may only be used to collect real-platform validation evidence. Any Core, Node.js, pnpm, URL, or SHA-256 change restarts validation for that platform. See the [runtime baseline policy](./runtime-baseline-policy.md).
+
+After a functional change, run `pnpm version:bump -- patch` to synchronize the product version, then `pnpm release:check`. Bundled plugins also need their own SemVer bump and local changelog, and must follow the [Harness plugin development policy](./harness-plugin-development-policy.md). Commit and push the current Git branch after all checks pass.
+
 Backend checks (from `src-tauri/`):
 
 ```bash

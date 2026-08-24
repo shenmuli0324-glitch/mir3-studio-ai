@@ -69,7 +69,23 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
         }
     }
 
-    let dsh_latest = download::fetch_latest_dsh_pkg_info().await;
+    // 首次安装优先使用安装包内已锁定并校验的平台基线，不访问 GitHub latest。
+    // 已有 Core 时仍走更新检查；没有基线的旧开发包才回退原联网安装流程。
+    let bundled_baseline = download::BaselineBundle::load(&app_handle)?;
+    let dsh_latest = if !dsh_files_ok {
+        if let Some(bundle) = bundled_baseline.as_ref() {
+            Ok(download::LatestDshPkg {
+                tag: bundle.manifest.core.tag.clone(),
+                commit: bundle.manifest.core.commit.clone(),
+                asset_url: format!("bundled://{}", bundle.manifest.baseline_id),
+                digest: Some(bundle.manifest.artifacts.core.sha256.clone()),
+            })
+        } else {
+            download::fetch_latest_dsh_pkg_info().await
+        }
+    } else {
+        download::fetch_latest_dsh_pkg_info().await
+    };
 
     // 已安装文件在盘时，用 resolve_update 甄别「记录滞后」与「真更新」：
     // 记录滞后（HealUpToDate）只修正 store 记录、绝不整包重下。否则会把一个
@@ -97,8 +113,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
             ) {
                 // 安装文件已是最新 release，只是记录滞后：修正记录后下次
                 // 启动直接走 commit 快速比对，不再误判、也绝不整包重下
-                download::UpdateCheck::UpToDate
-                | download::UpdateCheck::HealUpToDate => {
+                download::UpdateCheck::UpToDate | download::UpdateCheck::HealUpToDate => {
                     if record_commit.as_deref() != Some(latest.commit.as_str()) {
                         log::info!(
                             "Installed MIR3 AI Core files already at latest release, healing stale record: {} ({})",
@@ -231,6 +246,19 @@ pub async fn shutdown_harness(app_handle: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn restart_harness(app_handle: AppHandle) -> Result<(), String> {
     workflow::restart(app_handle).await
+}
+
+/// 第一方 MIR3 Core Plugin 已在浏览器端完成 apply；此时 Core、Harness 客户端和
+/// 系统插件都已通过，才能提交候选版本并推进 Last Known Good。
+#[tauri::command]
+pub async fn mark_core_ready(app_handle: AppHandle) -> Result<bool, String> {
+    workflow::finalize_core_update(&app_handle).await
+}
+
+/// 更新候选启动或插件加载失败时恢复上一个 Last Known Good Core。
+#[tauri::command]
+pub async fn rollback_core_update(app_handle: AppHandle) -> Result<bool, String> {
+    workflow::rollback_core_update(&app_handle).await
 }
 
 /// 获取当前 MIR3 AI Core 服务状态

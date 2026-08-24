@@ -48,6 +48,11 @@ pub struct DshPlugin {
     pub recommended: bool,
     /// 预设清单中的「修复」标记（黄色 chip）
     pub fix: bool,
+    /// Studio 随包维护的第一方必需插件，普通管理界面不可升级或卸载。
+    pub system: bool,
+    /// 第一方插件随包携带的本地更新记录；第三方插件不由 Studio 解释此字段。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changelog: Option<String>,
     /// 异常信息（安装/升级/卸载失败或页面运行期上报）；`None` = 正常
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<PluginError>,
@@ -147,6 +152,12 @@ fn parse_plugins(profile: &Path, presets: &[PreinstallPluginInfo]) -> Vec<DshPlu
                 .or_else(|| preset.map(|p| p.repo_url.clone()))
                 .map(|url| normalize_repo_url(&url))
                 .unwrap_or_default();
+            let system = super::system::is_system_plugin(id);
+            let changelog = if system {
+                std::fs::read_to_string(plugin_dir(profile, id).join("CHANGELOG.md")).ok()
+            } else {
+                None
+            };
             Some(DshPlugin {
                 id: id.clone(),
                 name: meta
@@ -167,6 +178,8 @@ fn parse_plugins(profile: &Path, presets: &[PreinstallPluginInfo]) -> Vec<DshPlu
                 bundled: bundled.contains(id.as_str()),
                 recommended: preset.map(|p| p.recommended).unwrap_or(false),
                 fix: preset.map(|p| p.fix).unwrap_or(false),
+                system,
+                changelog,
                 error: None,
             })
         })
@@ -288,7 +301,8 @@ mod tests {
     /// 构造临时 profile：package.json + node_modules 下的插件包清单
     /// （tag 用于区分不同测试的临时目录，避免并行执行时互相清理）
     fn build_profile(tag: &str, packages: &[(&str, &str)]) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("dsh-watch-test-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("dsh-watch-test-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir.join("node_modules")).unwrap();
         let mut manifest = serde_json::json!({
@@ -309,9 +323,8 @@ mod tests {
             }
         }
         manifest["dependencies"] = serde_json::Value::Object(deps);
-        manifest["dsh"]["profile"]["bundles"] = serde_json::Value::Array(
-            bundles.into_iter().map(serde_json::Value::String).collect(),
-        );
+        manifest["dsh"]["profile"]["bundles"] =
+            serde_json::Value::Array(bundles.into_iter().map(serde_json::Value::String).collect());
         std::fs::write(
             dir.join("package.json"),
             serde_json::to_string_pretty(&manifest).unwrap(),
@@ -375,14 +388,8 @@ mod tests {
         let dir = build_profile(
             "fallback",
             &[
-                (
-                    "dsh-at-file",
-                    r#"{"name":"dsh-at-file"}"#,
-                ),
-                (
-                    "dshmarket",
-                    r#"{"name":"dshmarket","dsh":{"bundle":{}}}"#,
-                ),
+                ("dsh-at-file", r#"{"name":"dsh-at-file"}"#),
+                ("dshmarket", r#"{"name":"dshmarket","dsh":{"bundle":{}}}"#),
             ],
         );
         let plugins = parse_plugins(&dir, &presets_for_test());
@@ -404,5 +411,28 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         assert!(parse_plugins(&dir, &[]).is_empty());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn system_plugin_exposes_bundled_changelog() {
+        let dir = build_profile(
+            "system-changelog",
+            &[(
+                super::super::system::PACKAGE_NAME,
+                r#"{"name":"@mir3-studio/dsh-mir3-core","version":"0.2.0","dsh":{"client":{}}}"#,
+            )],
+        );
+        let changelog = "# Updates\n\n## 0.2.0\n";
+        std::fs::write(
+            plugin_dir(&dir, super::super::system::PACKAGE_NAME).join("CHANGELOG.md"),
+            changelog,
+        )
+        .unwrap();
+
+        let plugins = parse_plugins(&dir, &[]);
+        assert_eq!(plugins.len(), 1);
+        assert!(plugins[0].system);
+        assert_eq!(plugins[0].changelog.as_deref(), Some(changelog));
+        std::fs::remove_dir_all(dir).ok();
     }
 }

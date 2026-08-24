@@ -180,6 +180,8 @@ export const harness = defineStore({
     iframeError: false,
     iframeKey: 0,
     serviceHealthy: false,
+    /** 第一方 MIR3 Core Plugin 已在当前 iframe 中完成 apply。 */
+    corePluginReady: false,
     serviceRunning: false,
     busyAction: null as SidebarBusyAction,
   }),
@@ -228,6 +230,19 @@ export const harness = defineStore({
       this.iframeLoaded = false
     },
 
+    markCorePluginReady() {
+      this.corePluginReady = true
+    },
+
+    async waitForCorePluginReady(timeoutMs = 20000) {
+      const startedAt = Date.now()
+      while (!this.corePluginReady) {
+        if (Date.now() - startedAt >= timeoutMs)
+          throw new Error('MIR3_CORE_PLUGIN_READY_TIMEOUT')
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    },
+
     /** 安装进度流：只前进不后退，供首次安装/手动更新共用 */
     async listenInstallProgress(): Promise<UnlistenFn> {
       return listen<InstallProgress>('install-progress', (e) => {
@@ -257,6 +272,7 @@ export const harness = defineStore({
       this.recovery = initialRecovery
       this.dismissedRecoveryIds = []
       this.serviceHealthy = false
+      this.corePluginReady = false
       this.iframeLoaded = false
       this.iframeError = false
       try {

@@ -47,16 +47,14 @@ pub async fn copy_service_url(app_handle: AppHandle) -> Result<(), String> {
 /// 在系统文件管理器中定位指定文件（Session 日志下载完成后的"在文件夹中显示"）
 #[tauri::command]
 pub fn reveal_in_folder(path: String) -> Result<(), String> {
-    tauri_plugin_opener::reveal_item_in_dir(&path)
-        .map_err(|e| format!("REVEAL_FAILED: {e}"))
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| format!("REVEAL_FAILED: {e}"))
 }
 
 /// 在系统文件管理器中打开指定目录（核心版本「打开目录」按钮；目录用 open 而非
 /// reveal——reveal 是定位父目录，open 是直接打开该目录本身）。
 #[tauri::command]
 pub fn open_dir(path: String) -> Result<(), String> {
-    tauri_plugin_opener::open_path(&path, None::<&str>)
-        .map_err(|e| format!("OPEN_DIR_FAILED: {e}"))
+    tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("OPEN_DIR_FAILED: {e}"))
 }
 
 /// 在系统文件管理器中打开数据目录（官方 $MIR3_STUDIO_HOME，即 ~/.mir3-studio-ai）
@@ -228,23 +226,39 @@ mod tests {
     #[test]
     fn frontend_line_detected() {
         // tracing 文件层（desktop.log）与前端独立文件（desktop.frontdesk.log）两种时间戳格式都应命中
-        assert!(is_frontend_log_line("2024-06-01 12:00:00.123Z INFO frontend: [tag] message"));
-        assert!(is_frontend_log_line("[2024-06-01 12:00:00.123Z] INFO frontend: message"));
-        assert!(is_frontend_log_line("2024-06-01 12:00:00.123Z WARN frontend: something"));
-        assert!(is_frontend_log_line("2024-06-01 12:00:00.123Z ERROR frontend: boom"));
+        assert!(is_frontend_log_line(
+            "2024-06-01 12:00:00.123Z INFO frontend: [tag] message"
+        ));
+        assert!(is_frontend_log_line(
+            "[2024-06-01 12:00:00.123Z] INFO frontend: message"
+        ));
+        assert!(is_frontend_log_line(
+            "2024-06-01 12:00:00.123Z WARN frontend: something"
+        ));
+        assert!(is_frontend_log_line(
+            "2024-06-01 12:00:00.123Z ERROR frontend: boom"
+        ));
     }
 
     #[test]
     fn backend_line_not_detected() {
         // 后端（dsh 等 target）不应误判为前端；消息正文里出现 "frontend" 也不应命中
-        assert!(!is_frontend_log_line("2024-06-01 12:00:00.123Z INFO dsh: starting server"));
-        assert!(!is_frontend_log_line("[2024-06-01 12:00:00.123Z] INFO dsh: emit to frontend: 3"));
-        assert!(!is_frontend_log_line("2024-06-01 12:00:00.123Z DEBUG reqwest: GET /ping"));
+        assert!(!is_frontend_log_line(
+            "2024-06-01 12:00:00.123Z INFO dsh: starting server"
+        ));
+        assert!(!is_frontend_log_line(
+            "[2024-06-01 12:00:00.123Z] INFO dsh: emit to frontend: 3"
+        ));
+        assert!(!is_frontend_log_line(
+            "2024-06-01 12:00:00.123Z DEBUG reqwest: GET /ping"
+        ));
     }
 
     #[test]
     fn frontend_level_padding_and_extra_spaces() {
         // 级别可能带前导空格（`{:>5}` 或 tracing 层多空格），frontend 目标仍应命中
-        assert!(is_frontend_log_line("2024-06-01 12:00:00.123Z  INFO frontend: padded"));
+        assert!(is_frontend_log_line(
+            "2024-06-01 12:00:00.123Z  INFO frontend: padded"
+        ));
     }
 }

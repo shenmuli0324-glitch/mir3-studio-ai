@@ -139,7 +139,9 @@ pub fn escape_path_sh(path: &Path) -> String {
 /// Windows `mir3.cmd` 内容。内部映射核心需要的环境变量，不公开兼容命令。
 #[cfg_attr(debug_assertions, allow(dead_code))]
 pub fn build_cmd_shim(app_dir: &Path, dsh_home: &Path) -> String {
-    let dsh_bin = app_dir.join("dependencies/dsh").join(config::core_compat::CORE_ENTRY_RELATIVE);
+    let dsh_bin = app_dir
+        .join("dependencies/dsh")
+        .join(config::core_compat::CORE_ENTRY_RELATIVE);
 
     format!(
         r#"@echo off
@@ -175,7 +177,9 @@ exit /b 1
 /// Windows `mir3.ps1` 内容。
 #[cfg_attr(debug_assertions, allow(dead_code))]
 pub fn build_ps1_shim(app_dir: &Path, dsh_home: &Path) -> String {
-    let dsh_bin = app_dir.join("dependencies/dsh").join(config::core_compat::CORE_ENTRY_RELATIVE);
+    let dsh_bin = app_dir
+        .join("dependencies/dsh")
+        .join(config::core_compat::CORE_ENTRY_RELATIVE);
 
     format!(
         r#"# MIR3 Studio AI - mir3 command shim (generated)
@@ -206,7 +210,9 @@ exit $LASTEXITCODE
 #[cfg(not(windows))]
 #[cfg_attr(debug_assertions, allow(dead_code))] // 仅 release 构建写入 dsh shim
 pub fn build_sh_shim(app_dir: &Path, dsh_home: &Path) -> String {
-    let dsh_bin = app_dir.join("dependencies/dsh").join(config::core_compat::CORE_ENTRY_RELATIVE);
+    let dsh_bin = app_dir
+        .join("dependencies/dsh")
+        .join(config::core_compat::CORE_ENTRY_RELATIVE);
 
     format!(
         r#"#!/bin/sh
@@ -482,10 +488,16 @@ pub fn write_private_pnpm_shims(app_handle: &AppHandle, bin_dir: &Path) -> Resul
 
     #[cfg(windows)]
     {
-        fs::write(bin_dir.join(PNPM_SHIM_CMD_NAME), build_pnpm_cmd_shim(&app_dir))
-            .map_err(|e| format!("write private pnpm cmd failed: {e}"))?;
-        fs::write(bin_dir.join(PNPM_SHIM_PS1_NAME), build_pnpm_ps1_shim(&app_dir))
-            .map_err(|e| format!("write private pnpm ps1 failed: {e}"))?;
+        fs::write(
+            bin_dir.join(PNPM_SHIM_CMD_NAME),
+            build_pnpm_cmd_shim(&app_dir),
+        )
+        .map_err(|e| format!("write private pnpm cmd failed: {e}"))?;
+        fs::write(
+            bin_dir.join(PNPM_SHIM_PS1_NAME),
+            build_pnpm_ps1_shim(&app_dir),
+        )
+        .map_err(|e| format!("write private pnpm ps1 failed: {e}"))?;
     }
     #[cfg(not(windows))]
     {
@@ -607,16 +619,16 @@ mod tests {
 
     #[test]
     fn foreign_file_detection() {
-        let dir = std::env::temp_dir().join(format!(
-            "mir3-shim-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("mir3-shim-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
         let user_core = dir.join(if cfg!(windows) { "mir3.cmd" } else { "mir3" });
         std::fs::write(&user_core, "#!/bin/sh\necho my own mir3\n").unwrap();
-        assert!(is_foreign_file(&user_core), "user file must be treated as foreign");
+        assert!(
+            is_foreign_file(&user_core),
+            "user file must be treated as foreign"
+        );
 
         // 本应用生成的 shim -> 不是 foreign，可覆盖
         #[cfg(not(windows))]
@@ -624,7 +636,10 @@ mod tests {
         #[cfg(windows)]
         let generated = build_cmd_shim(&sample_app_dir(), &sample_dsh_home());
         std::fs::write(&user_core, generated).unwrap();
-        assert!(!is_foreign_file(&user_core), "generated shim must not be foreign");
+        assert!(
+            !is_foreign_file(&user_core),
+            "generated shim must not be foreign"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

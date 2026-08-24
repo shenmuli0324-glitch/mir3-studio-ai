@@ -2,8 +2,9 @@ name: Build & Release
 
 on:
   # 正式发布：推送 v* tag 触发（先由 changelogithub 生成 changelog 并创建 release，再并行打包上传产物）
-  # git tag -a v0.1.0 -m "release: MIR3 Studio AI v0.1.0"
-  # git push origin v0.1.0
+  # pnpm version:bump -- patch
+  # git tag -a "v$(node -p "require('./package.json').version")" -m "release: MIR3 Studio AI"
+  # git push origin --tags
   push:
     tags:
       - 'v*'
@@ -198,6 +199,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 手动构建用于收集目标平台验收证据；正式 tag 构建没有该豁免，
+          # runtime-baseline.lock.json 中非 approved 平台会直接阻断发布。
+          MIR3_BASELINE_ALLOW_UNVALIDATED: '1'
           TAURI_BUNDLE_TARGETS: ${{ matrix.platform == 'ubuntu-22.04' && 'appimage,deb' || 'all' }}
         with:
           tagName: ${{ format('test-{0}-{1}', github.ref_name, github.run_number) }}

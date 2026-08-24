@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MIR3 Studio AI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "ai.mir3.studio",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm sidecar:dev && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm release:check && pnpm baseline:build && pnpm sidecar:build && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,20 +26,31 @@
       "icons/mir3-studio-ai/icon.ico",
       "icons/mir3-studio-ai/icon.png"
     ],
-    "resources": ["resources/**/*"],
+    "resources": [
+      "resources/**/*"
+    ],
+    "externalBin": [
+      "binaries/mir3-mcp"
+    ],
     "licenseFile": "licenses/INSTALLER-LICENSE.txt",
     "category": "DeveloperTool",
     "copyright": "Copyright © 2026 MIR3 Studio AI contributors",
     "windows": {
       "nsis": {
         "template": "templates/installer.nsi",
-        "languages": ["English", "SimpChinese"],
+        "languages": [
+          "English",
+          "SimpChinese"
+        ],
         "displayLanguageSelector": false,
         "installerIcon": "icons/mir3-studio-ai/icon.ico",
         "uninstallerIcon": "icons/mir3-studio-ai/icon.ico"
       },
       "wix": {
-        "language": ["en-US", "zh-CN"]
+        "language": [
+          "en-US",
+          "zh-CN"
+        ]
       }
     },
     "shortDescription": "AI development workspace for MIR3 engine projects",

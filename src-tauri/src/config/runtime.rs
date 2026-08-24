@@ -6,8 +6,8 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use super::constants::*;
 use super::format::get_dsh_service_url;
-use super::{detect_region, Region};
 use super::utils::search_node_binary;
+use super::{detect_region, Region};
 
 /// 获取 App Data 基础目录
 pub fn get_base_dir<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
@@ -38,7 +38,12 @@ pub fn get_node_download_url() -> Result<String, String> {
         _ => return Err(format!("Unsupported platform: {} {}", os, arch)),
     };
 
-    Ok(format!("{}/{}/{}", node_base_url(detect_region()), NODE_VERSION, filename))
+    Ok(format!(
+        "{}/{}/{}",
+        node_base_url(detect_region()),
+        NODE_VERSION,
+        filename
+    ))
 }
 
 /// 打包的 MIR3 AI Core 兼容发行版下载前缀：恒为 GitHub Release 官方直连，
@@ -92,8 +97,10 @@ pub fn mirror_download_url(asset_url: &str) -> String {
 /// `releases/download/<tag>/`，镜像/直连与平台文件名逻辑与最新版完全一致
 /// （GitHub 的 tag 下载路径是固定的 release 资产地址，可被确定性推导）。
 pub fn get_dsh_download_url_for_tag(tag: &str) -> Result<String, String> {
-    let base = dsh_core_base_url()
-        .replace("releases/latest/download/", &format!("releases/download/{tag}/"));
+    let base = dsh_core_base_url().replace(
+        "releases/latest/download/",
+        &format!("releases/download/{tag}/"),
+    );
     Ok(format!("{}{}", base, dsh_pkg_asset_filename()?))
 }
 
@@ -158,7 +165,10 @@ fn node_version_output(node: &Path) -> Option<std::process::Output> {
     }
     #[cfg(not(windows))]
     {
-        std::process::Command::new(node).arg("--version").output().ok()
+        std::process::Command::new(node)
+            .arg("--version")
+            .output()
+            .ok()
     }
 }
 
@@ -215,7 +225,9 @@ pub fn get_node_install_path(app_handle: &tauri::AppHandle) -> PathBuf {
 
 /// MIR3 AI Core 发行版安装目录
 pub fn get_dsh_install_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
-    get_base_dir(app_handle).join("dependencies").join(DSH_CORE_DIR)
+    get_base_dir(app_handle)
+        .join("dependencies")
+        .join(DSH_CORE_DIR)
 }
 
 /// dsh CLI 入口
@@ -225,7 +237,9 @@ pub fn get_dsh_binary_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
 
 /// pnpm 安装目录
 pub fn get_pnpm_install_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
-    get_base_dir(app_handle).join("dependencies").join(PNPM_CORE_DIR)
+    get_base_dir(app_handle)
+        .join("dependencies")
+        .join(PNPM_CORE_DIR)
 }
 
 /// 捆绑 pnpm CLI 入口（纯 JS 发行，用 node 运行）
@@ -243,7 +257,11 @@ fn pnpm_base_url(region: Region) -> &'static str {
 
 /// pnpm 下载地址（纯 JS 发行，全平台同一 URL）
 pub fn get_pnpm_download_url() -> String {
-    format!("{}pnpm-{}.tgz", pnpm_base_url(detect_region()), PNPM_VERSION)
+    format!(
+        "{}pnpm-{}.tgz",
+        pnpm_base_url(detect_region()),
+        PNPM_VERSION
+    )
 }
 
 /// MIR3 AI Core 发行版清单路径
@@ -359,7 +377,11 @@ pub fn get_dsh_version<R: Runtime>(app_handle: &AppHandle<R>) -> Option<String> 
         .get("dependencies")
         .and_then(|deps| deps.get(super::core_compat::CORE_PACKAGE))
         .and_then(|value| value.as_str())
-        .map(|value| value.trim_start_matches(['^', '~', '=', '>', '<']).to_string())
+        .map(|value| {
+            value
+                .trim_start_matches(['^', '~', '=', '>', '<'])
+                .to_string()
+        })
 }
 
 /// 侧边栏展示的运行时/版本/诊断信息
@@ -405,8 +427,16 @@ mod tests {
         // 无论哪个地域，首选源都是 GitHub 官方直连；镜像仅作兜底
         let urls = get_dsh_download_urls().expect("dsh urls");
         assert_eq!(urls.len(), 2);
-        assert!(urls[0].starts_with(crate::config::core_compat::CORE_RELEASE_BASE), "first source must be official GitHub: {}", urls[0]);
-        assert!(urls[1].starts_with(DSH_MIRROR_PREFIX), "fallback must be ghfast mirror: {}", urls[1]);
+        assert!(
+            urls[0].starts_with(crate::config::core_compat::CORE_RELEASE_BASE),
+            "first source must be official GitHub: {}",
+            urls[0]
+        );
+        assert!(
+            urls[1].starts_with(DSH_MIRROR_PREFIX),
+            "fallback must be ghfast mirror: {}",
+            urls[1]
+        );
         // 两个源的文件名一致（镜像只是换前缀，解压类型判定不受影响）
         let name = |u: &str| u.rsplit('/').next().unwrap_or("").to_string();
         assert_eq!(name(&urls[0]), name(&urls[1]));

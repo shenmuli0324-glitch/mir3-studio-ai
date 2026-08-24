@@ -1,5 +1,5 @@
 import { ArrowRotateRight, ArrowUpRightFromSquare, ChevronRight, CircleInfo, Copy, Folder, Power, TrashBin } from '@gravity-ui/icons'
-import { Button, Chip, Description, Input, Link, ListBox, Select, Spinner, Surface, Switch, Tooltip } from '@heroui/react'
+import { Button, Chip, Input, Link, ListBox, Select, Spinner, Surface, Tooltip } from '@heroui/react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
@@ -21,18 +21,9 @@ export interface RuntimeInfo {
   arch: string
 }
 
-export interface CliLinkStatus {
-  enabled: boolean
-  shim_exists: boolean
-  path_registered: boolean
-  user_core_preserved: boolean
-  bin_dir: string
-  shim_path: string
-}
 export interface AppConfig {
   port: number
   auto_start: boolean
-  cli_link_enabled: boolean
 }
 
 export function ConfigDebug() {
@@ -56,11 +47,6 @@ export function ConfigDebug() {
     },
   })
 
-  const { data: cliStatus, refetch: refreshCliStatus } = useQuery({
-    queryKey: ['cli_status'],
-    queryFn: () => invoke<CliLinkStatus>('get_cli_link_status'),
-  })
-
   const { data: logs, refetch: refreshLogs } = useQuery({
     queryKey: ['logs'],
     queryFn: () => invoke<string>('read_service_logs'),
@@ -72,13 +58,6 @@ export function ConfigDebug() {
       await invoke('clear_service_logs')
       await refreshLogs()
       toast(t('messages.logs_cleared'))
-    },
-  })
-
-  const { mutate: onToggleCliLink } = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      await invoke<AppConfig>('update_app_config', { cliLinkEnabled: enabled })
-      await refreshCliStatus()
     },
   })
 
@@ -226,40 +205,6 @@ export function ConfigDebug() {
       </div>
       <div className="border-t border-line/30" />
       <div className="space-y-1.5">
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-ink">{t('ui.cli_link_enabled')}</span>
-            <Switch
-              isSelected={cliStatus?.enabled ?? false}
-              onChange={onToggleCliLink}
-              aria-label={t('ui.cli_link_enabled')}
-            >
-              <Switch.Content>
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-              </Switch.Content>
-            </Switch>
-          </div>
-          <If cond={cliStatus != null}>
-            <div className="flex flex-col">
-              <If
-                cond={!cliStatus?.user_core_preserved}
-                else={(
-                  <Description className="text-[10px] text-muted/70">
-                    {t('ui.cli_link_user_core_preserved')}
-                  </Description>
-                )}
-              >
-                <Description className="text-[10px] text-muted/70">{cliStatus?.bin_dir}</Description>
-                <Description className="text-[10px] text-muted/70">
-                  {t('ui.cli_link_hint')}
-                </Description>
-              </If>
-            </div>
-          </If>
-        </div>
-
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-ink">{t('ui.port')}</span>
           <div className="flex items-center gap-1.5">

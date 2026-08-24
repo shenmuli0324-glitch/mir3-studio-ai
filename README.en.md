@@ -8,15 +8,18 @@
 
 <p align="center"><samp><strong>English</strong> · <a href="./README.md">中文</a></samp></p>
 
-> Version `0.1.0` establishes the independent product, data, and release identity. It adds no new MIR3-specific features; existing core, plugin, profile, and update capabilities remain available.
+> Version `0.1.1` opens projects created by 996 Project Manager and adds domain indexing, Skills, MCP, and a safe Draft review workflow.
+
+MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastructure foundations. On top of its plugin architecture, we independently develop the project model, knowledge system, development toolchain, and AI workflows for the 996 MIR3 ecosystem.
 
 ## Capabilities
 
 - Native Tauri 2 + React desktop shell for Windows, macOS, and Linux.
-- Automatic first-run preparation of Node.js and MIR3 AI Core.
+- Installers carry a locked Node.js, pnpm, and MIR3 AI Core baseline for the target platform, so first launch does not download the Core from GitHub.
 - Core version downloads, switching, health checks, and process lifecycle management.
 - Isolated profiles, plugin management, and recovery workflows.
-- One public command, `mir3`; plugin pnpm tooling stays private to the app.
+- 996 project recognition, external indexing, governed knowledge, Draft previews, and version snapshots.
+- A MIR3 Skill and eight domain MCP tools reuse existing Harness file, editor, and session capabilities.
 - Self-updates exclusively from MIR3 Studio AI GitHub Releases.
 
 ## Public identity
@@ -25,16 +28,15 @@
 | --- | --- |
 | App | MIR3 Studio AI |
 | Core display name | MIR3 AI Core |
-| Version | 0.1.0 |
+| Version | 0.1.1 |
 | Tauri identifier | `ai.mir3.studio` |
-| CLI | `mir3` |
 | Data directory | `~/.mir3-studio-ai` |
 | Development data directory | `~/.mir3-studio-ai.dev` |
 | Data override | `MIR3_STUDIO_HOME` |
 
 ## Quick start
 
-Download the installer for your platform from [GitHub Releases](https://github.com/shenmuli0324-glitch/mir3-studio-ai/releases). The first launch needs network access to prepare the runtime; afterward the core service runs locally on the loopback interface.
+Download the installer for your platform from [GitHub Releases](https://github.com/shenmuli0324-glitch/mir3-studio-ai/releases). First launch verifies and installs the bundled runtime baseline; network access is only needed for later update checks.
 
 ## Development
 
@@ -43,7 +45,7 @@ corepack pnpm install
 corepack pnpm tauri dev
 ```
 
-See [Development](./docs/DEVELOPMENT.md) for details.
+See [Development](./docs/DEVELOPMENT.md), the [runtime baseline policy](./docs/runtime-baseline-policy.md), and the product [CHANGELOG](./CHANGELOG.md).
 
 ## Data and privacy
 

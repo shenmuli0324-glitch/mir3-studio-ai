@@ -139,7 +139,10 @@ fn find_token<'a>(s: &'a str, marker: &str, end_marker: &str) -> Option<&'a str>
 /// 不走 api.github.com，故不受未认证限流约束。
 async fn fetch_latest_meta() -> Result<(String, String), String> {
     let body = http_client()?
-        .get(format!("{}/releases.atom", config::brand::get().update_repo))
+        .get(format!(
+            "{}/releases.atom",
+            config::brand::get().update_repo
+        ))
         .send()
         .await
         .map_err(|e| format!("UPDATE_ATOM: {e}"))?
@@ -170,7 +173,10 @@ fn extract_asset_names(html: &str, tag: &str) -> Vec<String> {
     let mut start = 0;
     while let Some(pos) = html[start..].find(&needle) {
         let after = start + pos + needle.len();
-        let end = html[after..].find('"').map(|e| after + e).unwrap_or(html.len());
+        let end = html[after..]
+            .find('"')
+            .map(|e| after + e)
+            .unwrap_or(html.len());
         names.push(html[after..end].to_string());
         start = end;
     }
@@ -182,7 +188,10 @@ fn extract_asset_names(html: &str, tag: &str) -> Vec<String> {
 /// 不走 api.github.com，故不受未认证限流约束。
 async fn fetch_asset_names(tag: &str) -> Result<Vec<String>, String> {
     let body = http_client()?
-        .get(format!("{}/releases/expanded_assets/{tag}", config::brand::get().update_repo))
+        .get(format!(
+            "{}/releases/expanded_assets/{tag}",
+            config::brand::get().update_repo
+        ))
         .send()
         .await
         .map_err(|e| format!("UPDATE_ASSETS: {e}"))?
@@ -308,7 +317,8 @@ async fn download_from_source(
     let mut stream = res.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| format!("UPDATE_DOWNLOAD: {e}"))?;
-        file.write_all(&chunk).map_err(|e| format!("UPDATE_FILE: {e}"))?;
+        file.write_all(&chunk)
+            .map_err(|e| format!("UPDATE_FILE: {e}"))?;
         downloaded += chunk.len() as u64;
         let pct = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
@@ -432,7 +442,10 @@ pub struct DesktopAboutInfo {
 /// 关于信息：版本来自编译常量，发布时间每次实时查询最新 Release（不缓存），
 /// 查询失败则留空、不影响展示。
 pub async fn about() -> DesktopAboutInfo {
-    let published_at = fetch_latest_meta().await.map(|(_, p)| p).unwrap_or_default();
+    let published_at = fetch_latest_meta()
+        .await
+        .map(|(_, p)| p)
+        .unwrap_or_default();
     DesktopAboutInfo {
         version: current_version(),
         published_at,
@@ -542,7 +555,10 @@ mod tests {
         let s = r#"<link rel="alternate" href="https://github.com/x/releases/tag/v0.1.1"/>"#;
         assert_eq!(find_token(s, "releases/tag/", "\""), Some("v0.1.1"));
         let s2 = "<updated>2026-08-19T09:27:38Z</updated>";
-        assert_eq!(find_token(s2, "<updated>", "</updated>"), Some("2026-08-19T09:27:38Z"));
+        assert_eq!(
+            find_token(s2, "<updated>", "</updated>"),
+            Some("2026-08-19T09:27:38Z")
+        );
         assert_eq!(find_token("no marker", "releases/tag/", "\""), None);
     }
 

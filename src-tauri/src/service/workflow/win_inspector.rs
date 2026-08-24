@@ -85,8 +85,7 @@ mod imp {
     /// 写入一个文件及其父目录，返回错误信息。
     fn write_file(path: &Path, content: &str) -> Result<(), String> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create parent dir failed: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("create parent dir failed: {e}"))?;
         }
         fs::write(path, content).map_err(|e| format!("write {} failed: {e}", path.display()))
     }
@@ -126,8 +125,7 @@ mod imp {
         }
         seq.push(plugin_insert_entry());
 
-        let out = serde_yaml::to_string(&doc)
-            .map_err(|e| format!("PATCH_RENDER_FAILED: {e}"))?;
+        let out = serde_yaml::to_string(&doc).map_err(|e| format!("PATCH_RENDER_FAILED: {e}"))?;
         write_file(&patch_path, &out).map_err(|e| format!("PATCH_WRITE_FAILED: {e}"))
     }
 
@@ -202,8 +200,8 @@ mod imp {
         if content.trim().is_empty() {
             return Ok(serde_yaml::Value::Sequence(Vec::new()));
         }
-        let doc: serde_yaml::Value = serde_yaml::from_str(content)
-            .map_err(|e| format!("PATCH_PARSE_FAILED: {e}"))?;
+        let doc: serde_yaml::Value =
+            serde_yaml::from_str(content).map_err(|e| format!("PATCH_PARSE_FAILED: {e}"))?;
         match &doc {
             serde_yaml::Value::Sequence(_) => Ok(doc),
             serde_yaml::Value::Null => Ok(serde_yaml::Value::Sequence(Vec::new())),
@@ -220,8 +218,8 @@ mod imp {
 
     /// 生成本插件的顶层 `- insert:` 挂载元素（解析自 `PATCH_ENTRY` 模板）。
     fn plugin_insert_entry() -> serde_yaml::Value {
-        let seq: serde_yaml::Value = serde_yaml::from_str(PATCH_ENTRY)
-            .expect("PATCH_ENTRY must remain valid YAML");
+        let seq: serde_yaml::Value =
+            serde_yaml::from_str(PATCH_ENTRY).expect("PATCH_ENTRY must remain valid YAML");
         match seq {
             serde_yaml::Value::Sequence(mut s) => s.remove(0),
             other => other,

@@ -30,6 +30,7 @@ pub(crate) const RECOVERY_REQUIRED_EVENT: &str = "plugin-recovery-required";
 /// 核心 bundle / 官方包：无论如何不可被「修复卸载」删除。
 fn is_core_package(name: &str) -> bool {
     name == "dshmarket"
+        || super::system::is_system_plugin(name)
         || crate::config::core_compat::WEB_PROFILE_BUNDLES.contains(&name)
         || crate::config::core_compat::is_official_package(name)
 }
@@ -97,7 +98,8 @@ fn extract_plugin_refs(text: &str) -> Vec<String> {
         }
     }
     // 「Failed to load plugins」错误卡片：紧随其后的若干行通常是包名。
-    for m in Regex::new(r"(?m)^Failed to load plugins\s*$").expect("literal")
+    for m in Regex::new(r"(?m)^Failed to load plugins\s*$")
+        .expect("literal")
         .find_iter(text)
     {
         let rest = &text[m.end()..];
@@ -133,8 +135,7 @@ fn extract_slot_conflict(text: &str) -> Option<String> {
 
 /// 对日志文本分类失败原因，返回（判别键, 动态详情）。
 fn classify_reason(text: &str) -> (String, String) {
-    let dup_route =
-        Regex::new(r#"duplicate prefix route\s+["']([^"']+)["']"#).expect("literal");
+    let dup_route = Regex::new(r#"duplicate prefix route\s+["']([^"']+)["']"#).expect("literal");
     if let Some(c) = dup_route.captures(text) {
         let route = c.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
         return ("duplicate_route".into(), route);
@@ -142,9 +143,7 @@ fn classify_reason(text: &str) -> (String, String) {
     if let Some(entry) = extract_duplicate_loader_entry(text) {
         return ("duplicate_loader_entry".into(), entry);
     }
-    if let Some(re) = Regex::new(r#"cannot resolve profile bundle\s+["']?([^"'\n]+)["']?"#)
-        .ok()
-    {
+    if let Some(re) = Regex::new(r#"cannot resolve profile bundle\s+["']?([^"'\n]+)["']?"#).ok() {
         if let Some(c) = re.captures(text) {
             return (
                 "cannot_resolve_bundle".into(),
@@ -153,13 +152,18 @@ fn classify_reason(text: &str) -> (String, String) {
         }
     }
     if text.contains("declares no dsh.bundle") {
-        let pkg = extract_plugin_refs(text).into_iter().next().unwrap_or_default();
+        let pkg = extract_plugin_refs(text)
+            .into_iter()
+            .next()
+            .unwrap_or_default();
         return ("no_dsh_bundle".into(), pkg);
     }
     if let Some(slot) = extract_slot_conflict(text) {
         return ("slot_conflict".into(), slot);
     }
-    if text.contains("failed to import loader entry") || text.contains("failed to apply loader entry") {
+    if text.contains("failed to import loader entry")
+        || text.contains("failed to apply loader entry")
+    {
         return ("load_failed".into(), String::new());
     }
     ("unknown".into(), String::new())
@@ -235,9 +239,7 @@ fn bundle_owns_package(profile: &Path, bundle: &str, package: &str) -> bool {
     let Some(meta) = read_plugin_meta(&dir) else {
         return false;
     };
-    if meta.deps.iter().any(|d| d == package)
-        || meta.optional_deps.iter().any(|d| d == package)
-    {
+    if meta.deps.iter().any(|d| d == package) || meta.optional_deps.iter().any(|d| d == package) {
         return true;
     }
     if let Some(patch) = &meta.patch_path {
@@ -262,7 +264,12 @@ fn plugin_references_packages(profile: &Path, plugin: &str, packages: &HashSet<S
             return true;
         }
     }
-    for file in ["cordis.patch.yml", "index.js", "lib/index.js", "dist/index.js"] {
+    for file in [
+        "cordis.patch.yml",
+        "index.js",
+        "lib/index.js",
+        "dist/index.js",
+    ] {
         if let Ok(content) = fs::read_to_string(dir.join(file)) {
             if packages.iter().any(|p| content.contains(p)) {
                 return true;
@@ -284,8 +291,11 @@ fn plugin_declares_loader_entry(profile: &Path, plugin: &str, entry_id: &str) ->
     let Ok(content) = fs::read_to_string(dir.join(patch)) else {
         return false;
     };
-    let re = Regex::new(&format!(r#"^\s*-\s+id:\s*["']?{}["']?(?:\s*(?:#.*)?)?$"#,
-        regex::escape(entry_id))).ok();
+    let re = Regex::new(&format!(
+        r#"^\s*-\s+id:\s*["']?{}["']?(?:\s*(?:#.*)?)?$"#,
+        regex::escape(entry_id)
+    ))
+    .ok();
     re.map(|re| re.is_match(&content)).unwrap_or(false)
 }
 
@@ -415,8 +425,9 @@ fn resolve_recovery_plugins(
         if matched.len() == 1 {
             return matched.into_iter().map(|s| s.clone()).collect();
         }
-        let providers: HashSet<String> =
-            packages_providing_slot(&profile, slot).into_iter().collect();
+        let providers: HashSet<String> = packages_providing_slot(&profile, slot)
+            .into_iter()
+            .collect();
         if !providers.is_empty() {
             let owners: Vec<&String> = roots
                 .iter()
@@ -438,7 +449,12 @@ pub fn detect(app_handle: &AppHandle, log_lines: &[String]) -> PluginRecoveryInf
     let duplicate_entry = extract_duplicate_loader_entry(&text);
     let slot_conflict = extract_slot_conflict(&text);
     let (reason, detail) = classify_reason(&text);
-    let plugins = resolve_recovery_plugins(app_handle, &refs, duplicate_entry.as_deref(), slot_conflict.as_deref());
+    let plugins = resolve_recovery_plugins(
+        app_handle,
+        &refs,
+        duplicate_entry.as_deref(),
+        slot_conflict.as_deref(),
+    );
     let raw_error = refs_text(&text);
     PluginRecoveryInfo {
         plugins,
@@ -473,7 +489,10 @@ fn refs_text(text: &str) -> String {
 /// 从 manifest 中移除指定插件（`dependencies` + `dsh.profile.bundles`），返回是否有改动。
 fn remove_plugin_from_manifest(manifest: &mut serde_json::Value, id: &str) -> bool {
     let mut modified = false;
-    if let Some(deps) = manifest.get_mut("dependencies").and_then(|d| d.as_object_mut()) {
+    if let Some(deps) = manifest
+        .get_mut("dependencies")
+        .and_then(|d| d.as_object_mut())
+    {
         if deps.remove(id).is_some() {
             modified = true;
         }
@@ -502,10 +521,18 @@ fn remove_plugin_dir(profile: &Path, id: &str) {
             log::warn!("failed to remove plugin dir {}: {e}", dir.display());
         }
     }
-    if let Some(scope) = id.starts_with('@').then(|| id.split('/').next().unwrap_or_default()) {
+    if let Some(scope) = id
+        .starts_with('@')
+        .then(|| id.split('/').next().unwrap_or_default())
+    {
         if !scope.is_empty() && scope != id {
             let scope_dir = node_modules.join(scope);
-            if scope_dir.is_dir() && scope_dir.read_dir().map(|mut d| d.next().is_none()).unwrap_or(false) {
+            if scope_dir.is_dir()
+                && scope_dir
+                    .read_dir()
+                    .map(|mut d| d.next().is_none())
+                    .unwrap_or(false)
+            {
                 let _ = fs::remove_dir_all(&scope_dir);
             }
         }
@@ -544,9 +571,9 @@ fn strip_cordis_patch_for(profile: &Path, id: &str) {
 /// 一个 patch 条目是否「针对」目标插件：顶层 id 字段或任意字段值等于该包名。
 fn patch_entry_targets(entry: &serde_yaml::Value, id: &str) -> bool {
     match entry {
-        serde_yaml::Value::Mapping(map) => map.iter().any(|(k, v)| {
-            k.as_str() == Some(id) || v.as_str() == Some(id)
-        }),
+        serde_yaml::Value::Mapping(map) => map
+            .iter()
+            .any(|(k, v)| k.as_str() == Some(id) || v.as_str() == Some(id)),
         serde_yaml::Value::String(s) => s == id,
         _ => false,
     }
@@ -564,10 +591,10 @@ pub fn uninstall(app_handle: &AppHandle, id: &str) -> Result<(), String> {
     if !manifest_path.exists() {
         return Err("PLUGIN_RECOVERY_NO_MANIFEST: profile package.json missing".to_string());
     }
-    let content = fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("PLUGIN_RECOVERY_READ: {e}"))?;
-    let mut manifest: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("PLUGIN_RECOVERY_PARSE: {e}"))?;
+    let content =
+        fs::read_to_string(&manifest_path).map_err(|e| format!("PLUGIN_RECOVERY_READ: {e}"))?;
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("PLUGIN_RECOVERY_PARSE: {e}"))?;
 
     let modified = remove_plugin_from_manifest(&mut manifest, id);
     if modified {
@@ -638,7 +665,10 @@ mod tests {
         let route_log = r#"duplicate prefix route "/sidebar/api""#;
         assert_eq!(classify_reason(route_log).0, "duplicate_route");
         let entry_log = "duplicate loader entry id: \"dshSidebarApi\"";
-        assert_eq!(extract_duplicate_loader_entry(entry_log).as_deref(), Some("dshSidebarApi"));
+        assert_eq!(
+            extract_duplicate_loader_entry(entry_log).as_deref(),
+            Some("dshSidebarApi")
+        );
         let slot_log = r#"single slot "sidebar" already has a registration"#;
         assert_eq!(extract_slot_conflict(slot_log).as_deref(), Some("sidebar"));
     }
@@ -657,7 +687,10 @@ mod tests {
         assert!(manifest["dependencies"].get("dsh-better-sidebar").is_none());
         assert!(manifest["dependencies"].get("dshmarker").is_some());
         assert_eq!(
-            manifest["dsh"]["profile"]["bundles"].as_array().unwrap().len(),
+            manifest["dsh"]["profile"]["bundles"]
+                .as_array()
+                .unwrap()
+                .len(),
             1
         );
     }

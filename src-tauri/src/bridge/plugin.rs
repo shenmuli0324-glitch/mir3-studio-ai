@@ -81,6 +81,9 @@ pub fn get_dsh_plugins(app_handle: AppHandle) -> Vec<plugin::DshPlugin> {
 /// 进程输出通过 `preinstall-log` 事件实时推送。
 #[tauri::command]
 pub async fn update_dsh_plugin(app_handle: AppHandle, id: String) -> Result<(), String> {
+    if plugin::system::is_system_plugin(&id) {
+        return Err("PLUGIN_SYSTEM_MANAGED: MIR3 Core Plugin is managed by Studio".to_string());
+    }
     plugin::update(&app_handle, &id).await?;
     plugin::watch::force_emit(&app_handle);
     Ok(())
@@ -90,6 +93,9 @@ pub async fn update_dsh_plugin(app_handle: AppHandle, id: String) -> Result<(), 
 /// 进程输出通过 `preinstall-log` 事件实时推送。
 #[tauri::command]
 pub async fn remove_dsh_plugin(app_handle: AppHandle, id: String) -> Result<(), String> {
+    if plugin::system::is_system_plugin(&id) {
+        return Err("PLUGIN_SYSTEM_MANAGED: MIR3 Core Plugin cannot be removed".to_string());
+    }
     plugin::remove(&app_handle, &id).await?;
     plugin::watch::force_emit(&app_handle);
     Ok(())
@@ -104,7 +110,12 @@ pub fn report_plugin_error(
     error: String,
     action: Option<String>,
 ) -> Result<(), String> {
-    plugin::errors::record(&app_handle, &id, action.as_deref().unwrap_or("runtime"), &error)?;
+    plugin::errors::record(
+        &app_handle,
+        &id,
+        action.as_deref().unwrap_or("runtime"),
+        &error,
+    )?;
     plugin::watch::force_emit(&app_handle);
     // 运行期异常：直接推送修复界面（应用仍在运行，前端以醒目对话框呈现）。
     let info = plugin::PluginRecoveryInfo {
@@ -135,6 +146,9 @@ pub fn detect_plugin_recovery(
 /// 「插件异常修复」场景；前端随后 `restart()` 重启并重新检测。
 #[tauri::command]
 pub fn recover_plugin(app_handle: AppHandle, id: String) -> Result<(), String> {
+    if plugin::system::is_system_plugin(&id) {
+        return Err("PLUGIN_SYSTEM_MANAGED: MIR3 Core Plugin cannot be removed".to_string());
+    }
     plugin::uninstall_recovery(&app_handle, &id)?;
     plugin::watch::force_emit(&app_handle);
     Ok(())

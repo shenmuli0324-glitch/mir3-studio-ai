@@ -1,39 +1,54 @@
-import { useEffect } from 'react'
+import type { StudioShellState, StudioView } from './studio-types'
+import { useEffect, useRef, useState } from 'react'
+import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
-import { PluginRecovery } from '../components/plugin-recovery'
-import { useDshTheme } from '../hooks/use-dsh-theme'
-import { store } from '../store'
+import { PluginRecovery } from '@/components/plugin-recovery'
+import { useMir3Projects } from '@/features/projects/use-mir3-projects'
+import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
+import { useDshTheme } from '@/hooks/use-dsh-theme'
+import { store } from '@/store'
+import { StudioViewContent } from '@/views'
 import { DesktopUpdater } from './components/desktop-updater'
 import { DownloadToast } from './components/download-toast-trigger'
 import { HarnessUpdater } from './components/harness-updater'
-import { Webview } from './components/webview'
+import { StartupGate } from './components/startup-gate'
+import { StudioSidebar } from './components/studio-sidebar'
+import { StudioTopbar } from './components/studio-topbar'
+import { DEFAULT_STUDIO_VIEW, harnessSurfaceFor, isHarnessView } from './studio-types'
 import '../i18n'
-/**
- * 应用根布局：只负责首次启动与整体壳层结构。
- * 业务状态与操作方法全部收敛到 valtio-define store，
- * 各子组件自行订阅 store，不再通过 props 透传回调与状态。
- * 弹出层（关于 / 检查更新 / 应用配置 / 插件异常修复）统一由 overlastic 命令式打开，
- * 仅在需要时挂载，不常驻渲染。
- */
+
 export function App() {
   useDshTheme()
-  const { status } = useStore(store.harness)
-  // 首次挂载自动启动 harness（store 内部对 StrictMode 重复挂载去重）
+  const { status, recovery } = useStore(store.harness)
+  const { activeProject, selectWorkspace } = useMir3Projects()
+  const [shellState, setShellState] = useState<StudioShellState>({
+    activeView: DEFAULT_STUDIO_VIEW,
+    sidebarCollapsed: false,
+    project: null,
+  })
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const { activeView, sidebarCollapsed } = shellState
+  const harnessVisible = isHarnessView(activeView)
+  const harnessSurface = harnessSurfaceFor(activeView)
+
   useEffect(() => {
     store.harness.startup()
   }, [])
 
-  // 仅开发模式：快捷键预览「插件异常修复界面」，便于快速看到实际 UI（不影响生产构建）。
-  //   Ctrl+Shift+1 → 运行期异常对话框（应用仍在运行）
-  //   Ctrl+Shift+2 → 启动崩溃全屏恢复页
+  useEffect(() => {
+    // 项目数据来自 Tauri Query；同步进壳层状态以保证顶栏、页面和工作台使用同一快照。
+    // eslint-disable-next-line react/set-state-in-effect
+    setShellState(value => ({ ...value, project: activeProject }))
+  }, [activeProject])
+
   useEffect(() => {
     if (!import.meta.env.DEV)
       return
-    function onKeyDown(e: KeyboardEvent) {
-      if (!e.ctrlKey || !e.shiftKey)
+    function onKeyDown(event: KeyboardEvent) {
+      if (!event.ctrlKey || !event.shiftKey)
         return
-      if (e.code === 'Digit1') {
-        e.preventDefault()
+      if (event.code === 'Digit1') {
+        event.preventDefault()
         store.harness.setRuntimeRecovery({
           plugins: ['dsh-better-sidebar'],
           reason: 'slot_conflict',
@@ -41,8 +56,8 @@ export function App() {
           raw_error: 'Preview: dsh-better-sidebar reported a UI slot conflict.',
         })
       }
-      else if (e.code === 'Digit2') {
-        e.preventDefault()
+      else if (event.code === 'Digit2') {
+        event.preventDefault()
         store.harness.fail('Preview: plugin startup failure')
         store.harness.setRuntimeRecovery({
           plugins: ['dsh-better-sidebar'],
@@ -56,14 +71,59 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  function toggleSidebar() {
+    setShellState(value => ({ ...value, sidebarCollapsed: !value.sidebarCollapsed }))
+  }
+
+  function navigate(view: StudioView) {
+    setShellState(value => ({ ...value, activeView: view }))
+  }
+
+  function readyContent() {
+    if (harnessVisible)
+      return null
+    return <StudioViewContent view={activeView} project={shellState.project} />
+  }
+
   return (
-    <div className="flex h-screen w-screen">
-      <Webview />
-      {status === 'ready' && <HarnessUpdater />}
-      {status === 'ready' && <DownloadToast />}
-      {/* 运行期插件异常：应用仍在运行，弹醒目对话框（启动崩溃走 webview 的全屏恢复页） */}
-      {status === 'ready' && <PluginRecovery />}
+    <div className="flex h-screen w-screen flex-col bg-canvas">
+      <If
+        cond={status === 'ready'}
+        else={<StartupGate status={status} recoveryRequired={recovery.required} iframeRef={iframeRef} />}
+      >
+        <StudioTopbar
+          activeView={activeView}
+          sidebarCollapsed={sidebarCollapsed}
+          iframeRef={iframeRef}
+          showSidebarToggle
+          onToggleSidebar={toggleSidebar}
+          project={shellState.project}
+          onSelectWorkspace={() => {
+            if (shellState.project)
+              void selectWorkspace(shellState.project.id)
+          }}
+        />
+        <div className="flex min-h-0 flex-1">
+          <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} onNavigate={navigate} />
+          <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
+            <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
+            <div className={studioPageClass(activeView)}>{readyContent()}</div>
+          </main>
+        </div>
+      </If>
+      <If cond={status === 'ready'}>
+        <HarnessUpdater />
+        <DownloadToast />
+        <PluginRecovery />
+      </If>
       <DesktopUpdater />
     </div>
   )
+}
+
+function studioPageClass(view: StudioView): string {
+  const base = 'absolute inset-0 min-h-0 min-w-0'
+  if (isHarnessView(view))
+    return `${base} invisible pointer-events-none`
+  return `${base} visible`
 }

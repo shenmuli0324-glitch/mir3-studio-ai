@@ -1,8 +1,13 @@
 node_modules
 dist
 src-tauri/target
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
 src-tauri/gen
 src-tauri/resources/node
+src-tauri/resources/runtime-baseline/*
+!src-tauri/resources/runtime-baseline/.gitkeep
+.cache/mir3-runtime
 *.log
 .DS_Store
 .idea

@@ -132,7 +132,10 @@ pub(crate) fn preinstall_pending(app_handle: &AppHandle) -> bool {
     if !setting.preinstall_done {
         return true;
     }
-    match (setting.preset_hash.as_deref(), current_preset_hash(app_handle)) {
+    match (
+        setting.preset_hash.as_deref(),
+        current_preset_hash(app_handle),
+    ) {
         (None, Some(_)) => true,
         (Some(prev), Some(cur)) => prev != cur,
         _ => false,
@@ -168,8 +171,7 @@ mod tests {
     #[test]
     fn preset_json_ids_are_unique() {
         let presets = load_presets_for_test();
-        let ids: std::collections::HashSet<&str> =
-            presets.iter().map(|p| p.id.as_str()).collect();
+        let ids: std::collections::HashSet<&str> = presets.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids.len(), presets.len(), "preset ids must be unique");
     }
 
