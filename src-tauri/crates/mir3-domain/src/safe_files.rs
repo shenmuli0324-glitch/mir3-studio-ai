@@ -3,6 +3,7 @@ use calamine::{Reader, Xls};
 use encoding_rs::GB18030;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use similar::{DiffTag, TextDiff};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
@@ -610,53 +611,65 @@ fn splice_document(
     if detected.content != original {
         return Err("SAFE_TEXT_CONTENT_CONFLICT: editor content is stale".to_string());
     }
-    let prefix_chars = original
-        .chars()
-        .zip(updated.chars())
-        .take_while(|(left, right)| left == right)
-        .count();
-    let max_suffix = original.chars().count().min(updated.chars().count()) - prefix_chars;
-    let suffix_chars = original
-        .chars()
-        .rev()
-        .zip(updated.chars().rev())
-        .take(max_suffix)
-        .take_while(|(left, right)| left == right)
-        .count();
-    let old_start = char_byte_index(original, prefix_chars);
-    let old_end = char_byte_index(original, original.chars().count() - suffix_chars);
-    let new_start = char_byte_index(updated, prefix_chars);
-    let new_end = char_byte_index(updated, updated.chars().count() - suffix_chars);
-    let prefix = &original[..old_start];
-    let old_segment = &original[old_start..old_end];
-    let inserted = normalize_newlines(
-        &updated[new_start..new_end],
-        detected.newline.as_deref(),
-        detected.mixed_newlines,
-        explicit_newline,
-    )?;
-    let prefix_bytes = encode_as(prefix, detected.encoding)?;
-    let old_bytes = encode_as(old_segment, detected.encoding)?;
-    let new_bytes = encode_as(&inserted, detected.encoding)?;
     let payload = &bytes[detected.bom.len()..];
-    let end = prefix_bytes.len().saturating_add(old_bytes.len());
-    if end > payload.len()
-        || payload[..prefix_bytes.len()] != prefix_bytes
-        || payload[prefix_bytes.len()..end] != old_bytes
+    let old_char_offsets = encoded_char_offsets(original, detected.encoding)?;
+    if old_char_offsets.last().copied() != Some(payload.len())
+        || encode_as(original, detected.encoding)? != payload
     {
         return Err("SAFE_TEXT_BYTE_STABILITY_FAILED: encoded edit range is ambiguous".to_string());
     }
-    let mut output =
-        Vec::with_capacity(bytes.len() + new_bytes.len().saturating_sub(old_bytes.len()));
+
+    let mut output = Vec::with_capacity(bytes.len().max(updated.len()));
     output.extend_from_slice(&detected.bom);
-    output.extend_from_slice(&payload[..prefix_bytes.len()]);
-    output.extend_from_slice(&new_bytes);
-    output.extend_from_slice(&payload[end..]);
+    for operation in TextDiff::from_chars(original, updated).ops() {
+        let old_range = operation.old_range();
+        let new_range = operation.new_range();
+        if operation.tag() == DiffTag::Equal {
+            output.extend_from_slice(
+                &payload[old_char_offsets[old_range.start]..old_char_offsets[old_range.end]],
+            );
+            continue;
+        }
+        let new_start = char_byte_index(updated, new_range.start);
+        let new_end = char_byte_index(updated, new_range.end);
+        let inserted = normalize_newlines(
+            &updated[new_start..new_end],
+            detected.newline.as_deref(),
+            detected.mixed_newlines,
+            explicit_newline,
+        )?;
+        output.extend_from_slice(&encode_as(&inserted, detected.encoding)?);
+    }
     let verified = detect_text(&output)?;
     if verified.encoding != detected.encoding || verified.bom != detected.bom {
         return Err("SAFE_TEXT_FORMAT_CHANGED: encoding or BOM changed".to_string());
     }
     Ok(output)
+}
+
+/// 将编辑器的完整 Working Source 转换为保持原编码的原始字节。
+///
+/// 实现会按字符 Diff 拆成多个区间；相等区间直接复制原字节，只对真正修改的
+/// token 重新编码。调用方可把多个文件的结果一次交给 `patch_draft_bytes`，从而
+/// 获得单 revision 的原子多文件 Draft。
+pub fn patch_supported_text_bytes(
+    bytes: &[u8],
+    original: &str,
+    updated: &str,
+    explicit_newline: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    splice_document(bytes, original, updated, explicit_newline)
+}
+
+fn encoded_char_offsets(value: &str, encoding: TextEncoding) -> Result<Vec<usize>, String> {
+    let mut offsets = Vec::with_capacity(value.chars().count() + 1);
+    let mut length = 0;
+    offsets.push(length);
+    for character in value.chars() {
+        length += encode_as(&character.to_string(), encoding)?.len();
+        offsets.push(length);
+    }
+    Ok(offsets)
 }
 
 fn char_byte_index(value: &str, char_index: usize) -> usize {
@@ -767,6 +780,53 @@ mod tests {
         let original = b"\xEF\xBB\xBFreturn 1\n";
         let output = splice_document(original, "return 1\n", "return 2\n", None).unwrap();
         assert!(output.starts_with(b"\xEF\xBB\xBF"));
+    }
+
+    #[test]
+    fn utf16le_bom_and_surrogate_bytes_are_preserved() {
+        let source = "标题=传奇😀\r数值=1\r";
+        let mut original = b"\xFF\xFE".to_vec();
+        original.extend(encode_as(source, TextEncoding::Utf16Le).unwrap());
+        let output =
+            splice_document(&original, source, "标题=传奇😀\r数值=9\r", Some("\r")).unwrap();
+        let detected = detect_text(&output).unwrap();
+        assert_eq!(detected.encoding, TextEncoding::Utf16Le);
+        assert_eq!(detected.newline.as_deref(), Some("\r"));
+        assert_eq!(detected.content, "标题=传奇😀\r数值=9\r");
+        assert!(output.starts_with(b"\xFF\xFE"));
+    }
+
+    #[test]
+    fn pure_cr_insert_keeps_the_source_newline_style() {
+        let original = b"a=1\rb=2\r";
+        let output = splice_document(original, "a=1\rb=2\r", "a=1\rnew=3\rb=2\r", None).unwrap();
+        assert_eq!(output, b"a=1\rnew=3\rb=2\r");
+        assert!(!output.contains(&b'\n'));
+    }
+
+    #[test]
+    fn distant_edits_preserve_intermediate_raw_bytes() {
+        let original = b"x = 1\n-- untouched comment\ny = 2\n";
+        let output = splice_document(
+            original,
+            "x = 1\n-- untouched comment\ny = 2\n",
+            "x = 8\n-- untouched comment\ny = 9\n",
+            None,
+        )
+        .unwrap();
+        let marker = b"\n-- untouched comment\n";
+        let old_start = original
+            .windows(marker.len())
+            .position(|window| window == marker)
+            .unwrap();
+        let new_start = output
+            .windows(marker.len())
+            .position(|window| window == marker)
+            .unwrap();
+        assert_eq!(
+            &original[old_start..old_start + marker.len()],
+            &output[new_start..new_start + marker.len()]
+        );
     }
 
     #[test]

@@ -5,6 +5,7 @@ import {
   FileText,
   FolderCode,
   Gear,
+  PencilToSquare,
   PlugConnection,
   Sparkles,
   Wrench,
@@ -15,6 +16,7 @@ import { If } from 'react-if-lite'
 
 const NAV_ITEMS = [
   { id: 'project', icon: FolderCode },
+  { id: 'gui-designer', icon: PencilToSquare },
   { id: 'workbench', icon: Sparkles },
   { id: 'devtools', icon: Wrench },
   { id: 'builds', icon: Boxes3 },

@@ -273,6 +273,15 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::knowledge_get,
         crate::bridge::knowledge_set_status,
         crate::bridge::diagnostics_get,
+        crate::bridge::gui_designer_status,
+        crate::bridge::gui_document_list,
+        crate::bridge::gui_document_open,
+        crate::bridge::gui_document_reparse,
+        crate::bridge::gui_document_template,
+        crate::bridge::gui_asset_read,
+        crate::bridge::gui_draft_prepare,
+        crate::bridge::gui_draft_confirm,
+        crate::bridge::gui_draft_apply,
     ]
 }
 

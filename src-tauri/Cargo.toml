@@ -1,6 +1,6 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.3.0"
+version = "0.4.0"
 description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"
@@ -8,7 +8,8 @@ edition = "2021"
 [workspace]
 members = [
   "crates/mir3-domain",
-  "crates/mir3-mcp"
+  "crates/mir3-mcp",
+  "crates/mir3-ui"
 ]
 
 [lib]
@@ -67,6 +68,7 @@ async-trait = "0.1"
 tokio = { version = "1", features = [ "full" ] }
 semver = "1"
 mir3-domain = { path = "crates/mir3-domain" }
+mir3-ui = { path = "crates/mir3-ui" }
 rfd = "0.16"
 
 [target.'cfg(windows)'.dependencies]

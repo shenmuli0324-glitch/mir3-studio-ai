@@ -4,7 +4,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use similar::TextDiff;
 use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static REPLACE_NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -392,9 +396,7 @@ impl DomainStore {
                     fs::create_dir_all(parent)
                         .map_err(|e| format!("DRAFT_APPLY_FAILED: {}: {e}", parent.display()))?;
                 }
-                let temporary = target.with_extension(format!("mir3-tmp-{}", std::process::id()));
-                fs::write(&temporary, content.unwrap_or_default())
-                    .and_then(|_| fs::rename(&temporary, &target))
+                replace_file_safely(&target, &content.unwrap_or_default())
             };
             if let Err(error) = result {
                 let _ = self.restore_snapshot(project_id, &snapshot.id);
@@ -524,7 +526,8 @@ impl DomainStore {
                     fs::create_dir_all(parent)
                         .map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
                 }
-                fs::write(&target, bytes).map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
+                replace_file_safely(&target, &bytes)
+                    .map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
             } else if target.exists() {
                 fs::remove_file(&target).map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
             }
@@ -589,6 +592,60 @@ fn safe_project_target(root: &Path, relative: &str) -> Result<PathBuf, String> {
         return Err("DRAFT_PATH_OUTSIDE: path escapes project root".to_string());
     }
     Ok(candidate)
+}
+
+/// 在目标同目录完成写入与替换，兼容 Windows 不能直接 rename 覆盖已有文件的语义。
+///
+/// 旧文件会先移动到临时备份；若新文件换入失败，立即恢复旧文件。上层仍会用
+/// Snapshot 回滚此前已经完成的其他文件，因此这里仅保证单文件不会处于半写状态。
+fn replace_file_safely(target: &Path, content: &[u8]) -> std::io::Result<()> {
+    let parent = target
+        .parent()
+        .ok_or_else(|| std::io::Error::other("target has no parent directory"))?;
+    let file_name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("mir3-file");
+    let nonce = format!(
+        "{}-{}-{}",
+        std::process::id(),
+        now_millis(),
+        REPLACE_NONCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let temporary = parent.join(format!(".{file_name}.mir3-tmp-{nonce}"));
+    let backup = parent.join(format!(".{file_name}.mir3-backup-{nonce}"));
+
+    let mut output = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&temporary)?;
+    if let Err(error) = output.write_all(content).and_then(|_| output.sync_all()) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    drop(output);
+
+    if !target.exists() {
+        return fs::rename(&temporary, target).inspect_err(|_| {
+            let _ = fs::remove_file(&temporary);
+        });
+    }
+
+    if let Err(error) = fs::rename(target, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    match fs::rename(&temporary, target) {
+        Ok(()) => {
+            let _ = fs::remove_file(backup);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = fs::rename(&backup, target);
+            let _ = fs::remove_file(&temporary);
+            Err(error)
+        }
+    }
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {

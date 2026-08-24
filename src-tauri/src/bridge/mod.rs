@@ -7,6 +7,7 @@
 pub mod app_config;
 pub mod clipboard;
 pub mod core;
+pub mod gui_designer;
 pub mod lifecycle;
 pub mod plugin;
 pub mod profile;
@@ -17,6 +18,7 @@ pub mod updater;
 pub use app_config::*;
 pub use clipboard::*;
 pub use core::*;
+pub use gui_designer::*;
 pub use lifecycle::*;
 pub use plugin::*;
 pub use profile::*;

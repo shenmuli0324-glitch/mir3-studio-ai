@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import runtimeBaseline from '../runtime-baseline.lock.json'
 import mir3Plugin from '../src-tauri/resources/mir3-core-plugin/package.json'
 import { DEV_TOOL_CATEGORIES, DEV_TOOLS } from '../src/features/devtools/devtool-registry'
+import { MOBILE_VIEWPORT, PC_VIEWPORTS } from '../src/features/gui-designer/types'
 import enUS from '../src/i18n/locales/en-US.json'
 import zhCN from '../src/i18n/locales/zh-CN.json'
 import {
@@ -16,7 +17,7 @@ import {
 describe('studio shell contract', () => {
   it('starts on the project view and exposes each planned destination once', () => {
     expect(DEFAULT_STUDIO_VIEW).toBe('project')
-    expect(STUDIO_VIEWS).toHaveLength(8)
+    expect(STUDIO_VIEWS).toHaveLength(9)
     expect(new Set(STUDIO_VIEWS).size).toBe(STUDIO_VIEWS.length)
   })
 
@@ -34,8 +35,10 @@ describe('studio shell contract', () => {
     expect(studioKeysEn).toEqual(studioKeysZh)
   })
 
-  it('exposes the development tools directly below the Harness workbench', () => {
-    expect(STUDIO_VIEWS.slice(0, 3)).toEqual(['project', 'workbench', 'devtools'])
+  it('exposes GUI Designer after project and development tools below Harness', () => {
+    expect(STUDIO_VIEWS.slice(0, 4)).toEqual(['project', 'gui-designer', 'workbench', 'devtools'])
+    expect(zhCN['studio.nav.gui-designer']).toBe('GUI编辑')
+    expect(enUS['studio.nav.gui-designer']).toBe('GUI Designer')
     expect(zhCN['studio.nav.devtools']).toBe('开发工具')
     expect(enUS['studio.nav.devtools']).toBe('Development tools')
     expect('studio.nav.knowledge' in zhCN).toBe(false)
@@ -63,6 +66,26 @@ describe('studio shell contract', () => {
     expect(devToolsView).toContain('<DevToolsCatalog')
     expect(devToolsView).toContain('<MapToolView')
     expect(devToolsView).toContain('<PlannedToolView')
+  })
+
+  it('keeps GUI Designer local with the locked device profiles', () => {
+    const designerView = readFileSync(new URL('../src/views/gui-designer-view.tsx', import.meta.url), 'utf8')
+    expect(isHarnessView('gui-designer')).toBe(false)
+    expect(designerView).toContain('<DesignerToolbar')
+    expect(designerView).toContain('<DesignerWorkspace')
+    expect(MOBILE_VIEWPORT).toEqual({ width: 1136, height: 640 })
+    expect(PC_VIEWPORTS).toEqual([
+      { width: 1920, height: 1080 },
+      { width: 1600, height: 1024 },
+      { width: 1600, height: 900 },
+      { width: 1440, height: 900 },
+      { width: 1366, height: 768 },
+      { width: 1280, height: 800 },
+      { width: 1280, height: 768 },
+      { width: 1152, height: 864 },
+      { width: 1024, height: 768 },
+      { width: 800, height: 600 },
+    ])
   })
 
   it('uses one persistent Harness iframe for the workbench and its settings surface', () => {

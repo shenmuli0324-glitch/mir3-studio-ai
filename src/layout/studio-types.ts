@@ -2,6 +2,7 @@ import type { Mir3Project } from '@/features/projects/types'
 
 export const STUDIO_VIEWS = [
   'project',
+  'gui-designer',
   'workbench',
   'devtools',
   'builds',

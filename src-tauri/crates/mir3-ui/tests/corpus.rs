@@ -1,0 +1,54 @@
+use mir3_ui::parse_document;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// 官方语料不进入仓库；设置 MIR3_GUI_CORPUS 后运行只读回归。
+#[test]
+fn parses_optional_official_corpus_without_panicking() {
+    let Ok(root) = std::env::var("MIR3_GUI_CORPUS") else {
+        return;
+    };
+    let files = lua_files(Path::new(&root));
+    assert!(
+        !files.is_empty(),
+        "MIR3_GUI_CORPUS did not contain Lua files"
+    );
+    let mut nodes = 0usize;
+    let mut diagnostics = 0usize;
+    for path in &files {
+        let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let source = String::from_utf8_lossy(&bytes);
+        let relative = path.strip_prefix(&root).unwrap_or(path).to_string_lossy();
+        let document = parse_document(&source, &relative, "corpus", "utf-8", "\n")
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        nodes += document.nodes.len();
+        diagnostics += document.diagnostics.len();
+    }
+    eprintln!(
+        "MIR3 GUI corpus: files={}, nodes={}, diagnostics={}",
+        files.len(),
+        nodes,
+        diagnostics
+    );
+}
+
+fn lua_files(root: &Path) -> Vec<PathBuf> {
+    let mut output = Vec::new();
+    visit(root, &mut output);
+    output.sort();
+    output
+}
+
+fn visit(path: &Path, output: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(path) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            visit(&path, output);
+        } else if path.extension().is_some_and(|extension| extension == "lua") {
+            output.push(path);
+        }
+    }
+}
