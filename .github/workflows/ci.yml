@@ -42,6 +42,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      # Tauri 在解析 externalBin 时要求目标平台 sidecar 已存在；干净 CI 环境
+      # 不含本地 ignored 产物，先按当前 runner 构建 MIR3 MCP。
+      - run: node scripts/prepare-mir3-sidecar.mjs debug
       - run: cargo check --manifest-path src-tauri/Cargo.toml --workspace --locked
       - run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked
 
