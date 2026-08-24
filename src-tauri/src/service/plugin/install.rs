@@ -25,7 +25,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use super::errors;
 use super::installed::{is_installed, profile_dir};
-use super::preset::load_presets;
+use super::preset::{load_presets, resolve_install_spec};
 use super::process::{run_plugin_process, PreinstallLogPayload, PREINSTALL_LOG_EVENT};
 use super::recovery::is_actionable_plugin_ref;
 use super::uninstall_recovery;
@@ -65,7 +65,8 @@ pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), Strin
         // GitHub 简写「HTTPS 探测失败即回退 SSH」的已知缺陷（pnpm issue
         // #3948 / #7243 / #13276）：公开仓库一旦落进 git+ssh，在没有 SSH 配置
         // 的桌面机上必然 `Host key verification failed` / `Permission denied (publickey)`。
-        specs.push(normalize_git_spec(spec));
+        let resolved = resolve_install_spec(app_handle, spec)?;
+        specs.push(normalize_git_spec(&resolved));
     }
 
     // 确保 pnpm/dsh shim 存在

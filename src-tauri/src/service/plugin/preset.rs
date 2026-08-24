@@ -11,6 +11,7 @@ use crate::config;
 
 /// 预设插件清单文件名
 const PRESET_PLUGINS_FILE: &str = "preset-plugins.json";
+const BUNDLED_SPEC_PREFIX: &str = "bundled:";
 
 /// 预装插件静态信息，对应 `resources/preset-plugins.json` 中的条目
 #[derive(Debug, Clone, Deserialize)]
@@ -69,6 +70,36 @@ fn preset_plugins_path(app_handle: &AppHandle) -> Option<PathBuf> {
         .join("resources")
         .join(PRESET_PLUGINS_FILE);
     source.exists().then_some(source)
+}
+
+/// 将预设清单中的 `bundled:<resource-directory>` 转成 Harness CLI 可安装的
+/// 绝对 `file:` spec。资源目录仍由 Tauri 安装包管理，但安装、挂载、更新和卸载
+/// 全部继续交给 `dsh plugin`，不会变成不可移除的系统插件。
+pub(crate) fn resolve_install_spec(app_handle: &AppHandle, spec: &str) -> Result<String, String> {
+    let Some(directory) = spec.strip_prefix(BUNDLED_SPEC_PREFIX) else {
+        return Ok(spec.to_string());
+    };
+    if directory.is_empty()
+        || directory.contains('/')
+        || directory.contains('\\')
+        || directory.contains("..")
+    {
+        return Err(format!("PREINSTALL_BUNDLED_SPEC_INVALID: {spec}"));
+    }
+    let relative = PathBuf::from("resources").join(directory);
+    let packaged = app_handle
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|root| root.join(&relative))
+        .filter(|path| path.join("package.json").is_file());
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join(directory);
+    let path = packaged
+        .or_else(|| source.join("package.json").is_file().then_some(source))
+        .ok_or_else(|| format!("PREINSTALL_BUNDLED_PLUGIN_MISSING: {directory}"))?;
+    Ok(format!("file:{}", path.to_string_lossy()))
 }
 
 /// 解析预设清单 JSON

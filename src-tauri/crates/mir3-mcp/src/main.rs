@@ -5,7 +5,7 @@
 //! 仅暴露 996 项目状态、领域索引、知识、Draft 与校验，不重复 Harness 的通用
 //! 文件读取、搜索、编辑器或会话能力。
 
-use mir3_domain::{DomainStore, DraftChangeInput, IndexQuery, KnowledgeStatus};
+use mir3_domain::{DomainStore, DraftChangeInput, IndexQuery, KnowledgeStatus, SafeTextPatch};
 use serde_json::{json, Value};
 use std::env;
 use std::io::{self, BufRead, Write};
@@ -144,23 +144,33 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 .get("expectedRevision")
                 .and_then(Value::as_i64)
                 .ok_or_else(|| "MCP_ARGUMENT_INVALID: expectedRevision is required".to_string());
-            let changes = args
-                .get("changes")
-                .cloned()
-                .ok_or_else(|| "MCP_ARGUMENT_INVALID: changes are required".to_string())
-                .and_then(|value| {
-                    serde_json::from_value::<Vec<DraftChangeInput>>(value)
-                        .map_err(|e| format!("MCP_ARGUMENT_INVALID: {e}"))
-                });
             draft_id
                 .and_then(|draft_id| revision.map(|revision| (draft_id, revision)))
                 .and_then(|(draft_id, revision)| {
-                    changes.map(|changes| (draft_id, revision, changes))
+                    if let Some(operation) = args.get("operation") {
+                        return apply_safe_operation(
+                            store,
+                            project_id,
+                            &draft_id,
+                            revision,
+                            operation,
+                        );
+                    }
+                    let changes = args
+                        .get("changes")
+                        .cloned()
+                        .ok_or_else(|| "MCP_ARGUMENT_INVALID: changes or operation is required".to_string())
+                        .and_then(|value| {
+                            serde_json::from_value::<Vec<DraftChangeInput>>(value)
+                                .map_err(|e| format!("MCP_ARGUMENT_INVALID: {e}"))
+                        })?;
+                    if changes.iter().any(|change| is_protected_path(&change.path)) {
+                        return Err("MIR3_SAFE_OPERATION_REQUIRED: TXT/Lua/XLS changes must use the operation field".to_string());
+                    }
+                    store
+                        .patch_draft(project_id, &draft_id, revision, &changes)
+                        .map(|preview| json!({"preview": preview}))
                 })
-                .and_then(|(draft_id, revision, changes)| {
-                    store.patch_draft(project_id, &draft_id, revision, &changes)
-                })
-                .map(|preview| json!({"preview": preview}))
         }
         "mir3_draft_diff" => required_string(&args, "draftId")
             .and_then(|draft_id| store.preview_draft(project_id, &draft_id))
@@ -192,7 +202,7 @@ fn tool_definitions() -> Vec<Value> {
         tool("mir3_knowledge_search", "检索当前项目中已人工激活且版本兼容的 996 领域知识。", json!({"type":"object","properties":{"text":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["text"],"additionalProperties":false})),
         tool("mir3_knowledge_get", "读取一条已激活的 996 领域知识。", json!({"type":"object","properties":{"knowledgeId":{"type":"string"}},"required":["knowledgeId"],"additionalProperties":false})),
         tool("mir3_draft_open", "创建一个外置修改 Draft；不会修改正式项目。", json!({"type":"object","properties":{"intent":{"type":"string","minLength":1}},"required":["intent"],"additionalProperties":false})),
-        tool("mir3_draft_patch", "向外置 Draft 写入结构化变更；不会修改正式项目。", json!({"type":"object","properties":{"draftId":{"type":"string"},"expectedRevision":{"type":"integer","minimum":0},"changes":{"type":"array","minItems":1,"items":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"deleted":{"type":"boolean"},"expectedSha256":{"type":"string"}},"required":["path"],"additionalProperties":false}}},"required":["draftId","expectedRevision","changes"],"additionalProperties":false})),
+        tool("mir3_draft_patch", "向外置 Draft 写入结构化变更；TXT/Lua 必须使用格式安全 operation，不会修改正式项目。", json!({"type":"object","properties":{"draftId":{"type":"string"},"expectedRevision":{"type":"integer","minimum":0},"changes":{"type":"array","minItems":1,"items":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"deleted":{"type":"boolean"},"expectedSha256":{"type":"string"}},"required":["path"],"additionalProperties":false}},"operation":{"oneOf":[{"type":"object","properties":{"type":{"const":"text.replace"},"path":{"type":"string"},"old":{"type":"string"},"new":{"type":"string"},"expectedSha256":{"type":"string"},"newline":{"type":"string","enum":["CRLF","LF","CR"]}},"required":["type","path","old","new","expectedSha256"],"additionalProperties":false},{"type":"object","properties":{"type":{"const":"text.splice"},"path":{"type":"string"},"start":{"type":"integer","minimum":0},"end":{"type":"integer","minimum":0},"expected":{"type":"string"},"text":{"type":"string"},"expectedSha256":{"type":"string"},"newline":{"type":"string","enum":["CRLF","LF","CR"]}},"required":["type","path","start","end","expected","text","expectedSha256"],"additionalProperties":false},{"type":"object","properties":{"type":{"const":"lua.replace_function"},"path":{"type":"string"},"functionName":{"type":"string"},"old":{"type":"string"},"replacement":{"type":"string"},"expectedSha256":{"type":"string"}},"required":["type","path","functionName","old","replacement","expectedSha256"],"additionalProperties":false},{"type":"object","properties":{"type":{"const":"xls.update_cells"},"path":{"type":"string"},"expectedSha256":{"type":"string"},"updates":{"type":"array"}},"required":["type","path","expectedSha256","updates"],"additionalProperties":false}]}},"required":["draftId","expectedRevision"],"anyOf":[{"required":["changes"]},{"required":["operation"]}],"additionalProperties":false})),
         tool("mir3_draft_diff", "返回 Draft 与当前 996 项目之间的修改预览。", json!({"type":"object","properties":{"draftId":{"type":"string"}},"required":["draftId"],"additionalProperties":false})),
         tool("mir3_validate", "执行 996 项目结构和 Draft 基线校验。", json!({"type":"object","properties":{"draftId":{"type":"string"}},"additionalProperties":false})),
     ]
@@ -209,6 +219,156 @@ fn required_string(args: &Value, key: &str) -> Result<String, String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| format!("MCP_ARGUMENT_INVALID: {key} is required"))
+}
+
+fn is_protected_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".txt") || lower.ends_with(".lua") || lower.ends_with(".xls")
+}
+
+fn apply_safe_operation(
+    store: &DomainStore,
+    project_id: &str,
+    draft_id: &str,
+    revision: i64,
+    operation: &Value,
+) -> Result<Value, String> {
+    let kind = operation
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.type is required".to_string())?;
+    if kind == "xls.update_cells" {
+        return Err(
+            "SAFE_XLS_READ_ONLY: xls.update_cells is reserved for Safe Files 0.2.0".to_string(),
+        );
+    }
+    let path = required_string(operation, "path")?;
+    if !path.to_ascii_lowercase().ends_with(".txt") && !path.to_ascii_lowercase().ends_with(".lua")
+    {
+        return Err("MIR3_SAFE_OPERATION_TYPE: text operations require TXT or Lua".to_string());
+    }
+    let expected_sha256 = required_string(operation, "expectedSha256")?;
+    let opened = store.safe_text_open(project_id, &path, Some(draft_id))?;
+    if opened.sha256 != expected_sha256 {
+        return Err("SAFE_FILE_SOURCE_CONFLICT: source changed since it was opened".to_string());
+    }
+    let new_content = match kind {
+        "text.replace" => {
+            let old = operation
+                .get("old")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.old is required".to_string())?;
+            let replacement = operation
+                .get("new")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.new is required".to_string())?;
+            if old.is_empty() || opened.content.matches(old).count() != 1 {
+                return Err("SAFE_TEXT_ANCHOR_AMBIGUOUS: old must occur exactly once".to_string());
+            }
+            opened.content.replacen(old, replacement, 1)
+        }
+        "text.splice" => {
+            let start = operation
+                .get("start")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.start is required".to_string())?
+                as usize;
+            let end = operation
+                .get("end")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.end is required".to_string())?
+                as usize;
+            let expected = operation
+                .get("expected")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    "MCP_ARGUMENT_INVALID: operation.expected is required".to_string()
+                })?;
+            let replacement = operation
+                .get("text")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.text is required".to_string())?;
+            let char_count = opened.content.chars().count();
+            if start > end || end > char_count {
+                return Err("SAFE_TEXT_SPLICE_RANGE: invalid character range".to_string());
+            }
+            let start_byte = char_byte_index(&opened.content, start);
+            let end_byte = char_byte_index(&opened.content, end);
+            if &opened.content[start_byte..end_byte] != expected {
+                return Err("SAFE_TEXT_SPLICE_CONFLICT: expected text does not match".to_string());
+            }
+            format!(
+                "{}{}{}",
+                &opened.content[..start_byte],
+                replacement,
+                &opened.content[end_byte..]
+            )
+        }
+        "lua.replace_function" => {
+            if !path.to_ascii_lowercase().ends_with(".lua") {
+                return Err("SAFE_LUA_TYPE_UNSUPPORTED: expected a .lua file".to_string());
+            }
+            let function_name = required_string(operation, "functionName")?;
+            let old = operation
+                .get("old")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "MCP_ARGUMENT_INVALID: operation.old is required".to_string())?;
+            let replacement = operation
+                .get("replacement")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    "MCP_ARGUMENT_INVALID: operation.replacement is required".to_string()
+                })?;
+            if !old.contains("function") || !old.contains(&function_name) {
+                return Err(
+                    "SAFE_LUA_FUNCTION_MISMATCH: anchor does not name the requested function"
+                        .to_string(),
+                );
+            }
+            if opened.content.matches(old).count() != 1 {
+                return Err(
+                    "SAFE_LUA_FUNCTION_AMBIGUOUS: function anchor must occur exactly once"
+                        .to_string(),
+                );
+            }
+            opened.content.replacen(old, replacement, 1)
+        }
+        _ => return Err(format!("MIR3_SAFE_OPERATION_UNKNOWN: {kind}")),
+    };
+    let newline = operation
+        .get("newline")
+        .and_then(Value::as_str)
+        .map(|value| match value {
+            "CRLF" => "\r\n",
+            "CR" => "\r",
+            _ => "\n",
+        })
+        .map(str::to_string);
+    let result = store.safe_text_patch(
+        project_id,
+        &SafeTextPatch {
+            relative_path: path,
+            draft_id: Some(draft_id.to_string()),
+            expected_revision: revision,
+            expected_sha256,
+            original_content: opened.content,
+            new_content,
+            newline,
+        },
+    )?;
+    Ok(json!({
+        "preview": result.preview,
+        "draftId": result.draft_id,
+        "revision": result.revision,
+        "sha256": result.sha256
+    }))
+}
+
+fn char_byte_index(value: &str, char_index: usize) -> usize {
+    value
+        .char_indices()
+        .nth(char_index)
+        .map_or(value.len(), |(index, _)| index)
 }
 
 fn tool_success(value: Value) -> Value {

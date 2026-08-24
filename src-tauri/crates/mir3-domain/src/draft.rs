@@ -1,4 +1,4 @@
-use crate::{now_millis, path_is_within, DomainStore};
+use crate::{decode_supported_text, now_millis, path_is_within, DomainStore};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -32,6 +32,13 @@ pub struct DraftChangeInput {
     pub content: Option<String>,
     #[serde(default)]
     pub deleted: bool,
+    pub expected_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DraftBinaryChangeInput {
+    pub path: String,
+    pub content: Vec<u8>,
     pub expected_sha256: Option<String>,
 }
 
@@ -187,6 +194,89 @@ impl DomainStore {
             .commit()
             .map_err(|e| format!("DRAFT_COMMIT_FAILED: {e}"))?;
         self.preview_draft(project_id, draft_id)
+    }
+
+    /// Safe Files 专用的原始字节 Draft 写入。它与文本 MCP 共用同一 Draft、
+    /// revision 和人工确认链路，但不会把 GB18030/BOM 文本强制转换成 UTF-8。
+    pub fn patch_draft_bytes(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        expected_revision: i64,
+        changes: &[DraftBinaryChangeInput],
+    ) -> Result<DraftPreview, String> {
+        let draft = self.get_draft(project_id, draft_id)?;
+        if draft.status != DraftStatus::Open {
+            return Err("DRAFT_NOT_OPEN: only open drafts can be patched".to_string());
+        }
+        if draft.revision != expected_revision {
+            return Err(format!(
+                "DRAFT_REVISION_CONFLICT: expected {expected_revision}, current {}",
+                draft.revision
+            ));
+        }
+        if changes.is_empty() {
+            return Err("DRAFT_CHANGES_EMPTY: at least one change is required".to_string());
+        }
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        let mut connection = self.project_connection(project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|e| format!("DRAFT_TRANSACTION_FAILED: {e}"))?;
+        for change in changes {
+            validate_relative_path(&change.path)?;
+            let target = safe_project_target(&root, &change.path)?;
+            let existing = fs::read(&target).ok();
+            let base_hash = existing.as_deref().map(hash_bytes);
+            if change.expected_sha256.is_some() && change.expected_sha256 != base_hash {
+                return Err(format!(
+                    "DRAFT_BASE_CONFLICT: {} changed since it was opened",
+                    change.path
+                ));
+            }
+            transaction
+                .execute(
+                    "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted) VALUES(?1,?2,?3,?4,0)
+                     ON CONFLICT(draft_id,path) DO UPDATE SET base_sha256=excluded.base_sha256,content=excluded.content,deleted=0",
+                    params![
+                        draft_id,
+                        change.path.replace('\\', "/"),
+                        base_hash,
+                        change.content,
+                    ],
+                )
+                .map_err(|e| format!("DRAFT_PATCH_FAILED: {e}"))?;
+        }
+        let next_revision = draft.revision + 1;
+        transaction
+            .execute(
+                "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1",
+                params![draft_id, next_revision, now_millis()],
+            )
+            .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
+        transaction
+            .commit()
+            .map_err(|e| format!("DRAFT_COMMIT_FAILED: {e}"))?;
+        self.preview_draft(project_id, draft_id)
+    }
+
+    pub fn draft_change_bytes(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        path: &str,
+    ) -> Result<Option<Vec<u8>>, String> {
+        validate_relative_path(path)?;
+        self.project_connection(project_id)?
+            .query_row(
+                "SELECT content FROM draft_changes WHERE draft_id=?1 AND path=?2 AND deleted=0",
+                params![draft_id, path.replace('\\', "/")],
+                |row| row.get::<_, Option<Vec<u8>>>(0),
+            )
+            .optional()
+            .map(|value| value.flatten())
+            .map_err(|e| format!("DRAFT_CHANGE_READ_FAILED: {e}"))
     }
 
     pub fn preview_draft(&self, project_id: &str, draft_id: &str) -> Result<DraftPreview, String> {
@@ -508,14 +598,14 @@ fn hash_bytes(bytes: &[u8]) -> String {
 }
 
 fn text_diff(path: &str, old: &[u8], new: Option<&[u8]>, deleted: bool) -> Option<String> {
-    let old = std::str::from_utf8(old).ok()?;
+    let old = decode_supported_text(old)?;
     let new = if deleted {
-        ""
+        String::new()
     } else {
-        std::str::from_utf8(new?).ok()?
+        decode_supported_text(new?)?
     };
     Some(
-        TextDiff::from_lines(old, new)
+        TextDiff::from_lines(&old, &new)
             .unified_diff()
             .header(&format!("a/{path}"), &format!("b/{path}"))
             .to_string(),

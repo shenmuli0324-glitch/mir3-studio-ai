@@ -3,7 +3,8 @@
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
     Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
-    Mir3Project, Snapshot, WorkspaceDirectory,
+    Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult, SafeXlsPage, SafeXlsWorkbook,
+    Snapshot, WorkspaceDirectory,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -195,6 +196,105 @@ pub fn draft_discard(
     draft_id: String,
 ) -> Result<Draft, String> {
     service.store().discard_draft(&project_id, &draft_id)
+}
+
+#[tauri::command]
+pub fn safe_file_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    relative_path: String,
+    draft_id: Option<String>,
+) -> Result<SafeTextOpen, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .safe_text_open(&project_id, &relative_path, draft_id.as_deref())
+}
+
+#[tauri::command]
+pub fn safe_text_patch(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    operation: SafeTextPatch,
+) -> Result<SafeTextPatchResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().safe_text_patch(&project_id, &operation)
+}
+
+#[tauri::command]
+pub fn safe_lua_patch(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    operation: SafeTextPatch,
+) -> Result<SafeTextPatchResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    if !operation
+        .relative_path
+        .to_ascii_lowercase()
+        .ends_with(".lua")
+    {
+        return Err("SAFE_LUA_TYPE_UNSUPPORTED: expected a .lua file".to_string());
+    }
+    service.store().safe_text_patch(&project_id, &operation)
+}
+
+#[tauri::command]
+pub fn safe_xls_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    relative_path: String,
+) -> Result<SafeXlsWorkbook, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().safe_xls_open(&project_id, &relative_path)
+}
+
+#[tauri::command]
+pub fn safe_xls_sheet_page(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    relative_path: String,
+    sheet: String,
+    offset: usize,
+    limit: usize,
+) -> Result<SafeXlsPage, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .safe_xls_sheet_page(&project_id, &relative_path, &sheet, offset, limit)
+}
+
+#[tauri::command]
+pub fn safe_xls_patch() -> Result<(), String> {
+    Err("SAFE_XLS_READ_ONLY: structured XLS Draft editing is planned for plugin 0.2.0".to_string())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeFileStatus {
+    pub available: bool,
+    pub editable_extensions: Vec<&'static str>,
+    pub read_only_extensions: Vec<&'static str>,
+}
+
+#[tauri::command]
+pub fn safe_file_status() -> SafeFileStatus {
+    SafeFileStatus {
+        available: true,
+        editable_extensions: vec!["txt", "lua"],
+        read_only_extensions: vec!["xls"],
+    }
+}
+
+fn ensure_safe_project(service: &ProjectService, project_id: &str) -> Result<(), String> {
+    let active = service
+        .store()
+        .active_project()?
+        .ok_or_else(|| "SAFE_FILES_PROJECT_UNBOUND: no active MIR3 project".to_string())?;
+    if active.id == project_id {
+        Ok(())
+    } else {
+        Err("SAFE_FILES_PROJECT_MISMATCH: request is not for the active project".to_string())
+    }
 }
 
 #[tauri::command]

@@ -8,7 +8,7 @@
 
 <p align="center"><samp><a href="./README.en.md">English</a> · <strong>中文</strong></samp></p>
 
-> 当前版本为 `0.1.2`。MIR3 Studio 直接打开由 996 项目管理器创建的项目，并通过领域索引、Skill、MCP 与安全 Draft 工作流辅助开发。
+> 当前版本为 `0.2.0`。MIR3 Studio 直接打开由 996 项目管理器创建的项目，并通过领域索引、Skill、MCP 与安全 Draft 工作流辅助开发。
 
 MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。在其插件化架构基础上，我们独立开发了面向 996 传奇3的项目模型、知识体系、开发工具链和 AI 工作流。
 
@@ -20,6 +20,7 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 - 隔离的 Profile、插件安装/升级/卸载及异常恢复。
 - 996项目识别、外置索引、知识治理、Draft预览与版本快照。
 - MIR3 Skill 与八项领域 MCP 工具复用现有 Harness 文件、编辑和会话能力。
+- 可选 MIR3 Safe Files 插件在启用时提供保留 GB18030/BOM/换行的 TXT、Lua Draft 编辑和 BIFF XLS 只读预览；卸载后回退 Harness 原生编辑模式。
 - 应用自更新仅连接 MIR3 Studio AI 的 GitHub Releases。
 
 ## 产品接口
@@ -28,7 +29,7 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 | --- | --- |
 | 应用名 | MIR3 Studio AI |
 | 核心显示名 | MIR3 AI Core |
-| 版本 | 0.1.2 |
+| 版本 | 0.2.0 |
 | Tauri identifier | `ai.mir3.studio` |
 | 数据目录 | `~/.mir3-studio-ai` |
 | 开发数据目录 | `~/.mir3-studio-ai.dev` |

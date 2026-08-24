@@ -1,5 +1,14 @@
 # MIR3 Studio AI 更新记录
 
+## 0.2.0 - 2026-08-24
+
+- 新增可选 Harness 插件 `@mir3-studio/dsh-mir3-safe-files` 0.1.0；通过 Better Sidebar 公共扩展接口接管 TXT、Lua 和 BIFF XLS。
+- 插件启用时，TXT/Lua 保存进入外置 Draft，保留 GB18030、UTF BOM 和原始换行；混合换行无法确定时拒绝写入。
+- 新增 BIFF `.xls` 分页只读预览，并拒绝伪装为 `.xls` 的 OOXML/XLSX。
+- Safe Files 插件通过 Harness 原生插件安装、挂载和卸载流程运行，不成为 MIR3 Core 的启动依赖；卸载后自然回退 Harness 原生查看器。
+- MIR3 MCP 仍保持八项领域工具，并为 `mir3_draft_patch` 增加格式安全的 `text.replace`、`text.splice` 和 `lua.replace_function` 操作。
+- Draft 原始字节写入、源哈希、revision、人工预览、快照和确认令牌继续共用同一安全链路。
+
 ## 0.1.1 - 2026-08-24
 
 MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。在其插件化架构基础上，我们独立开发了面向 996 传奇3的项目模型、知识体系、开发工具链和 AI 工作流。

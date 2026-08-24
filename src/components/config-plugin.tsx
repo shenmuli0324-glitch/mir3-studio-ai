@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
+import { clearSafeFilesState, hasDirtySafeFiles, MIR3_SAFE_FILES_PACKAGE } from '@/features/workbench/safe-files-state'
 import { store } from '@/store'
 import { toast } from '@/utils'
 import { useDshPlugins } from '../hooks/use-dsh-plugins'
@@ -47,6 +48,8 @@ export function ConfigPlugin() {
       // 失效插件列表查询：dsh-plugins-updated 事件在停服务重启场景下可能丢失
       // （插件操作会停止运行中的服务），必须显式重拉以确保列表落盘后刷新。
       void queryClient.invalidateQueries({ queryKey: ['plugins'] })
+      if (id === MIR3_SAFE_FILES_PACKAGE)
+        clearSafeFilesState()
       toast(t('plugins.updated_toast', { name }), {})
     },
     onError: (err, id) => {
@@ -91,6 +94,10 @@ export function ConfigPlugin() {
   async function onRemove(id: string, name: string) {
     if (busy)
       return
+    if (id === MIR3_SAFE_FILES_PACKAGE && hasDirtySafeFiles()) {
+      toast(t('plugins.safe_files_dirty'), {})
+      return
+    }
     try {
       await openDialog({
         status: 'danger',
@@ -121,13 +128,14 @@ export function ConfigPlugin() {
   }
 
   async function onPluginClick(plugin: DshPlugin) {
-    if (!plugin.system)
+    if (!plugin.changelog)
       return
     try {
       await openChangelog({
         pluginName: plugin.name,
         version: plugin.version,
         changelog: plugin.changelog ?? '',
+        system: plugin.system,
       })
     }
     catch {
@@ -151,7 +159,7 @@ export function ConfigPlugin() {
             {plugins.map(plugin => (
               <Item
                 key={plugin.id}
-                interactive={plugin.system}
+                interactive={plugin.changelog != null}
                 onClick={() => void onPluginClick(plugin)}
                 left={(
                   <div className="min-w-0">
@@ -202,7 +210,7 @@ export function ConfigPlugin() {
                         {t('plugins.system')}
                       </Chip>
                     </If>
-                    <If cond={plugin.system}>
+                    <If cond={plugin.changelog != null}>
                       <Chip className="rounded-md" variant="primary" color="accent" size="sm">
                         {t('plugins.view_changelog')}
                       </Chip>

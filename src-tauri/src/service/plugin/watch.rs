@@ -130,8 +130,13 @@ fn parse_plugins(profile: &Path, presets: &[PreinstallPluginInfo]) -> Vec<DshPlu
         .map(|profile| profile.bundles.iter().map(String::as_str).collect())
         .unwrap_or_default();
 
-    let preset_map: HashMap<&str, &PreinstallPluginInfo> =
-        presets.iter().map(|p| (p.id.as_str(), p)).collect();
+    let mut preset_map: HashMap<&str, &PreinstallPluginInfo> = HashMap::new();
+    for preset in presets {
+        preset_map.insert(preset.id.as_str(), preset);
+        if let Some(package) = preset.package.as_deref() {
+            preset_map.insert(package, preset);
+        }
+    }
 
     let mut dep_ids: Vec<&String> = manifest.dependencies.keys().collect();
     // 稳定排序：启动加载（bundles）的插件在前，其余按 id 字典序
@@ -153,7 +158,8 @@ fn parse_plugins(profile: &Path, presets: &[PreinstallPluginInfo]) -> Vec<DshPlu
                 .map(|url| normalize_repo_url(&url))
                 .unwrap_or_default();
             let system = super::system::is_system_plugin(id);
-            let changelog = if system {
+            let locally_bundled = preset.is_some_and(|value| value.spec.starts_with("bundled:"));
+            let changelog = if system || locally_bundled {
                 std::fs::read_to_string(plugin_dir(profile, id).join("CHANGELOG.md")).ok()
             } else {
                 None

@@ -7,6 +7,7 @@ export interface PluginChangelogDialogProps extends PropsWithOverlays {
   pluginName: string
   version: string
   changelog: string
+  system: boolean
 }
 
 /** 第一方内置插件的离线说明与更新记录，不依赖仓库或网络。 */
@@ -34,7 +35,7 @@ export function PluginChangelogDialog(props: PluginChangelogDialogProps) {
                   </code>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-muted">
-                  {t('plugins.changelog_local_hint')}
+                  {t(props.system ? 'plugins.changelog_local_hint' : 'plugins.changelog_optional_hint')}
                 </p>
               </div>
               <pre className="mt-4 whitespace-pre-wrap break-words rounded-md bg-panel2 p-4 font-sans text-sm leading-6 text-ink">

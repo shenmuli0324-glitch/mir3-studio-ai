@@ -6,11 +6,13 @@
 mod draft;
 mod knowledge;
 mod project;
+mod safe_files;
 mod scan;
 mod store;
 
 pub use draft::*;
 pub use knowledge::*;
 pub use project::*;
+pub use safe_files::*;
 pub use scan::*;
 pub use store::*;

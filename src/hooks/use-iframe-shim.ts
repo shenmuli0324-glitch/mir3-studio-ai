@@ -7,6 +7,7 @@ import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
 import { postProjectActivation } from '@/features/projects/workspace-bridge'
+import { setSafeFileDirty } from '@/features/workbench/safe-files-state'
 import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
 
@@ -50,6 +51,24 @@ interface Mir3PluginMessage {
   requestId?: string
   payload?: { projectId?: string, code?: string, message?: string }
 }
+
+interface Mir3SafeFilesMessage {
+  source?: 'mir3-safe-files-plugin'
+  type?: 'mir3/files.ready' | 'mir3/files.request' | 'mir3/files.mode' | 'mir3/files.dirty' | 'mir3/files.error'
+  version?: number
+  requestId?: string
+  payload?: Record<string, unknown>
+}
+
+const SAFE_FILES_COMMANDS = new Set([
+  'safe_file_open',
+  'safe_text_patch',
+  'safe_lua_patch',
+  'safe_xls_open',
+  'safe_xls_sheet_page',
+  'safe_xls_patch',
+  'safe_file_status',
+])
 
 export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
   const isMounted = useMountedState()
@@ -189,10 +208,65 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
     })().catch(error => console.error('[MIR3 Core Plugin] workspace selection failed:', error))
   }
 
+  function handleMir3SafeFiles(event: MessageEvent<Mir3SafeFilesMessage>) {
+    const data = event.data
+    if (!data || typeof data !== 'object' || data.source !== 'mir3-safe-files-plugin' || data.version !== 1)
+      return
+    if (event.source !== iframeRef.current?.contentWindow)
+      return
+    const iframeOrigin = getIframeOrigin(iframeRef)
+    if (!iframeOrigin || event.origin !== iframeOrigin)
+      return
+    if (data.type === 'mir3/files.ready') {
+      void invoke<Mir3Project | null>('project_get_active')
+        .then((project) => {
+          if (project)
+            postProjectActivation(iframeRef, project)
+        })
+        .catch(error => console.error('[MIR3 Safe Files] failed to bind active project:', error))
+      return
+    }
+    if (data.type === 'mir3/files.error') {
+      console.error('[MIR3 Safe Files]', data.payload?.message)
+      return
+    }
+    if (data.type === 'mir3/files.dirty') {
+      const relativePath = data.payload?.relativePath
+      if (typeof relativePath === 'string')
+        setSafeFileDirty(relativePath, data.payload?.dirty === true)
+      return
+    }
+    if (data.type !== 'mir3/files.request' || !data.requestId)
+      return
+    const command = data.payload?.command
+    if (typeof command !== 'string' || !SAFE_FILES_COMMANDS.has(command))
+      return
+    const requestId = data.requestId
+    const origin = iframeOrigin
+    const args = { ...data.payload }
+    delete args.command
+    function reply(result?: unknown, error?: unknown) {
+      iframeRef.current?.contentWindow?.postMessage(
+        {
+          source: 'mir3-studio',
+          type: 'mir3/files.response',
+          version: 1,
+          requestId,
+          payload: error === undefined ? { result } : { error: String(error) },
+        },
+        origin,
+      )
+    }
+    void invoke(command, args)
+      .then(result => reply(result))
+      .catch(error => reply(undefined, error))
+  }
+
   useEvent('message', handleMessage)
   useEvent('message', handlePluginError)
   useEvent('message', handleClipboardImage)
   useEvent('message', handleMir3Plugin)
+  useEvent('message', handleMir3SafeFiles)
 
   // 系统通知点击 → 通知 iframe 聚焦对应会话
   useEffect(() => {
