@@ -1,4 +1,3 @@
-import type { Mir3Project } from '@/features/projects/types'
 import type { HarnessSurface, StudioView } from '@/layout/studio-types'
 import { BuildsView } from './builds-view'
 import { FeedbackView } from './feedback-view'
@@ -7,9 +6,8 @@ import { LogsView } from './logs-view'
 import { ProjectView } from './project-view'
 import { RuntimeView } from './runtime-view'
 
-export function StudioViewContent({ view, project }: {
+export function StudioViewContent({ view }: {
   view: Exclude<StudioView, HarnessSurface>
-  project: Mir3Project | null
 }) {
   switch (view) {
     case 'project':
@@ -21,7 +19,7 @@ export function StudioViewContent({ view, project }: {
     case 'feedback':
       return <FeedbackView />
     case 'knowledge':
-      return <KnowledgeView project={project} />
+      return <KnowledgeView />
     case 'logs':
       return <LogsView />
   }

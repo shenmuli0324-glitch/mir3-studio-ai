@@ -82,7 +82,7 @@ export function App() {
   function readyContent() {
     if (harnessVisible)
       return null
-    return <StudioViewContent view={activeView} project={shellState.project} />
+    return <StudioViewContent view={activeView} />
   }
 
   return (

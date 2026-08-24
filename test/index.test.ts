@@ -33,6 +33,19 @@ describe('studio shell contract', () => {
     expect(studioKeysEn).toEqual(studioKeysZh)
   })
 
+  it('exposes project rules as an intentionally empty Studio surface', () => {
+    const projectRulesView = readFileSync(new URL('../src/views/knowledge-view.tsx', import.meta.url), 'utf8')
+    expect(zhCN['studio.nav.knowledge']).toBe('项目规则')
+    expect(enUS['studio.nav.knowledge']).toBe('Project rules')
+    expect(zhCN['studio.knowledge.empty']).toBeTruthy()
+    expect('studio.knowledge.assets' in zhCN).toBe(false)
+    expect('studio.knowledge.assets' in enUS).toBe(false)
+    expect(projectRulesView).toContain('<EmptyPanel')
+    expect(projectRulesView).not.toContain('useProjectDetails')
+    expect(projectRulesView).not.toContain('AssetCard')
+    expect(projectRulesView).not.toContain('studio.knowledge.assets')
+  })
+
   it('uses one persistent Harness iframe for the workbench and its settings surface', () => {
     expect(isHarnessView('workbench')).toBe(true)
     expect(isHarnessView('settings')).toBe(true)
