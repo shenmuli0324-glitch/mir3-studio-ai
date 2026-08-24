@@ -1,10 +1,11 @@
+import type { GuiComponentKind } from './component-catalog'
 import type {
   BoundValue,
   GuiDevice,
   GuiDraftConfirmation,
   GuiLeftPanel,
   GuiMode,
-  GuiNodeKind,
+  GuiPropertyValue,
   GuiTemplateRequest,
   Mir3UiDocument,
   Mir3UiNode,
@@ -14,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { defineScope } from '@/hooks/define-scope'
 import { useGuiDesignerStatus, useGuiDocumentActions, useGuiDocumentList } from './api'
+import { componentDefinition, isContainerKind } from './component-catalog'
 import { MOBILE_VIEWPORT, PC_VIEWPORTS } from './types'
 
 export interface GuiWorkingFile {
@@ -22,12 +24,26 @@ export interface GuiWorkingFile {
   workingSource: string
   document: Mir3UiDocument
   expectedSha256?: string | null
-  history: string[]
-  future: string[]
+  history: GuiSourceTransaction[]
+  future: GuiSourceTransaction[]
   valid: boolean
   isNew: boolean
   parseError?: string | null
+  accessedAt: number
 }
+
+export type GuiBehaviorKind = 'timeline' | 'action'
+
+interface GuiSourceTransaction {
+  start: number
+  before: string
+  after: string
+}
+
+const MAX_HISTORY_ENTRIES = 200
+const MAX_HISTORY_BYTES = 32 * 1024 * 1024
+const MAX_WORKING_SOURCE_BYTES = 8 * 1024 * 1024
+const MAX_CLEAN_WORKING_FILES = 20
 
 let dirtyOutsideScope = false
 
@@ -55,6 +71,7 @@ export const GuiDesignerScope = defineScope(() => {
   const [notice, setNotice] = useState<string | null>(null)
   const [parsePending, setParsePending] = useState(false)
   const parseSequenceRef = useRef(0)
+  const openSequenceRef = useRef(0)
   const currentFile = currentPath ? files[currentPath] : undefined
   const entries = documentList.data ?? []
   const dirty = Object.values(files).some(file => file.workingSource !== file.originalSource || file.isNew)
@@ -77,6 +94,16 @@ export const GuiDesignerScope = defineScope(() => {
   useEffect(() => {
     if (!currentFile || (currentFile.workingSource === currentFile.originalSource && currentFile.history.length === 0))
       return
+    if (new TextEncoder().encode(currentFile.workingSource).byteLength > MAX_WORKING_SOURCE_BYTES) {
+      const oversizedTimer = window.setTimeout(() => {
+        setParsePending(false)
+        setFiles(value => ({
+          ...value,
+          [currentFile.path]: { ...value[currentFile.path], valid: false, parseError: 'GUI_SOURCE_TOO_LARGE' },
+        }))
+      }, 0)
+      return () => window.clearTimeout(oversizedTimer)
+    }
     const sequence = ++parseSequenceRef.current
     const timer = window.setTimeout(() => {
       void actions.reparse({
@@ -113,27 +140,35 @@ export const GuiDesignerScope = defineScope(() => {
   }, [currentFile?.path, currentFile?.workingSource])
 
   async function openFile(path: string) {
+    const sequence = ++openSequenceRef.current
     const cached = files[path]
     if (cached) {
+      setFiles(value => ({ ...value, [path]: { ...value[path], accessedAt: Date.now() } }))
       setCurrentPath(path)
       setSelectedNodeId(cached.document.roots[0] ?? null)
       return
     }
     const result = await actions.open({ devRelativePath: path })
-    setFiles(value => ({
-      ...value,
-      [path]: {
-        path,
-        originalSource: result.source,
-        workingSource: result.source,
-        document: result.document,
-        expectedSha256: result.sha256 ?? result.document.sourceSha256,
-        history: [],
-        future: [],
-        valid: !result.document.diagnostics.some(item => item.severity === 'error'),
-        isNew: false,
-      },
-    }))
+    setFiles((value) => {
+      const next = {
+        ...value,
+        [path]: {
+          path,
+          originalSource: result.source,
+          workingSource: result.source,
+          document: result.document,
+          expectedSha256: result.sha256 ?? result.document.sourceSha256,
+          history: [],
+          future: [],
+          valid: !result.document.diagnostics.some(item => item.severity === 'error'),
+          isNew: false,
+          accessedAt: Date.now(),
+        },
+      }
+      return pruneWorkingFileCache(next, path)
+    })
+    if (sequence !== openSequenceRef.current)
+      return
     setCurrentPath(path)
     setSelectedNodeId(result.document.roots[0] ?? null)
     setParsePending(false)
@@ -147,13 +182,15 @@ export const GuiDesignerScope = defineScope(() => {
       const file = value[currentPath]
       if (!file || file.workingSource === source)
         return value
+      const transaction = sourceTransaction(file.workingSource, source)
       return {
         ...value,
         [currentPath]: {
           ...file,
           workingSource: source,
-          history: [...file.history, file.workingSource],
+          history: trimHistory([...file.history, transaction]),
           future: [],
+          accessedAt: Date.now(),
         },
       }
     })
@@ -165,16 +202,17 @@ export const GuiDesignerScope = defineScope(() => {
     setParsePending(true)
     setFiles((value) => {
       const file = value[currentPath]
-      const previous = file?.history.at(-1)
-      if (!file || previous == null)
+      const transaction = file?.history.at(-1)
+      if (!file || transaction == null)
         return value
+      const previous = applySourceTransaction(file.workingSource, transaction, false)
       return {
         ...value,
         [currentPath]: {
           ...file,
           workingSource: previous,
           history: file.history.slice(0, -1),
-          future: [file.workingSource, ...file.future],
+          future: [transaction, ...file.future],
         },
       }
     })
@@ -186,15 +224,16 @@ export const GuiDesignerScope = defineScope(() => {
     setParsePending(true)
     setFiles((value) => {
       const file = value[currentPath]
-      const next = file?.future[0]
-      if (!file || next == null)
+      const transaction = file?.future[0]
+      if (!file || transaction == null)
         return value
+      const next = applySourceTransaction(file.workingSource, transaction, true)
       return {
         ...value,
         [currentPath]: {
           ...file,
           workingSource: next,
-          history: [...file.history, file.workingSource],
+          history: trimHistory([...file.history, transaction]),
           future: file.future.slice(1),
         },
       }
@@ -229,6 +268,19 @@ export const GuiDesignerScope = defineScope(() => {
     return (property === 'width' || property === 'height') && canInsertSizeSetter(node)
   }
 
+  function updateNodeGenericProperty(nodeId: string, property: string, value: GuiPropertyValue) {
+    const file = currentFile
+    const bound = file?.document.nodes[nodeId]?.properties?.[property]
+    if (!file || !bound?.writable || !bound.span)
+      return
+    updateWorkingSource(replaceSpans(file.workingSource, [{ span: bound.span, token: luaPropertyToken(value) }]))
+  }
+
+  function nodeGenericPropertyWritable(node: Mir3UiNode, property: string): boolean {
+    const bound = node.properties?.[property]
+    return Boolean(bound?.writable && bound.span)
+  }
+
   function updateNodePosition(nodeId: string, x: number, y: number) {
     const file = currentFile
     const node = file?.document.nodes[nodeId]
@@ -240,11 +292,12 @@ export const GuiDesignerScope = defineScope(() => {
     ]))
   }
 
-  function addNode(kind: Exclude<GuiNodeKind, 'Node' | 'Unsupported'>, x = 80, y = 80, canvasCoordinates = false) {
+  function addNode(kind: GuiComponentKind, x = 80, y = 80, canvasCoordinates = false) {
     const file = currentFile
     if (!file)
       return
-    const parent = selectedNode(file, selectedNodeId) ?? selectedNode(file, file.document.roots[0] ?? null)
+    const selected = selectedNode(file, selectedNodeId)
+    const parent = insertionParent(file, selected)
     const insertion = parent?.binding?.safeInsertion
     if (!parent || !insertion) {
       setNotice('studio.gui.notice.no_insertion')
@@ -257,6 +310,21 @@ export const GuiDesignerScope = defineScope(() => {
     const source = componentSource(kind, variable, parentVariable, x - parentPosition.x, y - parentPosition.y)
     updateWorkingSource(replaceSpans(file.workingSource, [{ span: insertion, token: source }]))
     setNotice(null)
+  }
+
+  function addNodeBehavior(nodeId: string, behavior: GuiBehaviorKind) {
+    const file = currentFile
+    const node = file?.document.nodes[nodeId]
+    const insertion = node?.binding?.safeInsertion
+    if (!file || !node?.luaVariable || !insertion)
+      return
+    const newline = file.document.newline === '\r\n' ? '\r\n' : file.document.newline === '\r' ? '\r' : '\n'
+    const source = behaviorSource(behavior, node.luaVariable, newline)
+    updateWorkingSource(replaceSpans(file.workingSource, [{ span: insertion, token: source }]))
+  }
+
+  function canAddNodeBehavior(node: Mir3UiNode): boolean {
+    return Boolean(node.luaVariable && node.binding?.safeInsertion && !parsePending)
   }
 
   async function createPage(request: GuiTemplateRequest) {
@@ -274,6 +342,7 @@ export const GuiDesignerScope = defineScope(() => {
           future: [],
           valid: true,
           isNew: true,
+          accessedAt: Date.now(),
         }
       }
       return next
@@ -384,8 +453,12 @@ export const GuiDesignerScope = defineScope(() => {
     redo,
     updateNodeProperty,
     nodePropertyWritable,
+    updateNodeGenericProperty,
+    nodeGenericPropertyWritable,
     updateNodePosition,
     addNode,
+    addNodeBehavior,
+    canAddNodeBehavior,
     createPage,
     prepareDiff,
     applyDiff,
@@ -408,6 +481,17 @@ function selectedNode(file: GuiWorkingFile, nodeId: string | null): Mir3UiNode |
   return nodeId ? file.document.nodes[nodeId] : undefined
 }
 
+function insertionParent(file: GuiWorkingFile, selected?: Mir3UiNode): Mir3UiNode | undefined {
+  if (selected && isContainerKind(selected.kind))
+    return selected
+  if (selected?.parentId) {
+    const parent = selectedNode(file, selected.parentId)
+    if (parent && isContainerKind(parent.kind))
+      return parent
+  }
+  return selectedNode(file, file.document.roots[0] ?? null)
+}
+
 function boundForProperty(node: Mir3UiNode, property: 'x' | 'y' | 'width' | 'height' | 'text' | 'image'): BoundValue<number | string> | undefined | null {
   switch (property) {
     case 'x': return node.position.x
@@ -424,8 +508,11 @@ function canInsertSizeSetter(node: Mir3UiNode): boolean {
 }
 
 function defaultNodeSize(node: Mir3UiNode): { width: number, height: number } {
-  const width = node.size.width.value > 0 ? node.size.width.value : node.kind === 'Panel' ? 240 : node.kind === 'Text' ? 80 : 100
-  const height = node.size.height.value > 0 ? node.size.height.value : node.kind === 'Panel' ? 160 : node.kind === 'Text' ? 24 : 40
+  if (node.kind === 'Unsupported')
+    return { width: Math.max(24, node.size.width.value), height: Math.max(24, node.size.height.value) }
+  const definition = componentDefinition(node.kind)
+  const width = node.size.width.value > 0 ? node.size.width.value : definition.defaultWidth
+  const height = node.size.height.value > 0 ? node.size.height.value : definition.defaultHeight
   return { width, height }
 }
 
@@ -462,6 +549,24 @@ function luaString(value: string): string {
   return JSON.stringify(value)
 }
 
+function luaPropertyToken(value: GuiPropertyValue): string {
+  if (value == null)
+    return 'nil'
+  if (typeof value === 'string')
+    return luaString(value)
+  if (typeof value === 'number')
+    return formatNumber(value)
+  if (typeof value === 'boolean')
+    return value ? 'true' : 'false'
+  return value.luaLiteral
+}
+
+function behaviorSource(behavior: GuiBehaviorKind, variable: string, newline: string): string {
+  if (behavior === 'timeline')
+    return `${newline}\tGUI:Timeline_FadeIn(${variable}, 0.3, nil)`
+  return `${newline}\tGUI:runAction(${variable}, GUI:ActionFadeIn(0.3))`
+}
+
 function nextNodeIndex(document: Mir3UiDocument, kind: string): number {
   const expressions = Object.values(document.nodes).map(node => node.luaVariable ?? '')
   let index = 1
@@ -478,14 +583,82 @@ function absoluteNodePosition(document: Mir3UiDocument, node: Mir3UiNode): { x: 
   return { x: parentPosition.x + node.position.x.value, y: parentPosition.y + node.position.y.value }
 }
 
-function componentSource(kind: Exclude<GuiNodeKind, 'Node' | 'Unsupported'>, variable: string, parent: string, x: number, y: number): string {
+function componentSource(kind: GuiComponentKind, variable: string, parent: string, x: number, y: number): string {
   const prefix = `\n\tlocal ${variable} = GUI:`
+  const definition = componentDefinition(kind)
+  const width = definition.defaultWidth
+  const height = definition.defaultHeight
   switch (kind) {
-    case 'Panel': return `${prefix}Layout_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, 240, 160, false)\n`
+    case 'Node': return `${prefix}Node_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)})\n`
+    case 'Panel': return `${prefix}Layout_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, false)\n`
     case 'Image': return `${prefix}Image_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "")\n`
     case 'Text': return `${prefix}Text_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, 16, "#ffffff", [[]])\n`
     case 'Button': return `${prefix}Button_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "")\n`
+    case 'TextAtlas': return `${prefix}TextAtlas_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "0", "", 16, 24, "0")\n`
+    case 'RichText': return `${prefix}RichText_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, [[]], ${width}, 16, "#ffffff", 2, nil, "Arial")\n`
+    case 'ScrollText': return `${prefix}ScrollText_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, 16, "#ffffff", [[]])\n`
+    case 'ItemShow': return `${prefix}ItemShow_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, {})\n`
+    case 'CheckBox': return `${prefix}CheckBox_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "", "")\n`
+    case 'TextInput': return `${prefix}TextInput_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, 16)\n`
+    case 'Slider': return `${prefix}Slider_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "", "", "")\n\tGUI:setContentSize(${variable}, ${width}, ${height})\n`
+    case 'ProgressTimer': return `${prefix}ProgressTimer_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "")\n\tGUI:setContentSize(${variable}, ${width}, ${height})\n`
+    case 'LoadingBar': return `${prefix}LoadingBar_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "", 0)\n\tGUI:setContentSize(${variable}, ${width}, ${height})\n`
+    case 'Effect': return `${prefix}Effect_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, 0, 0, 0, 0, 0, 1)\n`
+    case 'UIModel': return `${prefix}UIModel_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, 0, 0, 1)\n`
+    case 'SpineAnim': return `${prefix}SpineAnim_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, "", "", 0, "", true)\n`
+    case 'PageView': return `${prefix}PageView_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, 1)\n`
+    case 'ListView': return `${prefix}ListView_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, 1)\n`
+    case 'ScrollView': return `${prefix}ScrollView_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, 1)\n`
+    case 'QuickCell': return `${prefix}QuickCell_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, function(quickParent)\n\t\tlocal ${variable}_root = GUI:Layout_Create(quickParent, "${variable}_root", 0, 0, ${width}, ${height}, false)\n\t\treturn ${variable}_root\n\tend)\n`
+    case 'MenuItem': return `${prefix}MenuItem_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, { itemname = "", select = "", direction = 0, width = ${width}, height = ${height}, fontSize = 16, fontColor = "#ffffff" })\n`
+    case 'TableView': return `${prefix}TableView_Create(${parent}, "${variable}", ${formatNumber(x)}, ${formatNumber(y)}, ${width}, ${height}, 1, 80, 40, 0)\n`
   }
+}
+
+function sourceTransaction(beforeSource: string, afterSource: string): GuiSourceTransaction {
+  let start = 0
+  const commonLength = Math.min(beforeSource.length, afterSource.length)
+  while (start < commonLength && beforeSource[start] === afterSource[start])
+    start += 1
+  let beforeEnd = beforeSource.length
+  let afterEnd = afterSource.length
+  while (beforeEnd > start && afterEnd > start && beforeSource[beforeEnd - 1] === afterSource[afterEnd - 1]) {
+    beforeEnd -= 1
+    afterEnd -= 1
+  }
+  return { start, before: beforeSource.slice(start, beforeEnd), after: afterSource.slice(start, afterEnd) }
+}
+
+function applySourceTransaction(source: string, transaction: GuiSourceTransaction, forward: boolean): string {
+  const find = forward ? transaction.before : transaction.after
+  const replacement = forward ? transaction.after : transaction.before
+  return `${source.slice(0, transaction.start)}${replacement}${source.slice(transaction.start + find.length)}`
+}
+
+function trimHistory(history: GuiSourceTransaction[]): GuiSourceTransaction[] {
+  let bytes = 0
+  const kept: GuiSourceTransaction[] = []
+  for (let index = history.length - 1; index >= 0 && kept.length < MAX_HISTORY_ENTRIES; index -= 1) {
+    const transaction = history[index]
+    const size = (transaction.before.length + transaction.after.length) * 2
+    if (kept.length > 0 && bytes + size > MAX_HISTORY_BYTES)
+      break
+    bytes += size
+    kept.push(transaction)
+  }
+  return kept.reverse()
+}
+
+function pruneWorkingFileCache(files: Record<string, GuiWorkingFile>, activePath: string): Record<string, GuiWorkingFile> {
+  const cleanFiles = Object.values(files)
+    .filter(file => file.path !== activePath && !file.isNew && file.workingSource === file.originalSource)
+    .sort((left, right) => right.accessedAt - left.accessedAt)
+  const keep = new Set(cleanFiles.slice(0, MAX_CLEAN_WORKING_FILES).map(file => file.path))
+  return Object.fromEntries(Object.entries(files).filter(([path, file]) => {
+    if (path === activePath || file.isNew || file.workingSource !== file.originalSource)
+      return true
+    return keep.has(path)
+  }))
 }
 
 function inferPeerPath(path: string, device: GuiDevice): string {

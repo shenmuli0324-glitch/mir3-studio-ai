@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const MIR3_UI_SCHEMA_VERSION: u32 = 1;
+pub const MIR3_UI_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -93,13 +93,32 @@ pub struct Mir3UiSize {
     pub height: BoundValue<f64>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Mir3UiNodeType {
     Panel,
     Image,
-    Text,
     Button,
+    Text,
+    TextAtlas,
+    RichText,
+    ScrollText,
     Node,
+    ItemShow,
+    CheckBox,
+    TextInput,
+    Slider,
+    ProgressTimer,
+    LoadingBar,
+    Effect,
+    #[serde(rename = "UIModel")]
+    UiModel,
+    SpineAnim,
+    PageView,
+    ListView,
+    ScrollView,
+    QuickCell,
+    MenuItem,
+    TableView,
     Unsupported,
 }
 
@@ -107,14 +126,16 @@ pub enum Mir3UiNodeType {
 #[serde(rename_all = "camelCase")]
 pub enum CompatibilityStatus {
     Supported,
-    Partial,
-    Unsupported,
+    Approximate,
+    Dynamic,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Mir3UiCompatibility {
     pub status: CompatibilityStatus,
+    pub reason_code: Option<String>,
     pub reason: Option<String>,
 }
 
@@ -125,6 +146,85 @@ pub struct SourceBinding {
     pub statement: SourceSpan,
     pub property_spans: BTreeMap<String, SourceSpan>,
     pub insert_byte: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Mir3UiTransform {
+    pub scale_x: BoundValue<f64>,
+    pub scale_y: BoundValue<f64>,
+    pub rotation: BoundValue<f64>,
+    pub skew_x: BoundValue<f64>,
+    pub skew_y: BoundValue<f64>,
+}
+
+impl Default for Mir3UiTransform {
+    fn default() -> Self {
+        Self {
+            scale_x: BoundValue::default(1.0),
+            scale_y: BoundValue::default(1.0),
+            rotation: BoundValue::default(0.0),
+            skew_x: BoundValue::default(0.0),
+            skew_y: BoundValue::default(0.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Mir3UiScale9 {
+    pub enabled: BoundValue<bool>,
+    pub left: BoundValue<f64>,
+    pub bottom: BoundValue<f64>,
+    pub right: BoundValue<f64>,
+    pub top: BoundValue<f64>,
+}
+
+impl Default for Mir3UiScale9 {
+    fn default() -> Self {
+        Self {
+            enabled: BoundValue::default(false),
+            left: BoundValue::default(0.0),
+            bottom: BoundValue::default(0.0),
+            right: BoundValue::default(0.0),
+            top: BoundValue::default(0.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Mir3UiContainer {
+    pub direction: BoundValue<f64>,
+    pub gravity: BoundValue<f64>,
+    pub items_margin: BoundValue<f64>,
+    pub inner_width: BoundValue<f64>,
+    pub inner_height: BoundValue<f64>,
+}
+
+impl Default for Mir3UiContainer {
+    fn default() -> Self {
+        Self {
+            direction: BoundValue::default(1.0),
+            gravity: BoundValue::default(0.0),
+            items_margin: BoundValue::default(0.0),
+            inner_width: BoundValue::default(0.0),
+            inner_height: BoundValue::default(0.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum Mir3UiPropertyValue {
+    Boolean(bool),
+    Number(f64),
+    String(String),
+    RawLiteral {
+        #[serde(rename = "luaLiteral")]
+        lua_literal: String,
+    },
+    Nil,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -148,8 +248,28 @@ pub struct Mir3UiNode {
     pub color: BoundValue<String>,
     pub opacity: BoundValue<f64>,
     pub tag: BoundValue<f64>,
+    #[serde(default)]
+    pub transform: Mir3UiTransform,
+    #[serde(default = "default_true_bound_value")]
+    pub ignore_content_adapt_with_size: BoundValue<bool>,
+    #[serde(default = "default_false_bound_value")]
+    pub clipping_enabled: BoundValue<bool>,
+    #[serde(default)]
+    pub scale9: Mir3UiScale9,
+    #[serde(default)]
+    pub container: Mir3UiContainer,
+    #[serde(default)]
+    pub properties: BTreeMap<String, BoundValue<Mir3UiPropertyValue>>,
     pub compatibility: Mir3UiCompatibility,
     pub source_binding: SourceBinding,
+}
+
+fn default_true_bound_value() -> BoundValue<bool> {
+    BoundValue::default(true)
+}
+
+fn default_false_bound_value() -> BoundValue<bool> {
+    BoundValue::default(false)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

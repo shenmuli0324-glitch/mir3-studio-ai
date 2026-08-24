@@ -227,13 +227,13 @@ export interface Mir3UiDocument {
   assets: Mir3AssetReference[]
 }
 
-export type Mir3UiNodeKind =
-  | 'Panel'
-  | 'Image'
-  | 'Text'
-  | 'Button'
-  | 'Node'
-  | 'Unsupported'
+export type Mir3UiNodeKind
+  = | 'Panel'
+    | 'Image'
+    | 'Text'
+    | 'Button'
+    | 'Node'
+    | 'Unsupported'
 
 export interface Mir3UiNode {
   id: string
@@ -361,11 +361,11 @@ Patch Engine 不生成 Lua，不格式化 Lua，只替换被确认属性对应�
 ### 7.2 Edit Intent
 
 ```ts
-export type UiEditIntent =
-  | { type: 'SetPosition', nodeId: string, x: number, y: number }
-  | { type: 'SetSize', nodeId: string, width: number, height: number }
-  | { type: 'SetText', nodeId: string, text: string }
-  | { type: 'SetImage', nodeId: string, path: string }
+export type UiEditIntent
+  = | { type: 'SetPosition', nodeId: string, x: number, y: number }
+    | { type: 'SetSize', nodeId: string, width: number, height: number }
+    | { type: 'SetText', nodeId: string, text: string }
+    | { type: 'SetImage', nodeId: string, path: string }
 ```
 
 每个 intent 必须经过：节点存在、属性可写、Source Binding 存在、值域合法、源 SHA 未变化、原 token 与 `raw` 一致等校验。

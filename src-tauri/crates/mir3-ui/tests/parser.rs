@@ -36,7 +36,7 @@ fn parses_core_nodes_bindings_assets_and_unsupported_nodes() {
     assert_eq!(document.nodes[4].pressed_image.value, "res/b_pressed.png");
     assert_eq!(
         document.nodes[5].compatibility.status,
-        CompatibilityStatus::Unsupported
+        CompatibilityStatus::Approximate
     );
     assert_eq!(document.assets.len(), 3);
     assert!(document.nodes[1]

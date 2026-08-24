@@ -1,25 +1,64 @@
 import type {
+  GuiAssetMeta,
   GuiDesignerStatus,
+  GuiDevTreePage,
   GuiDocumentEntry,
   GuiDocumentOpenResult,
   GuiDraftApplyResult,
   GuiDraftChangeSet,
   GuiDraftConfirmation,
   GuiDraftPrepareResult,
+  GuiReadonlyDocument,
   GuiTemplateRequest,
   GuiTemplateResult,
   Mir3UiDocument,
   Mir3UiNode,
   SourceSpan,
 } from './types'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
+
+let assetDecodingPaused = false
+const assetDecodeWaiters = new Set<() => void>()
+
+export function setGuiAssetDecodingPaused(paused: boolean): void {
+  assetDecodingPaused = paused
+  if (paused)
+    return
+  for (const resume of assetDecodeWaiters)
+    resume()
+  assetDecodeWaiters.clear()
+}
 
 export function useGuiDesignerStatus(projectId?: string) {
   return useQuery({
     queryKey: ['gui-designer-status', projectId],
     queryFn: () => invoke<GuiDesignerStatus>('gui_designer_status', { projectId }),
     enabled: projectId != null,
+  })
+}
+
+export function guiDevTreeQueryOptions(projectId: string, parentPath: string, cursor?: string | null) {
+  return queryOptions({
+    queryKey: ['gui-dev-tree', projectId, parentPath, cursor ?? null],
+    queryFn: () => invoke<GuiDevTreePage>('gui_dev_tree_list', { projectId, parentPath, cursor }),
+    staleTime: 30_000,
+  })
+}
+
+export function guiReadonlyDocumentQueryOptions(projectId: string, devRelativePath: string) {
+  return queryOptions({
+    queryKey: ['gui-readonly-document', projectId, devRelativePath],
+    queryFn: () => invoke<GuiReadonlyDocument>('gui_readonly_document_open', { projectId, devRelativePath }),
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+}
+
+export function guiAssetMetaQueryOptions(projectId: string, logicalPath: string) {
+  return queryOptions({
+    queryKey: ['gui-asset-meta', projectId, logicalPath],
+    queryFn: () => invoke<GuiAssetMeta>('gui_asset_meta', { projectId, logicalPath }),
+    staleTime: Number.POSITIVE_INFINITY,
   })
 }
 
@@ -31,14 +70,37 @@ export function useGuiDocumentList(projectId?: string) {
   })
 }
 
-export function useGuiAsset(projectId: string | undefined, logicalPath: string | undefined) {
-  return useQuery({
+export interface GuiAssetBinary {
+  logicalPath: string
+  mimeType: string
+  blob: Blob
+  sha256: string
+  width?: number
+  height?: number
+}
+
+export function guiAssetQueryOptions(projectId: string, logicalPath: string) {
+  return queryOptions({
     queryKey: ['gui-asset', projectId, logicalPath],
-    queryFn: () => invoke<{ logicalPath: string, mimeType: string, base64: string, sha256: string }>('gui_asset_read', { projectId, logicalPath }),
-    enabled: projectId != null && logicalPath != null && logicalPath.length > 0,
+    queryFn: () => invoke<unknown>('gui_asset_read', { projectId, logicalPath })
+      .then(payload => normalizeGuiAssetPayload(payload, logicalPath))
+      .then(readGuiAssetDimensions),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   })
+}
+
+export async function normalizeGuiAssetPayload(payload: unknown, logicalPath: string): Promise<GuiAssetBinary> {
+  const legacy = isRecord(payload) ? payload : undefined
+  const mimeType = stringValue(legacy?.mimeType) ?? inferAssetMimeType(logicalPath)
+  const bytes = assetBytes(payload)
+  const blob = new Blob([bytes], { type: mimeType })
+  return {
+    logicalPath: stringValue(legacy?.logicalPath) ?? logicalPath,
+    mimeType,
+    blob,
+    sha256: stringValue(legacy?.sha256) ?? `${logicalPath}:${bytes.byteLength}`,
+  }
 }
 
 export function useGuiDocumentActions(projectId?: string) {
@@ -211,6 +273,9 @@ function normalizeNode(input: unknown): Mir3UiNode {
   const wire = input as Record<string, unknown>
   const compatibility = wire.compatibility as Record<string, unknown> | undefined
   const sourceBinding = wire.sourceBinding as Record<string, unknown> | undefined
+  const transform = wire.transform as Record<string, unknown> | undefined
+  const scale9 = wire.scale9 as Record<string, unknown> | undefined
+  const container = wire.container as Record<string, unknown> | undefined
   const insertByte = numberValue(sourceBinding?.insertByte) ?? 0
   const zeroSpan: SourceSpan | null = insertByte > 0 ? { startByte: insertByte, endByte: insertByte } : null
   return {
@@ -224,7 +289,31 @@ function normalizeNode(input: unknown): Mir3UiNode {
     position: pointValue(wire.position),
     size: sizeValue(wire.size),
     anchor: pointValue(wire.anchor),
+    transform: {
+      scaleX: boundValue<number>(transform?.scaleX ?? wire.scaleX, 1),
+      scaleY: boundValue<number>(transform?.scaleY ?? wire.scaleY, 1),
+      rotation: boundValue<number>(transform?.rotation ?? wire.rotation, 0),
+      skewX: boundValue<number>(transform?.skewX ?? wire.skewX, 0),
+      skewY: boundValue<number>(transform?.skewY ?? wire.skewY, 0),
+    },
     visible: boundValue<boolean>(wire.visible, true),
+    ignoreContentAdaptWithSize: boundValue<boolean>(wire.ignoreContentAdaptWithSize, true),
+    clippingEnabled: boundValue<boolean>(wire.clippingEnabled, false),
+    scale9: {
+      enabled: boundValue<boolean>(scale9?.enabled, false),
+      left: boundValue<number>(scale9?.left, 0),
+      bottom: boundValue<number>(scale9?.bottom, 0),
+      right: boundValue<number>(scale9?.right, 0),
+      top: boundValue<number>(scale9?.top, 0),
+    },
+    container: {
+      direction: boundValue<number>(container?.direction, 1),
+      gravity: boundValue<number>(container?.gravity, 0),
+      itemsMargin: boundValue<number>(container?.itemsMargin, 0),
+      innerWidth: boundValue<number>(container?.innerWidth, 0),
+      innerHeight: boundValue<number>(container?.innerHeight, 0),
+    },
+    properties: propertyValues(wire.properties),
     paint: {
       text: boundValue<string>(wire.text, ''),
       image: boundValue<string>(wire.image, ''),
@@ -234,6 +323,8 @@ function normalizeNode(input: unknown): Mir3UiNode {
       opacity: boundValue<number>(wire.opacity, 255),
     },
     compatibility: compatibilityValue(compatibility?.status ?? wire.compatibility),
+    compatibilityReasonCode: stringValue(compatibility?.reasonCode),
+    compatibilityReason: stringValue(compatibility?.reason),
     binding: {
       createCall: spanValue(sourceBinding?.createCall),
       statement: spanValue(sourceBinding?.statement),
@@ -291,16 +382,48 @@ function spansValue(input: unknown): Record<string, SourceSpan> {
 
 function nodeKindValue(input: unknown): Mir3UiNode['kind'] {
   const value = String(input ?? 'Unsupported')
-  if (value === 'Panel' || value === 'Image' || value === 'Text' || value === 'Button' || value === 'Node')
-    return value
+  const kinds: Mir3UiNode['kind'][] = [
+    'Panel',
+    'Image',
+    'Text',
+    'Button',
+    'Node',
+    'TextAtlas',
+    'RichText',
+    'ScrollText',
+    'ItemShow',
+    'CheckBox',
+    'TextInput',
+    'Slider',
+    'ProgressTimer',
+    'LoadingBar',
+    'Effect',
+    'UIModel',
+    'SpineAnim',
+    'PageView',
+    'ListView',
+    'ScrollView',
+    'QuickCell',
+    'MenuItem',
+    'TableView',
+  ]
+  const kind = kinds.find(item => item === value)
+  if (kind)
+    return kind
   return 'Unsupported'
 }
 
+function propertyValues(input: unknown): Mir3UiNode['properties'] {
+  if (!isRecord(input))
+    return {}
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, boundValue(value, null)]))
+}
+
 function compatibilityValue(input: unknown): Mir3UiNode['compatibility'] {
-  const value = String(input ?? 'unsupported').toLowerCase()
-  if (value === 'supported' || value === 'partial')
+  const value = String(input ?? 'unknown').toLowerCase()
+  if (value === 'supported' || value === 'approximate' || value === 'dynamic')
     return value
-  return 'unsupported'
+  return 'unknown'
 }
 
 function sourceValue(input: unknown): 'literal' | 'default' | 'dynamic' {
@@ -334,4 +457,83 @@ function platformValue(input: unknown): GuiDocumentEntry['platform'] {
   if (value === 'mobile' || value === 'pc')
     return value
   return 'shared'
+}
+
+async function readGuiAssetDimensions(asset: GuiAssetBinary): Promise<GuiAssetBinary> {
+  await waitForAssetDecoding()
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(asset.blob)
+      const dimensions = { width: bitmap.width, height: bitmap.height }
+      bitmap.close()
+      return { ...asset, ...dimensions }
+    }
+    catch {
+      // WebView不支持该容器时继续使用Image解码，不让素材失败阻断画布。
+    }
+  }
+  return readGuiAssetDimensionsWithImage(asset)
+}
+
+async function waitForAssetDecoding(): Promise<void> {
+  if (!assetDecodingPaused)
+    return
+  await new Promise<void>((resolve) => {
+    assetDecodeWaiters.add(resolve)
+  })
+}
+
+async function readGuiAssetDimensionsWithImage(asset: GuiAssetBinary): Promise<GuiAssetBinary> {
+  if (typeof Image !== 'function' || typeof URL.createObjectURL !== 'function')
+    return asset
+  const url = URL.createObjectURL(asset.blob)
+  try {
+    const dimensions = await new Promise<{ width: number, height: number }>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight })
+      image.onerror = reject
+      image.src = url
+    })
+    return { ...asset, ...dimensions }
+  }
+  catch {
+    return asset
+  }
+  finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+function assetBytes(payload: unknown): Uint8Array {
+  if (payload instanceof ArrayBuffer)
+    return new Uint8Array(payload)
+  if (ArrayBuffer.isView(payload))
+    return new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength)
+  if (Array.isArray(payload))
+    return Uint8Array.from(payload.map(Number))
+  if (isRecord(payload)) {
+    if (typeof payload.base64 === 'string')
+      return decodeBase64(payload.base64)
+    if (Array.isArray(payload.bytes))
+      return Uint8Array.from(payload.bytes.map(Number))
+    if (Array.isArray(payload.data))
+      return Uint8Array.from(payload.data.map(Number))
+  }
+  throw new Error('GUI_ASSET_PAYLOAD_INVALID')
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const decoded = globalThis.atob(value)
+  const bytes = new Uint8Array(decoded.length)
+  for (let index = 0; index < decoded.length; index += 1)
+    bytes[index] = decoded.charCodeAt(index)
+  return bytes
+}
+
+function inferAssetMimeType(logicalPath: string): string {
+  return /\.jpe?g$/i.test(logicalPath) ? 'image/jpeg' : 'image/png'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object'
 }

@@ -60,7 +60,7 @@ describe('gui designer interaction', () => {
     renderDesigner()
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: /demo\/main\.lua/i }))
+    await openDemoFile(user)
     expect(await screen.findByText('1136 × 640')).toBeTruthy()
 
     await user.click(screen.getByRole('button', { name: 'PC' }))
@@ -79,7 +79,7 @@ describe('gui designer interaction', () => {
     renderDesigner()
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: /demo\/main\.lua/i }))
+    await openDemoFile(user)
     await user.click(screen.getByRole('button', { name: 'Layers' }))
     await user.click(await screen.findByRole('button', { name: /Button_close/i }))
 
@@ -106,6 +106,18 @@ describe('gui designer interaction', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm and apply' }))
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_draft_apply', expect.objectContaining({ confirmationToken: 'confirm-once' })))
   })
+
+  it('lazy-loads GUILayout and opens Lua in a read-only preview', async () => {
+    installInvokeFixture()
+    renderDesigner()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: /GUILayout.*Official GUI runtime logic/i }))
+    await user.click(await screen.findByRole('button', { name: /demo\.lua.*read-only/i }))
+    expect(await screen.findByText('Read-only Lua source')).toBeTruthy()
+    expect(screen.getByText('return {}')).toBeTruthy()
+    expect(mocks.invoke).toHaveBeenCalledWith('gui_readonly_document_open', expect.objectContaining({ devRelativePath: 'GUILayout/demo.lua' }))
+  })
 })
 
 function renderDesigner(): void {
@@ -123,6 +135,47 @@ function installInvokeFixture(): void {
         { path: 'GUIExport/demo/main_win32.lua', kind: 'editable', platform: 'pc', peerPath: 'GUIExport/demo/main.lua' },
         { path: 'GUILayout/demo.lua', kind: 'readonly', platform: 'shared' },
       ])
+    }
+    if (command === 'gui_dev_tree_list') {
+      const parentPath = String(args.parentPath ?? '')
+      if (parentPath === '') {
+        return Promise.resolve({
+          parentPath,
+          entries: [treeDirectory('GUIExport', 'GUIExport'), treeDirectory('GUILayout', 'GUILayout'), treeDirectory('res', 'res')],
+          nextCursor: null,
+        })
+      }
+      if (parentPath === 'GUIExport') {
+        return Promise.resolve({ parentPath, entries: [treeDirectory('GUIExport/demo', 'GUIExport')], nextCursor: null })
+      }
+      if (parentPath === 'GUIExport/demo') {
+        return Promise.resolve({
+          parentPath,
+          entries: [
+            treeFile('GUIExport/demo/main.lua', 'editable'),
+            treeFile('GUIExport/demo/main_win32.lua', 'editable'),
+          ],
+          nextCursor: null,
+        })
+      }
+      if (parentPath === 'GUILayout') {
+        return Promise.resolve({
+          parentPath,
+          entries: [treeFile('GUILayout/demo.lua', 'readonly')],
+          nextCursor: null,
+        })
+      }
+      return Promise.resolve({ parentPath, entries: [], nextCursor: null })
+    }
+    if (command === 'gui_readonly_document_open') {
+      return Promise.resolve({
+        devRelativePath: 'GUILayout/demo.lua',
+        source: 'return {}',
+        sha256: 'readonly-sha',
+        encoding: 'UTF-8',
+        newline: '\n',
+        readOnly: true,
+      })
     }
     if (command === 'gui_document_open')
       return Promise.resolve(documentEnvelope(String(args.devRelativePath)))
@@ -148,6 +201,38 @@ function installInvokeFixture(): void {
       return Promise.resolve({ id: 'snapshot-1', files: [] })
     return Promise.reject(new Error(`UNEXPECTED_COMMAND: ${command}`))
   })
+}
+
+async function openDemoFile(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: /GUIExport.*Official static GUI layout/i }))
+  await user.click(await screen.findByRole('button', { name: /demo.*Official static GUI layout/i }))
+  await user.click(await screen.findByRole('button', { name: /main\.lua.*visual editing/i }))
+}
+
+function treeDirectory(path: string, descriptionId: string) {
+  return {
+    path,
+    name: path.split('/').at(-1),
+    entryType: 'directory',
+    policy: path === 'GUILayout' ? 'readonly' : 'info',
+    hidden: false,
+    size: 0,
+    hasChildren: true,
+    descriptionId,
+  }
+}
+
+function treeFile(path: string, policy: 'editable' | 'readonly' | 'asset' | 'info') {
+  return {
+    path,
+    name: path.split('/').at(-1),
+    entryType: 'file',
+    policy,
+    hidden: false,
+    size: 64,
+    hasChildren: false,
+    descriptionId: 'GUIExport',
+  }
 }
 
 function documentEnvelope(path: string) {

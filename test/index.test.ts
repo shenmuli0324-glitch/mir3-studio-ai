@@ -1,8 +1,11 @@
+import type { Mir3UiNode } from '../src/features/gui-designer/types'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import runtimeBaseline from '../runtime-baseline.lock.json'
 import mir3Plugin from '../src-tauri/resources/mir3-core-plugin/package.json'
 import { DEV_TOOL_CATEGORIES, DEV_TOOLS } from '../src/features/devtools/devtool-registry'
+import { normalizeGuiAssetPayload } from '../src/features/gui-designer/api'
+import { canvasRenderMode, nodeLocalMatrix, renderedNodeSize, transformMatrixPoint } from '../src/features/gui-designer/canvas-render-model'
 import { MOBILE_VIEWPORT, PC_VIEWPORTS } from '../src/features/gui-designer/types'
 import enUS from '../src/i18n/locales/en-US.json'
 import zhCN from '../src/i18n/locales/zh-CN.json'
@@ -88,6 +91,61 @@ describe('studio shell contract', () => {
     ])
   })
 
+  it('applies the parent anchor to its child coordinate system', () => {
+    const parent = testGuiNode('Panel', 200, 100)
+    parent.position.x.value = 100
+    parent.position.y.value = 100
+    parent.anchor!.x.value = 0.5
+    parent.anchor!.y.value = 0.5
+    const origin = transformMatrixPoint(nodeLocalMatrix(parent, renderedNodeSize(parent)), { x: 0, y: 0 })
+    expect(origin).toEqual({ x: 0, y: 50 })
+  })
+
+  it('applies position after rotation and scale in the local node matrix', () => {
+    const node = testGuiNode('Panel', 10, 10)
+    node.position.x.value = 10
+    node.position.y.value = 20
+    node.transform!.scaleX.value = 2
+    node.transform!.scaleY.value = 2
+    node.transform!.rotation.value = 90
+    const point = transformMatrixPoint(nodeLocalMatrix(node, renderedNodeSize(node)), { x: 1, y: 0 })
+    expect(point.x).toBeCloseTo(10)
+    expect(point.y).toBeCloseTo(22)
+  })
+
+  it('chooses explicit or intrinsic image size from ignoreContentAdaptWithSize instead of taking the maximum', () => {
+    const image = testGuiNode('Image', 80, 40)
+    image.ignoreContentAdaptWithSize!.value = true
+    expect(renderedNodeSize(image, { width: 200, height: 100 })).toEqual({ width: 80, height: 40 })
+    image.ignoreContentAdaptWithSize!.value = false
+    expect(renderedNodeSize(image, { width: 200, height: 100 })).toEqual({ width: 200, height: 100 })
+  })
+
+  it('uses lightweight and blocked modes for very large GUI documents', () => {
+    expect(canvasRenderMode(1999)).toBe('full')
+    expect(canvasRenderMode(2000)).toBe('lightweight')
+    expect(canvasRenderMode(9999)).toBe('lightweight')
+    expect(canvasRenderMode(10000)).toBe('blocked')
+  })
+
+  it('updates drag preview with requestAnimationFrame and only commits on pointerup', () => {
+    const canvas = readFileSync(new URL('../src/features/gui-designer/designer-canvas.tsx', import.meta.url), 'utf8')
+    const pointerMove = canvas.slice(canvas.indexOf('function handlePointerMove'), canvas.indexOf('function applyPendingDragFrame'))
+    expect(pointerMove).toContain('requestAnimationFrame')
+    expect(pointerMove).not.toContain('updateNodePosition')
+    expect(pointerMove).not.toContain('setState')
+    expect(canvas.match(/scope\.updateNodePosition/g)).toHaveLength(1)
+  })
+
+  it('normalizes legacy base64 and future binary GUI asset payloads', async () => {
+    const legacy = await normalizeGuiAssetPayload({ logicalPath: 'res/a.png', mimeType: 'image/png', base64: 'AQID', sha256: 'legacy' }, 'res/a.png')
+    const binary = await normalizeGuiAssetPayload(Uint8Array.from([1, 2, 3]).buffer, 'res/a.png')
+    expect(legacy.blob.size).toBe(3)
+    expect(legacy.sha256).toBe('legacy')
+    expect(binary.blob.size).toBe(3)
+    expect(binary.mimeType).toBe('image/png')
+  })
+
   it('uses one persistent Harness iframe for the workbench and its settings surface', () => {
     expect(isHarnessView('workbench')).toBe(true)
     expect(isHarnessView('settings')).toBe(true)
@@ -96,6 +154,24 @@ describe('studio shell contract', () => {
     expect(harnessSurfaceFor('project')).toBe('workbench')
   })
 })
+
+function testGuiNode(kind: Mir3UiNode['kind'], width: number, height: number): Mir3UiNode {
+  function bound<T>(value: T) {
+    return { value, source: 'literal' as const, writable: true }
+  }
+  return {
+    id: 'node',
+    kind,
+    children: [],
+    position: { x: bound(0), y: bound(0) },
+    size: { width: bound(width), height: bound(height) },
+    anchor: { x: bound(0), y: bound(0) },
+    transform: { scaleX: bound(1), scaleY: bound(1), rotation: bound(0), skewX: bound(0), skewY: bound(0) },
+    visible: bound(true),
+    ignoreContentAdaptWithSize: bound(true),
+    compatibility: 'supported',
+  }
+}
 
 describe('runtime baseline promotion contract', () => {
   it('locks one checksummed runtime set per supported target', () => {

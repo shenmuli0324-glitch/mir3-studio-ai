@@ -74,7 +74,27 @@ pub fn replace_bound_property(
         "opacity" => node.opacity.writable,
         "tag" => node.tag.writable,
         "name" => node.name.writable,
-        _ => false,
+        "scaleX" => node.transform.scale_x.writable,
+        "scaleY" => node.transform.scale_y.writable,
+        "rotation" => node.transform.rotation.writable,
+        "skewX" => node.transform.skew_x.writable,
+        "skewY" => node.transform.skew_y.writable,
+        "ignoreContentAdaptWithSize" => node.ignore_content_adapt_with_size.writable,
+        "clippingEnabled" => node.clipping_enabled.writable,
+        "scale9Enabled" => node.scale9.enabled.writable,
+        "scale9Left" => node.scale9.left.writable,
+        "scale9Bottom" => node.scale9.bottom.writable,
+        "scale9Right" => node.scale9.right.writable,
+        "scale9Top" => node.scale9.top.writable,
+        "direction" => node.container.direction.writable,
+        "gravity" => node.container.gravity.writable,
+        "itemsMargin" => node.container.items_margin.writable,
+        "innerWidth" => node.container.inner_width.writable,
+        "innerHeight" => node.container.inner_height.writable,
+        _ => node
+            .properties
+            .get(property)
+            .is_some_and(|value| value.writable),
     };
     if !writable {
         return Err(format!("GUI_PROPERTY_DYNAMIC: {node_id}.{property}"));

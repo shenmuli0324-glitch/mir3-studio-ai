@@ -1,8 +1,9 @@
 use crate::{
-    BoundValue, BoundValueSource, CompatibilityStatus, DiagnosticSeverity, Mir3UiAsset,
-    Mir3UiCompatibility, Mir3UiDiagnostic, Mir3UiDocument, Mir3UiNode, Mir3UiNodeType, Mir3UiPoint,
-    Mir3UiSize, Mir3UiSource, Mir3UiViewport, SourceBinding, SourcePoint, SourceSpan,
-    MIR3_UI_SCHEMA_VERSION,
+    widget_adapter_registry, AdapterPropertyKind, BoundValue, BoundValueSource,
+    CompatibilityStatus, DiagnosticSeverity, Mir3UiAsset, Mir3UiCompatibility, Mir3UiContainer,
+    Mir3UiDiagnostic, Mir3UiDocument, Mir3UiNode, Mir3UiNodeType, Mir3UiPoint, Mir3UiPropertyValue,
+    Mir3UiScale9, Mir3UiSize, Mir3UiSource, Mir3UiTransform, Mir3UiViewport, SourceBinding,
+    SourcePoint, SourceSpan, WidgetAdapter, MIR3_UI_SCHEMA_VERSION,
 };
 use std::collections::{BTreeMap, HashMap};
 use tree_sitter::{Node, Parser, Point};
@@ -202,15 +203,12 @@ fn process_create(
         });
         return;
     };
+    let registry = widget_adapter_registry();
+    let adapter = registry.find(&call.method);
     let raw_type = call.method.trim_end_matches("_Create");
-    let node_type = match raw_type {
-        "Layout" => Mir3UiNodeType::Panel,
-        "Image" => Mir3UiNodeType::Image,
-        "Text" => Mir3UiNodeType::Text,
-        "Button" => Mir3UiNodeType::Button,
-        "Node" => Mir3UiNodeType::Node,
-        _ => Mir3UiNodeType::Unsupported,
-    };
+    let node_type = adapter
+        .map(|value| value.node_type)
+        .unwrap_or(Mir3UiNodeType::Unsupported);
     let id = format!("node-{}", call.call_span.start_byte);
     let parent_variable = call.arguments.first().map(|argument| argument.text.trim());
     let parent_id = parent_variable
@@ -219,60 +217,59 @@ fn process_create(
         .map(|node| node.id.clone());
     let missing_parent = parent_id.is_none()
         && parent_variable.is_some_and(|name| !matches!(name, "parent" | "nil" | "_parent"));
-    let supported = node_type != Mir3UiNodeType::Unsupported;
     let name = string_argument(&call.arguments, 1, String::new());
-    let x = number_argument(&call.arguments, 2, 0.0);
-    let y = number_argument(&call.arguments, 3, 0.0);
-    let (width, height) = if node_type == Mir3UiNodeType::Panel {
-        (
-            number_argument(&call.arguments, 4, 0.0),
-            number_argument(&call.arguments, 5, 0.0),
-        )
-    } else {
-        (BoundValue::default(0.0), BoundValue::default(0.0))
-    };
-    let image = if matches!(node_type, Mir3UiNodeType::Image | Mir3UiNodeType::Button) {
-        string_argument(&call.arguments, 4, String::new())
-    } else {
-        BoundValue::default(String::new())
-    };
-    let font_size = if node_type == Mir3UiNodeType::Text {
-        number_argument(&call.arguments, 4, 14.0)
-    } else {
-        BoundValue::default(14.0)
-    };
-    let color = if node_type == Mir3UiNodeType::Text {
-        string_argument(&call.arguments, 5, "#ffffff".to_string())
-    } else {
-        BoundValue::default(String::new())
-    };
-    let text = if node_type == Mir3UiNodeType::Text {
-        string_argument(&call.arguments, 6, String::new())
-    } else {
-        BoundValue::default(String::new())
-    };
-    let has_dynamic = [name.source, x.source, y.source, width.source, height.source]
-        .contains(&BoundValueSource::Dynamic)
-        || [image.source, text.source, font_size.source, color.source]
-            .contains(&BoundValueSource::Dynamic);
-    let reason = if !supported {
-        Some(format!("V0.1 不渲染 GUI:{raw_type}_Create"))
-    } else if missing_parent {
-        Some(format!(
-            "无法静态解析父节点 {}",
-            parent_variable.unwrap_or_default()
-        ))
-    } else if has_dynamic {
-        Some("包含动态 Lua 属性；动态 token 保持只读".to_string())
-    } else {
-        None
-    };
-    let status = if !supported {
-        CompatibilityStatus::Unsupported
-    } else if missing_parent || has_dynamic {
-        CompatibilityStatus::Partial
+    let x = bound_number(adapter, &call.arguments, "x", 0.0);
+    let y = bound_number(adapter, &call.arguments, "y", 0.0);
+    let width = bound_number(adapter, &call.arguments, "width", 0.0);
+    let height = bound_number(adapter, &call.arguments, "height", 0.0);
+    let image = bound_string(adapter, &call.arguments, "image", String::new());
+    let font_size = bound_number(adapter, &call.arguments, "fontSize", 14.0);
+    let color = bound_string(adapter, &call.arguments, "color", String::new());
+    let text = bound_string(adapter, &call.arguments, "text", String::new());
+    let direction = bound_number(adapter, &call.arguments, "direction", 1.0);
+    let clipping_enabled = bound_bool(
+        adapter,
+        &call.arguments,
+        "clippingEnabled",
+        matches!(
+            node_type,
+            Mir3UiNodeType::PageView
+                | Mir3UiNodeType::ListView
+                | Mir3UiNodeType::ScrollView
+                | Mir3UiNodeType::TableView
+        ),
+    );
+    let create_scale = bound_number(adapter, &call.arguments, "scale", 1.0);
+    let properties = create_generic_properties(adapter, &call.arguments);
+    let has_dynamic = name.source == BoundValueSource::Dynamic
+        || properties
+            .values()
+            .any(|value| value.source == BoundValueSource::Dynamic);
+    let status = if adapter.is_none() {
+        CompatibilityStatus::Unknown
+    } else if has_dynamic || missing_parent {
+        CompatibilityStatus::Dynamic
+    } else if adapter.is_some_and(|value| value.approximate) {
+        CompatibilityStatus::Approximate
     } else {
         CompatibilityStatus::Supported
+    };
+    let reason = match status {
+        CompatibilityStatus::Unknown => Some(format!("V0.2 未注册 GUI:{raw_type}_Create")),
+        CompatibilityStatus::Dynamic if missing_parent => Some(format!(
+            "无法静态解析父节点 {}",
+            parent_variable.unwrap_or_default()
+        )),
+        CompatibilityStatus::Dynamic => Some("包含动态 Lua 属性；动态 token 保持只读".to_string()),
+        CompatibilityStatus::Approximate => Some("运行时控件使用近似占位预览".to_string()),
+        CompatibilityStatus::Supported => None,
+    };
+    let reason_code = match status {
+        CompatibilityStatus::Unknown => Some("unsupported_api".to_string()),
+        CompatibilityStatus::Dynamic if missing_parent => Some("unresolved_parent".to_string()),
+        CompatibilityStatus::Dynamic => Some("dynamic_property".to_string()),
+        CompatibilityStatus::Approximate => Some("runtime_approximation".to_string()),
+        CompatibilityStatus::Supported => None,
     };
     let mut property_spans = BTreeMap::new();
     bind_span(&mut property_spans, "name", &name);
@@ -284,6 +281,9 @@ fn process_create(
     bind_span(&mut property_spans, "fontSize", &font_size);
     bind_span(&mut property_spans, "color", &color);
     bind_span(&mut property_spans, "text", &text);
+    for (property, value) in &properties {
+        bind_span(&mut property_spans, property, value);
+    }
 
     let node = Mir3UiNode {
         id: id.clone(),
@@ -307,7 +307,24 @@ fn process_create(
         color,
         opacity: BoundValue::default(255.0),
         tag: BoundValue::default(0.0),
-        compatibility: Mir3UiCompatibility { status, reason },
+        transform: Mir3UiTransform {
+            scale_x: create_scale.clone(),
+            scale_y: create_scale,
+            ..Mir3UiTransform::default()
+        },
+        ignore_content_adapt_with_size: BoundValue::default(true),
+        clipping_enabled,
+        scale9: Mir3UiScale9::default(),
+        container: Mir3UiContainer {
+            direction,
+            ..Mir3UiContainer::default()
+        },
+        properties,
+        compatibility: Mir3UiCompatibility {
+            status,
+            reason_code,
+            reason,
+        },
         source_binding: SourceBinding {
             create_call: call.call_span,
             statement: call.statement_span,
@@ -327,6 +344,131 @@ fn process_create(
         });
     }
     symbols.insert((call.scope_start_byte, variable), index);
+}
+
+fn bound_number(
+    adapter: Option<&WidgetAdapter>,
+    arguments: &[CallArgument],
+    property: &str,
+    default: f64,
+) -> BoundValue<f64> {
+    adapter
+        .and_then(|value| {
+            value
+                .bindings
+                .iter()
+                .find(|binding| binding.property == property)
+        })
+        .map_or_else(
+            || BoundValue::default(default),
+            |binding| number_argument(arguments, binding.index, default),
+        )
+}
+
+fn bound_string(
+    adapter: Option<&WidgetAdapter>,
+    arguments: &[CallArgument],
+    property: &str,
+    default: String,
+) -> BoundValue<String> {
+    let binding = adapter.and_then(|value| {
+        value
+            .bindings
+            .iter()
+            .find(|binding| binding.property == property)
+    });
+    match binding {
+        Some(binding) => string_argument(arguments, binding.index, default),
+        None => BoundValue::default(default),
+    }
+}
+
+fn bound_bool(
+    adapter: Option<&WidgetAdapter>,
+    arguments: &[CallArgument],
+    property: &str,
+    default: bool,
+) -> BoundValue<bool> {
+    adapter
+        .and_then(|value| {
+            value
+                .bindings
+                .iter()
+                .find(|binding| binding.property == property)
+        })
+        .map_or_else(
+            || BoundValue::default(default),
+            |binding| bool_argument(arguments, binding.index, default),
+        )
+}
+
+fn create_generic_properties(
+    adapter: Option<&WidgetAdapter>,
+    arguments: &[CallArgument],
+) -> BTreeMap<String, BoundValue<Mir3UiPropertyValue>> {
+    let mut properties = BTreeMap::new();
+    for (index, argument) in arguments.iter().enumerate().skip(2) {
+        let binding =
+            adapter.and_then(|value| value.bindings.iter().find(|binding| binding.index == index));
+        let property = binding
+            .map(|value| value.property.to_string())
+            .unwrap_or_else(|| format!("createArg{index}"));
+        let kind = binding.map(|value| value.kind);
+        properties.insert(property, generic_argument(argument, kind));
+    }
+    properties
+}
+
+fn generic_argument(
+    argument: &CallArgument,
+    kind: Option<AdapterPropertyKind>,
+) -> BoundValue<Mir3UiPropertyValue> {
+    let literal = match kind {
+        Some(AdapterPropertyKind::Number) => argument
+            .text
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .map(Mir3UiPropertyValue::Number),
+        Some(AdapterPropertyKind::String | AdapterPropertyKind::Asset) => {
+            lua_string(&argument.text).map(Mir3UiPropertyValue::String)
+        }
+        Some(AdapterPropertyKind::Boolean) => match argument.text.trim() {
+            "true" => Some(Mir3UiPropertyValue::Boolean(true)),
+            "false" => Some(Mir3UiPropertyValue::Boolean(false)),
+            _ => None,
+        },
+        Some(AdapterPropertyKind::Any) => infer_literal(&argument.text),
+        None => infer_literal(&argument.text),
+    };
+    match literal {
+        Some(value) => BoundValue::literal(value, argument.text.clone(), argument.span),
+        None => BoundValue::dynamic(
+            Mir3UiPropertyValue::String(argument.text.clone()),
+            argument.text.clone(),
+            argument.span,
+        ),
+    }
+}
+
+fn infer_literal(token: &str) -> Option<Mir3UiPropertyValue> {
+    let trimmed = token.trim();
+    if (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with("function") && trimmed.ends_with("end"))
+    {
+        return Some(Mir3UiPropertyValue::RawLiteral {
+            lua_literal: trimmed.to_string(),
+        });
+    }
+    if let Ok(value) = trimmed.parse::<f64>() {
+        return Some(Mir3UiPropertyValue::Number(value));
+    }
+    match trimmed {
+        "true" => Some(Mir3UiPropertyValue::Boolean(true)),
+        "false" => Some(Mir3UiPropertyValue::Boolean(false)),
+        "nil" => Some(Mir3UiPropertyValue::Nil),
+        _ => lua_string(trimmed).map(Mir3UiPropertyValue::String),
+    }
 }
 
 fn process_setter(
@@ -360,11 +502,36 @@ fn process_setter(
             update_number(node, "anchorY", &call.arguments, 2);
         }
         "setVisible" => update_bool(node, "visible", &call.arguments, 1),
+        "setScale" => {
+            let value = number_argument(&call.arguments, 1, 1.0);
+            bind_span(&mut node.source_binding.property_spans, "scaleX", &value);
+            bind_span(&mut node.source_binding.property_spans, "scaleY", &value);
+            node.transform.scale_x = value.clone();
+            node.transform.scale_y = value;
+        }
+        "setScaleX" => update_number(node, "scaleX", &call.arguments, 1),
+        "setScaleY" => update_number(node, "scaleY", &call.arguments, 1),
+        "setRotation" => update_number(node, "rotation", &call.arguments, 1),
+        "setRotationSkewX" => update_number(node, "skewX", &call.arguments, 1),
+        "setRotationSkewY" => update_number(node, "skewY", &call.arguments, 1),
         "setOpacity" => update_number(node, "opacity", &call.arguments, 1),
         "setTag" => update_number(node, "tag", &call.arguments, 1),
-        "Text_setString" | "TextInput_setString" | "Button_setTitleText" => {
-            update_string(node, "text", &call.arguments, 1)
+        "setTouchEnabled" | "setMouseEnabled" => {
+            update_generic_bool(node, "touchEnabled", &call.arguments, 1)
         }
+        "setChineseName" => update_generic_string(node, "chineseName", &call.arguments, 1),
+        "setIgnoreContentAdaptWithSize" => {
+            update_bool(node, "ignoreContentAdaptWithSize", &call.arguments, 1)
+        }
+        "Layout_setClippingEnabled"
+        | "ListView_setClippingEnabled"
+        | "ScrollView_setClippingEnabled" => {
+            update_bool(node, "clippingEnabled", &call.arguments, 1)
+        }
+        "Text_setString"
+        | "TextAtlas_setString"
+        | "TextInput_setString"
+        | "Button_setTitleText" => update_string(node, "text", &call.arguments, 1),
         "Image_loadTexture" | "Layout_setBackGroundImage" => {
             update_string(node, "image", &call.arguments, 1)
         }
@@ -373,10 +540,58 @@ fn process_setter(
         "Button_loadTextureDisabled" => update_string(node, "disabledImage", &call.arguments, 1),
         "Button_setTitleFontSize" => update_number(node, "fontSize", &call.arguments, 1),
         "Button_setTitleColor" => update_string(node, "color", &call.arguments, 1),
+        "TextInput_setFontColor" => update_string(node, "color", &call.arguments, 1),
+        "TextInput_setPlaceholderFontColor" => {
+            update_generic_string(node, "placeholderColor", &call.arguments, 1)
+        }
+        "Text_setTextAreaSize" => {
+            update_number(node, "width", &call.arguments, 1);
+            update_number(node, "height", &call.arguments, 2);
+        }
+        "Image_setScale9Slice"
+        | "Button_setScale9Slice"
+        | "Layout_setBackGroundImageScale9Slice"
+        | "ListView_setBackGroundImageScale9Slice" => update_scale9(node, &call.arguments),
+        "Image_setScale9Enabled" | "Layout_setBackGroundImageScale9Enabled" => {
+            update_bool(node, "scale9Enabled", &call.arguments, 1)
+        }
+        "ListView_setGravity" => update_number(node, "gravity", &call.arguments, 1),
+        "ListView_setItemsMargin" => update_number(node, "itemsMargin", &call.arguments, 1),
+        "ListView_setBounceEnabled" | "ScrollView_setBounceEnabled" => {
+            update_generic_bool(node, "bounceEnabled", &call.arguments, 1)
+        }
+        "ScrollView_setInnerContainerSize" => {
+            update_number(node, "innerWidth", &call.arguments, 1);
+            update_number(node, "innerHeight", &call.arguments, 2);
+        }
+        "TextInput_setPlaceHolder" => {
+            update_generic_string(node, "placeholder", &call.arguments, 1)
+        }
+        "TextInput_setInputMode" => update_generic_number(node, "inputMode", &call.arguments, 1),
+        "TextInput_setMaxLength" => update_generic_number(node, "maxLength", &call.arguments, 1),
+        "Text_setTextHorizontalAlignment"
+        | "TextInput_setTextHorizontalAlignment"
+        | "Text_setTextVerticalAlignment"
+        | "TextInput_setTextVerticalAlignment" => {
+            update_generic_number(node, &call.method, &call.arguments, 1)
+        }
+        "Slider_setPercent" | "LoadingBar_setPercent" | "ProgressTimer_setPercentage" => {
+            update_generic_number(node, "percent", &call.arguments, 1)
+        }
+        "LoadingBar_setColor" => update_generic_string(node, "progressColor", &call.arguments, 1),
+        "Text_enableOutline" | "Button_titleEnableOutline" => {
+            update_generic_bool_literal(node, "outlineEnabled", true);
+            update_generic_string(node, "outlineColor", &call.arguments, 1);
+            update_generic_number(node, "outlineSize", &call.arguments, 2);
+        }
+        "Text_disableOutLine" | "Button_titleDisableOutLine" => {
+            update_generic_bool_literal(node, "outlineEnabled", false)
+        }
+        "CheckBox_setSelected" => update_generic_bool(node, "selected", &call.arguments, 1),
         _ => return,
     }
-    if node.compatibility.status == CompatibilityStatus::Supported && node_has_dynamic(node) {
-        node.compatibility.status = CompatibilityStatus::Partial;
+    if node.node_type != Mir3UiNodeType::Unsupported && node_has_dynamic(node) {
+        node.compatibility.status = CompatibilityStatus::Dynamic;
         node.compatibility.reason = Some("包含动态 Lua 属性；动态 token 保持只读".to_string());
     }
     node.source_binding.insert_byte = node
@@ -403,13 +618,38 @@ fn node_has_dynamic(node: &Mir3UiNode) -> bool {
         node.color.source,
         node.opacity.source,
         node.tag.source,
+        node.transform.scale_x.source,
+        node.transform.scale_y.source,
+        node.transform.rotation.source,
+        node.transform.skew_x.source,
+        node.transform.skew_y.source,
+        node.ignore_content_adapt_with_size.source,
+        node.clipping_enabled.source,
+        node.scale9.enabled.source,
+        node.scale9.left.source,
+        node.scale9.bottom.source,
+        node.scale9.right.source,
+        node.scale9.top.source,
+        node.container.direction.source,
+        node.container.gravity.source,
+        node.container.items_margin.source,
+        node.container.inner_width.source,
+        node.container.inner_height.source,
     ]
     .contains(&BoundValueSource::Dynamic)
+        || node
+            .properties
+            .values()
+            .any(|value| value.source == BoundValueSource::Dynamic)
 }
 
 fn update_number(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgument], index: usize) {
     let value = number_argument(arguments, index, 0.0);
     bind_span(&mut node.source_binding.property_spans, property, &value);
+    node.properties.insert(
+        property.to_string(),
+        map_bound_value(value.clone(), Mir3UiPropertyValue::Number),
+    );
     match property {
         "x" => node.position.x = value,
         "y" => node.position.y = value,
@@ -420,6 +660,19 @@ fn update_number(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgumen
         "opacity" => node.opacity = value,
         "tag" => node.tag = value,
         "fontSize" => node.font_size = value,
+        "scaleX" => node.transform.scale_x = value,
+        "scaleY" => node.transform.scale_y = value,
+        "rotation" => node.transform.rotation = value,
+        "skewX" => node.transform.skew_x = value,
+        "skewY" => node.transform.skew_y = value,
+        "scale9Left" => node.scale9.left = value,
+        "scale9Bottom" => node.scale9.bottom = value,
+        "scale9Right" => node.scale9.right = value,
+        "scale9Top" => node.scale9.top = value,
+        "gravity" => node.container.gravity = value,
+        "itemsMargin" => node.container.items_margin = value,
+        "innerWidth" => node.container.inner_width = value,
+        "innerHeight" => node.container.inner_height = value,
         _ => {}
     }
 }
@@ -427,6 +680,10 @@ fn update_number(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgumen
 fn update_string(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgument], index: usize) {
     let value = string_argument(arguments, index, String::new());
     bind_span(&mut node.source_binding.property_spans, property, &value);
+    node.properties.insert(
+        property.to_string(),
+        map_bound_value(value.clone(), Mir3UiPropertyValue::String),
+    );
     match property {
         "text" => node.text = value,
         "image" => node.image = value,
@@ -440,8 +697,83 @@ fn update_string(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgumen
 fn update_bool(node: &mut Mir3UiNode, property: &str, arguments: &[CallArgument], index: usize) {
     let value = bool_argument(arguments, index, true);
     bind_span(&mut node.source_binding.property_spans, property, &value);
-    if property == "visible" {
-        node.visible = value;
+    node.properties.insert(
+        property.to_string(),
+        map_bound_value(value.clone(), Mir3UiPropertyValue::Boolean),
+    );
+    match property {
+        "visible" => node.visible = value,
+        "ignoreContentAdaptWithSize" => node.ignore_content_adapt_with_size = value,
+        "clippingEnabled" => node.clipping_enabled = value,
+        "scale9Enabled" => node.scale9.enabled = value,
+        _ => {}
+    }
+}
+
+fn update_scale9(node: &mut Mir3UiNode, arguments: &[CallArgument]) {
+    update_number(node, "scale9Left", arguments, 1);
+    update_number(node, "scale9Bottom", arguments, 2);
+    update_number(node, "scale9Right", arguments, 3);
+    update_number(node, "scale9Top", arguments, 4);
+    node.scale9.enabled = BoundValue::default(true);
+}
+
+fn update_generic_number(
+    node: &mut Mir3UiNode,
+    property: &str,
+    arguments: &[CallArgument],
+    index: usize,
+) {
+    let value = number_argument(arguments, index, 0.0);
+    bind_span(&mut node.source_binding.property_spans, property, &value);
+    node.properties.insert(
+        property.to_string(),
+        map_bound_value(value, Mir3UiPropertyValue::Number),
+    );
+}
+
+fn update_generic_string(
+    node: &mut Mir3UiNode,
+    property: &str,
+    arguments: &[CallArgument],
+    index: usize,
+) {
+    let value = string_argument(arguments, index, String::new());
+    bind_span(&mut node.source_binding.property_spans, property, &value);
+    node.properties.insert(
+        property.to_string(),
+        map_bound_value(value, Mir3UiPropertyValue::String),
+    );
+}
+
+fn update_generic_bool(
+    node: &mut Mir3UiNode,
+    property: &str,
+    arguments: &[CallArgument],
+    index: usize,
+) {
+    let value = bool_argument(arguments, index, false);
+    bind_span(&mut node.source_binding.property_spans, property, &value);
+    node.properties.insert(
+        property.to_string(),
+        map_bound_value(value, Mir3UiPropertyValue::Boolean),
+    );
+}
+
+fn update_generic_bool_literal(node: &mut Mir3UiNode, property: &str, value: bool) {
+    node.properties.insert(
+        property.to_string(),
+        BoundValue::default(Mir3UiPropertyValue::Boolean(value)),
+    );
+}
+
+fn map_bound_value<T, U>(value: BoundValue<T>, mapper: impl FnOnce(T) -> U) -> BoundValue<U> {
+    BoundValue {
+        value: mapper(value.value),
+        source: value.source,
+        writable: value.writable,
+        original_token: value.original_token,
+        span: value.span,
     }
 }
 
@@ -556,12 +888,34 @@ fn collect_assets(nodes: &[Mir3UiNode]) -> Vec<Mir3UiAsset> {
                     .push(node.id.clone());
             }
         }
+        for (property, value) in &node.properties {
+            let lower = property.to_ascii_lowercase();
+            let is_asset = lower.contains("image")
+                || lower.contains("texture")
+                || lower.contains("asset")
+                || lower.contains("file");
+            if !is_asset {
+                continue;
+            }
+            if let Mir3UiPropertyValue::String(path) = &value.value {
+                if !path.trim().is_empty() {
+                    assets
+                        .entry(path.clone())
+                        .or_default()
+                        .push(node.id.clone());
+                }
+            }
+        }
     }
     assets
         .into_iter()
-        .map(|(logical_path, node_ids)| Mir3UiAsset {
-            logical_path,
-            node_ids,
+        .map(|(logical_path, mut node_ids)| {
+            node_ids.sort();
+            node_ids.dedup();
+            Mir3UiAsset {
+                logical_path,
+                node_ids,
+            }
         })
         .collect()
 }

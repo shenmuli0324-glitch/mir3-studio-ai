@@ -4,7 +4,6 @@
 //! 执行 Lua。所有正式写入都必须经过现有 Draft、人工确认与 Snapshot 链路。
 
 use crate::service::project::{DraftConfirmation, ProjectService};
-use base64::Engine;
 use mir3_domain::{patch_supported_text_bytes, DraftBinaryChangeInput, DraftPreview, Snapshot};
 use mir3_ui::{
     generate_template, parse_document, DiagnosticSeverity, Mir3UiDocument, Mir3UiViewport,
@@ -16,10 +15,13 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 const MAX_ASSET_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_GUI_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 const MOBILE_WIDTH: u32 = 1136;
 const MOBILE_HEIGHT: u32 = 640;
 const DEFAULT_PC_WIDTH: u32 = 1024;
 const DEFAULT_PC_HEIGHT: u32 = 768;
+const DEV_TREE_PAGE_SIZE: usize = 500;
+const DEV_METADATA_DOCUMENT_VERSION: &str = "2026-08-24";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,13 +110,72 @@ pub struct GuiTemplateResponse {
     pub documents: Vec<GuiDocumentEnvelope>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GuiAsset {
+#[derive(Debug, Clone)]
+pub struct GuiAssetContent {
     pub logical_path: String,
     pub mime_type: String,
-    pub base64: String,
+    pub bytes: Vec<u8>,
     pub sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiAssetMeta {
+    pub logical_path: String,
+    pub mime_type: String,
+    pub byte_length: u64,
+    pub sha256: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GuiDevEntryType {
+    Directory,
+    File,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GuiDevPolicy {
+    Editable,
+    Readonly,
+    Asset,
+    Info,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiDevTreeEntry {
+    pub path: String,
+    pub name: String,
+    pub entry_type: GuiDevEntryType,
+    pub policy: GuiDevPolicy,
+    pub hidden: bool,
+    pub size: u64,
+    pub has_children: bool,
+    pub description_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiDevTreePage {
+    pub parent_path: String,
+    pub entries: Vec<GuiDevTreeEntry>,
+    pub next_cursor: Option<String>,
+    pub metadata_version: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiReadonlyDocument {
+    pub dev_relative_path: String,
+    pub source: String,
+    pub sha256: String,
+    pub encoding: String,
+    pub newline: String,
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -254,6 +315,7 @@ pub fn open_document(
     let opened = project_service
         .store()
         .safe_text_open(project_id, &project_relative, draft_id)?;
+    ensure_source_size(&opened.content)?;
     let newline = opened.newline.clone().unwrap_or_else(|| "\n".to_string());
     let document = parse_document(
         &opened.content,
@@ -279,6 +341,7 @@ pub fn reparse_document(
     project_id: &str,
     request: GuiReparseRequest,
 ) -> Result<GuiDocumentEnvelope, String> {
+    ensure_source_size(&request.working_source)?;
     let context = active_context(project_service, project_id)?;
     let path = validate_gui_export_path(&request.dev_relative_path)?;
     let (sha256, encoding, newline) = match optional_existing_file(&context.dev_root, &path)? {
@@ -306,9 +369,7 @@ pub fn reparse_document(
             (None, "UTF-8".to_string(), "\n".to_string())
         }
     };
-    let working_hash = sha256
-        .clone()
-        .unwrap_or_else(|| hash_bytes(request.working_source.as_bytes()));
+    let working_hash = hash_bytes(request.working_source.as_bytes());
     let document = parse_document(
         &request.working_source,
         &path,
@@ -378,24 +439,107 @@ pub fn create_template(
     Ok(GuiTemplateResponse { documents })
 }
 
-pub fn read_asset(
+pub fn list_dev_tree(
+    project_service: &ProjectService,
+    project_id: &str,
+    parent_path: &str,
+    cursor: Option<&str>,
+) -> Result<GuiDevTreePage, String> {
+    let context = active_context(project_service, project_id)?;
+    let parent = validate_tree_parent(parent_path)?;
+    let directory = existing_directory(&context.dev_root, &parent, "GUI_DEV_TREE")?;
+    let offset = parse_tree_cursor(cursor)?;
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&directory)
+        .map_err(|e| format!("GUI_DEV_TREE_READ_FAILED: {}: {e}", directory.display()))?
+    {
+        let entry = entry.map_err(|e| format!("GUI_DEV_TREE_READ_FAILED: {e}"))?;
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|e| format!("GUI_DEV_TREE_METADATA_FAILED: {e}"))?;
+        if is_link_or_reparse(&metadata) {
+            continue;
+        }
+        let file_type = if metadata.is_dir() {
+            GuiDevEntryType::Directory
+        } else if metadata.is_file() {
+            GuiDevEntryType::File
+        } else {
+            continue;
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = if parent.is_empty() {
+            name.clone()
+        } else {
+            format!("{parent}/{name}")
+        };
+        let has_children = metadata.is_dir() && directory_has_children(&entry.path())?;
+        entries.push(GuiDevTreeEntry {
+            policy: dev_entry_policy(&path, file_type),
+            description_id: dev_description_id(&path, file_type),
+            hidden: name.starts_with('.'),
+            size: if metadata.is_file() {
+                metadata.len()
+            } else {
+                0
+            },
+            has_children,
+            path,
+            name,
+            entry_type: file_type,
+        });
+    }
+    entries.sort_by(|left, right| {
+        let left_rank = u8::from(left.entry_type == GuiDevEntryType::File);
+        let right_rank = u8::from(right.entry_type == GuiDevEntryType::File);
+        left_rank
+            .cmp(&right_rank)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    if offset > entries.len() {
+        return Err("GUI_DEV_TREE_CURSOR_INVALID: cursor 超出目录范围".to_string());
+    }
+    let end = offset.saturating_add(DEV_TREE_PAGE_SIZE).min(entries.len());
+    let next_cursor = (end < entries.len()).then(|| end.to_string());
+    Ok(GuiDevTreePage {
+        parent_path: parent,
+        entries: entries[offset..end].to_vec(),
+        next_cursor,
+        metadata_version: DEV_METADATA_DOCUMENT_VERSION.to_string(),
+    })
+}
+
+pub fn open_readonly_document(
+    project_service: &ProjectService,
+    project_id: &str,
+    dev_relative_path: &str,
+) -> Result<GuiReadonlyDocument, String> {
+    let context = active_context(project_service, project_id)?;
+    let path = validate_guilayout_path(dev_relative_path)?;
+    existing_file(&context.dev_root, &path, "GUI_READONLY_DOCUMENT")?;
+    let project_relative = project_relative_path(&context, &path)?;
+    let opened = project_service
+        .store()
+        .safe_text_open(project_id, &project_relative, None)?;
+    ensure_source_size(&opened.content)?;
+    Ok(GuiReadonlyDocument {
+        dev_relative_path: path,
+        source: opened.content,
+        sha256: opened.sha256,
+        encoding: opened.encoding,
+        newline: opened.newline.unwrap_or_else(|| "\n".to_string()),
+        read_only: true,
+    })
+}
+
+pub fn read_asset_content(
     project_service: &ProjectService,
     project_id: &str,
     logical_path: &str,
-) -> Result<GuiAsset, String> {
+) -> Result<GuiAssetContent, String> {
     let context = active_context(project_service, project_id)?;
     let relative = normalize_asset_path(logical_path)?;
     let target = existing_file(&context.dev_root, &relative, "GUI_ASSET")?;
-    let extension = target
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase)
-        .ok_or_else(|| "GUI_ASSET_TYPE_UNSUPPORTED: 仅支持 PNG/JPG".to_string())?;
-    let mime_type = match extension.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        _ => return Err("GUI_ASSET_TYPE_UNSUPPORTED: 仅支持 PNG/JPG".to_string()),
-    };
     let metadata = fs::metadata(&target)
         .map_err(|e| format!("GUI_ASSET_METADATA_FAILED: {}: {e}", target.display()))?;
     if metadata.len() > MAX_ASSET_BYTES {
@@ -403,19 +547,29 @@ pub fn read_asset(
     }
     let bytes = fs::read(&target)
         .map_err(|e| format!("GUI_ASSET_READ_FAILED: {}: {e}", target.display()))?;
-    let valid_container = match extension.as_str() {
-        "png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
-        "jpg" | "jpeg" => bytes.starts_with(b"\xff\xd8\xff"),
-        _ => false,
-    };
-    if !valid_container {
-        return Err("GUI_ASSET_CONTAINER_INVALID: 素材内容与 PNG/JPG 扩展名不符".to_string());
-    }
-    Ok(GuiAsset {
+    let mime_type = validate_asset_container(&target, &bytes)?;
+    Ok(GuiAssetContent {
         logical_path: relative,
         mime_type: mime_type.to_string(),
-        base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
         sha256: hash_bytes(&bytes),
+        bytes,
+    })
+}
+
+pub fn read_asset_meta(
+    project_service: &ProjectService,
+    project_id: &str,
+    logical_path: &str,
+) -> Result<GuiAssetMeta, String> {
+    let content = read_asset_content(project_service, project_id, logical_path)?;
+    let (width, height) = image_dimensions(&content.bytes, &content.mime_type)?;
+    Ok(GuiAssetMeta {
+        logical_path: content.logical_path,
+        mime_type: content.mime_type,
+        byte_length: content.bytes.len() as u64,
+        sha256: content.sha256,
+        width,
+        height,
     })
 }
 
@@ -431,6 +585,7 @@ pub fn prepare_draft(
     let mut unique_paths = HashSet::new();
     let mut validated = Vec::with_capacity(request.files.len());
     for file in &request.files {
+        ensure_source_size(&file.source)?;
         let path = validate_gui_export_path(&file.dev_relative_path)?;
         if !unique_paths.insert(path.to_ascii_lowercase()) {
             return Err("GUI_DRAFT_CASE_CONFLICT: 同批变更包含重复路径".to_string());
@@ -541,6 +696,13 @@ pub fn prepare_draft(
     })
 }
 
+fn ensure_source_size(source: &str) -> Result<(), String> {
+    if source.len() > MAX_GUI_SOURCE_BYTES {
+        return Err("GUI_SOURCE_TOO_LARGE: GUI Lua 源码不能超过 8 MiB".to_string());
+    }
+    Ok(())
+}
+
 pub fn confirm_draft(
     project_service: &ProjectService,
     project_id: &str,
@@ -634,6 +796,131 @@ fn validate_gui_export_path(value: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
+fn validate_guilayout_path(value: &str) -> Result<String, String> {
+    let normalized = validate_dev_relative(value, "GUI_READONLY_DOCUMENT_PATH_INVALID")?;
+    let path = Path::new(&normalized);
+    if path.components().next().and_then(component_text) != Some("GUILayout")
+        || !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("lua"))
+    {
+        return Err(
+            "GUI_READONLY_DOCUMENT_PATH_INVALID: 仅允许读取 GUILayout 下的 Lua 文件".to_string(),
+        );
+    }
+    Ok(normalized)
+}
+
+fn validate_tree_parent(value: &str) -> Result<String, String> {
+    if value.trim().is_empty() || value == "." {
+        Ok(String::new())
+    } else {
+        validate_dev_relative(value, "GUI_DEV_TREE_PATH_INVALID")
+    }
+}
+
+fn parse_tree_cursor(cursor: Option<&str>) -> Result<usize, String> {
+    match cursor {
+        None => Ok(0),
+        Some(value) => value
+            .parse::<usize>()
+            .map_err(|_| "GUI_DEV_TREE_CURSOR_INVALID: cursor 必须是非负整数".to_string()),
+    }
+}
+
+fn dev_entry_policy(path: &str, entry_type: GuiDevEntryType) -> GuiDevPolicy {
+    if entry_type == GuiDevEntryType::File
+        && path.starts_with("GUIExport/")
+        && has_extension(path, &["lua"])
+    {
+        GuiDevPolicy::Editable
+    } else if path == "GUILayout" || path.starts_with("GUILayout/") {
+        GuiDevPolicy::Readonly
+    } else if entry_type == GuiDevEntryType::File
+        && path.starts_with("res/")
+        && has_extension(path, &["png", "jpg", "jpeg"])
+    {
+        GuiDevPolicy::Asset
+    } else {
+        GuiDevPolicy::Info
+    }
+}
+
+fn dev_description_id(path: &str, entry_type: GuiDevEntryType) -> String {
+    let components: Vec<String> = Path::new(path)
+        .components()
+        .filter_map(component_text)
+        .map(str::to_ascii_lowercase)
+        .collect();
+    let first = components.first().map(String::as_str).unwrap_or("");
+    let second = components.get(1).map(String::as_str).unwrap_or("");
+    let third = components.get(2).map(String::as_str).unwrap_or("");
+    let description = match (first, second, third) {
+        ("scripts", "game_config", _) => "game_config",
+        ("scripts", "ssr", _) => "ssr",
+        ("scripts", _, _) => "scripts",
+        ("game_config", _, _) => "game_config",
+        ("ssr", _, _) => "ssr",
+        ("res", "custom", _) => "res_custom",
+        ("res", "item", _) => "res_item",
+        ("res", "item_ground", _) => "res_item_ground",
+        ("res", "player_show", _) => "res_player_show",
+        ("res", "private", _) => "res_private",
+        ("res", "official", "announce") => "res_official_announce",
+        ("res", "official", "bag_ui") => "res_official_bag_ui",
+        ("res", "official", "chat") => "res_official_chat",
+        ("res", "official", "damage_num") => "res_official_damage_num",
+        ("res", "official", "dark") => "res_official_dark",
+        ("res", "official", "loading") => "res_official_loading",
+        ("res", "official", "login") => "res_official_login",
+        ("res", "official", "mail") => "res_official_mail",
+        ("res", "official", "main") => "res_official_main",
+        ("res", "official", "minimap") => "res_official_minimap",
+        ("res", "official", "item_tips") => "res_official_item_tips",
+        ("res", "official", "player_main_layer_ui") => "res_official_player_main",
+        ("res", "official", "player_model") => "res_official_player_model",
+        ("res", "official", "player_skill_layer_ui") => "res_official_player_skill",
+        ("res", "official", "skill") => "res_official_skill",
+        ("res", "official", "splash") => "res_official_splash",
+        ("res", "official", "trade") => "res_official_trade",
+        ("res", "official", _) => "res_official",
+        ("res", "public", _) => "res_public",
+        ("res", "skill_icon", _) => "res_skill_icon",
+        ("res", "skill_icon_c", _) => "res_skill_icon_c",
+        ("res", _, _) if components.len() > 1 && entry_type == GuiDevEntryType::Directory => {
+            "res_subdirectory"
+        }
+        ("res", _, _) => "res",
+        ("anim", "effect", _) => "anim_effect",
+        ("anim", "hair", _) => "anim_hair",
+        ("anim", "monster", _) => "anim_monster",
+        ("anim", "npc", _) => "anim_npc",
+        ("anim", "player", _) => "anim_player",
+        ("anim", "weapon", _) => "anim_weapon",
+        ("anim", _, _) => "anim",
+        ("scene", "map", _) => "scene_map",
+        ("scene", "objects", _) => "scene_objects",
+        ("scene", "smtiles", _) => "scene_smtiles",
+        ("scene", "tiles", _) => "scene_tiles",
+        ("scene", "uiminimap", _) => "scene_uiminimap",
+        ("scene", _, _) => "scene",
+        ("data_config", _, _) => "data_config",
+        ("guiexport", _, _) => "GUIExport",
+        ("guilayout", _, _) => "GUILayout",
+        ("guidata", _, _) => "GUIData",
+        _ => "custom",
+    };
+    description.to_string()
+}
+
+fn has_extension(path: &str, allowed: &[&str]) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| allowed.iter().any(|item| value.eq_ignore_ascii_case(item)))
+}
+
 fn normalize_template_path(value: &str) -> Result<String, String> {
     let value = if Path::new(value).extension().is_none() {
         format!("{value}.lua")
@@ -673,6 +960,94 @@ fn normalize_asset_path(value: &str) -> Result<String, String> {
         return Err("GUI_ASSET_TYPE_UNSUPPORTED: 仅支持 PNG/JPG".to_string());
     }
     Ok(relative)
+}
+
+fn validate_asset_container(path: &Path, bytes: &[u8]) -> Result<&'static str, String> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| "GUI_ASSET_TYPE_UNSUPPORTED: 仅支持 PNG/JPG".to_string())?;
+    match extension.as_str() {
+        "png" if bytes.starts_with(b"\x89PNG\r\n\x1a\n") => Ok("image/png"),
+        "jpg" | "jpeg" if bytes.starts_with(b"\xff\xd8\xff") => Ok("image/jpeg"),
+        "png" | "jpg" | "jpeg" => {
+            Err("GUI_ASSET_CONTAINER_INVALID: 素材内容与 PNG/JPG 扩展名不符".to_string())
+        }
+        _ => Err("GUI_ASSET_TYPE_UNSUPPORTED: 仅支持 PNG/JPG".to_string()),
+    }
+}
+
+fn image_dimensions(bytes: &[u8], mime_type: &str) -> Result<(u32, u32), String> {
+    let dimensions = match mime_type {
+        "image/png" => png_dimensions(bytes),
+        "image/jpeg" => jpeg_dimensions(bytes),
+        _ => None,
+    };
+    dimensions
+        .filter(|(width, height)| *width > 0 && *height > 0)
+        .ok_or_else(|| "GUI_ASSET_DIMENSIONS_INVALID: 无法读取图片尺寸".to_string())
+}
+
+fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 24
+        || !bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+        || bytes.get(12..16) != Some(b"IHDR")
+    {
+        return None;
+    }
+    Some((
+        u32::from_be_bytes(bytes.get(16..20)?.try_into().ok()?),
+        u32::from_be_bytes(bytes.get(20..24)?.try_into().ok()?),
+    ))
+}
+
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if !bytes.starts_with(b"\xff\xd8\xff") {
+        return None;
+    }
+    let mut cursor = 2usize;
+    while cursor < bytes.len() {
+        while bytes.get(cursor) == Some(&0xff) {
+            cursor += 1;
+        }
+        let marker = *bytes.get(cursor)?;
+        cursor += 1;
+        if marker == 0xd9 || marker == 0xda {
+            break;
+        }
+        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            continue;
+        }
+        let length = u16::from_be_bytes(bytes.get(cursor..cursor + 2)?.try_into().ok()?) as usize;
+        if length < 2 || cursor.checked_add(length)? > bytes.len() {
+            return None;
+        }
+        if matches!(
+            marker,
+            0xc0 | 0xc1
+                | 0xc2
+                | 0xc3
+                | 0xc5
+                | 0xc6
+                | 0xc7
+                | 0xc9
+                | 0xca
+                | 0xcb
+                | 0xcd
+                | 0xce
+                | 0xcf
+        ) {
+            if length < 7 {
+                return None;
+            }
+            let height = u16::from_be_bytes(bytes.get(cursor + 3..cursor + 5)?.try_into().ok()?);
+            let width = u16::from_be_bytes(bytes.get(cursor + 5..cursor + 7)?.try_into().ok()?);
+            return Some((u32::from(width), u32::from(height)));
+        }
+        cursor += length;
+    }
+    None
 }
 
 fn validate_dev_relative(value: &str, prefix: &str) -> Result<String, String> {
@@ -723,6 +1098,14 @@ fn is_windows_reserved(component: &str) -> bool {
 fn reject_symlink(path: &Path, prefix: &str) -> Result<(), String> {
     let metadata =
         fs::symlink_metadata(path).map_err(|e| format!("{prefix}: {}: {e}", path.display()))?;
+    if is_link_or_reparse(&metadata) {
+        Err(format!("{prefix}: 不允许符号链接或 reparse point"))
+    } else {
+        Ok(())
+    }
+}
+
+fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
     #[cfg(windows)]
     let is_reparse_point = {
         use std::os::windows::fs::MetadataExt;
@@ -730,11 +1113,7 @@ fn reject_symlink(path: &Path, prefix: &str) -> Result<(), String> {
     };
     #[cfg(not(windows))]
     let is_reparse_point = false;
-    if metadata.file_type().is_symlink() || is_reparse_point {
-        Err(format!("{prefix}: 不允许符号链接或 reparse point"))
-    } else {
-        Ok(())
-    }
+    metadata.file_type().is_symlink() || is_reparse_point
 }
 
 fn existing_file(root: &Path, relative: &str, prefix: &str) -> Result<PathBuf, String> {
@@ -752,6 +1131,40 @@ fn existing_file(root: &Path, relative: &str, prefix: &str) -> Result<PathBuf, S
         return Err(format!("{prefix}_PATH_OUTSIDE: 文件超出允许目录"));
     }
     Ok(canonical)
+}
+
+fn existing_directory(root: &Path, relative: &str, prefix: &str) -> Result<PathBuf, String> {
+    if relative.is_empty() {
+        return Ok(root.to_path_buf());
+    }
+    let target = root.join(relative);
+    let mut cursor = root.to_path_buf();
+    for component in Path::new(relative).components() {
+        let name =
+            component_text(component).ok_or_else(|| format!("{prefix}_PATH_INVALID: 路径无效"))?;
+        cursor.push(name);
+        reject_symlink(&cursor, &format!("{prefix}_SYMLINK"))?;
+    }
+    let canonical = fs::canonicalize(&target)
+        .map_err(|e| format!("{prefix}_NOT_FOUND: {}: {e}", target.display()))?;
+    if !canonical.starts_with(root) || !canonical.is_dir() {
+        return Err(format!("{prefix}_PATH_OUTSIDE: 目录超出允许范围或不是目录"));
+    }
+    Ok(canonical)
+}
+
+fn directory_has_children(directory: &Path) -> Result<bool, String> {
+    for entry in fs::read_dir(directory)
+        .map_err(|e| format!("GUI_DEV_TREE_READ_FAILED: {}: {e}", directory.display()))?
+    {
+        let entry = entry.map_err(|e| format!("GUI_DEV_TREE_READ_FAILED: {e}"))?;
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|e| format!("GUI_DEV_TREE_METADATA_FAILED: {e}"))?;
+        if !is_link_or_reparse(&metadata) && (metadata.is_dir() || metadata.is_file()) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn optional_existing_file(root: &Path, relative: &str) -> Result<Option<PathBuf>, String> {
@@ -982,9 +1395,19 @@ mod tests {
         fs::write(project.join("客户端/dev/GUIData/secret.lua"), "return {}\n").unwrap();
         fs::write(
             project.join("客户端/dev/res/icons/close.png"),
-            b"\x89PNG\r\n\x1a\nfixture",
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x20\x00\x00\x00\x10",
         )
         .unwrap();
+        fs::write(
+            project.join("客户端/dev/res/icons/photo.jpg"),
+            b"\xff\xd8\xff\xc0\x00\x11\x08\x00\x10\x00\x20\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00",
+        )
+        .unwrap();
+        fs::write(project.join("客户端/dev/.hidden"), b"hidden").unwrap();
+        fs::create_dir_all(project.join("客户端/dev/scripts")).unwrap();
+        fs::create_dir_all(project.join("客户端/dev/scripts/game_config")).unwrap();
+        fs::create_dir_all(project.join("客户端/dev/scripts/ssr")).unwrap();
+        fs::create_dir_all(project.join("客户端/dev/MyCustom")).unwrap();
         let service = ProjectService::new(base.join("studio-data")).unwrap();
         let imported = service.store().import_project(&project).unwrap();
         service.store().activate_project(&imported.id).unwrap();
@@ -1033,7 +1456,7 @@ mod tests {
                 && entry.peer_path.as_deref() == Some("GUIExport/demo/main_win32.lua")
         }));
 
-        let asset = read_asset(&service, &project_id, "icons/close.png").unwrap();
+        let asset = read_asset_content(&service, &project_id, "icons/close.png").unwrap();
         assert_eq!(asset.mime_type, "image/png");
         let opened = open_document(&service, &project_id, "GUIExport/demo/main.lua", None).unwrap();
         let working = opened
@@ -1148,6 +1571,152 @@ mod tests {
                 .unwrap_err()
                 .starts_with("GUI_DOCUMENT_SYMLINK")
         );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn dev_tree_is_one_level_sorted_classified_and_paginated() {
+        let (base, service, project_id) = fixture_service();
+        let root = list_dev_tree(&service, &project_id, "", None).unwrap();
+        let first_file = root
+            .entries
+            .iter()
+            .position(|entry| entry.entry_type == GuiDevEntryType::File)
+            .unwrap();
+        assert!(root.entries[..first_file]
+            .iter()
+            .all(|entry| entry.entry_type == GuiDevEntryType::Directory));
+        assert!(root.entries[..first_file]
+            .windows(2)
+            .all(|pair| { pair[0].name.to_lowercase() <= pair[1].name.to_lowercase() }));
+        assert!(root.entries.iter().any(|entry| {
+            entry.path == "GUILayout"
+                && entry.policy == GuiDevPolicy::Readonly
+                && entry.description_id == "GUILayout"
+        }));
+        assert!(root
+            .entries
+            .iter()
+            .any(|entry| { entry.path == "MyCustom" && entry.description_id == "custom" }));
+        assert!(root
+            .entries
+            .iter()
+            .any(|entry| entry.path == ".hidden" && entry.hidden));
+        let scripts = list_dev_tree(&service, &project_id, "scripts", None).unwrap();
+        assert!(scripts.entries.iter().any(|entry| {
+            entry.path == "scripts/game_config" && entry.description_id == "game_config"
+        }));
+        assert!(scripts
+            .entries
+            .iter()
+            .any(|entry| { entry.path == "scripts/ssr" && entry.description_id == "ssr" }));
+
+        let export = list_dev_tree(&service, &project_id, "GUIExport/demo", None).unwrap();
+        assert!(export
+            .entries
+            .iter()
+            .all(|entry| entry.policy == GuiDevPolicy::Editable));
+        let assets = list_dev_tree(&service, &project_id, "res/icons", None).unwrap();
+        assert_eq!(assets.entries[0].policy, GuiDevPolicy::Asset);
+
+        let paging = base.join("project/客户端/dev/paging");
+        fs::create_dir_all(&paging).unwrap();
+        for index in 0..503 {
+            fs::write(paging.join(format!("file-{index:04}.txt")), b"x").unwrap();
+        }
+        let first = list_dev_tree(&service, &project_id, "paging", None).unwrap();
+        assert_eq!(first.entries.len(), DEV_TREE_PAGE_SIZE);
+        assert_eq!(first.next_cursor.as_deref(), Some("500"));
+        let second = list_dev_tree(
+            &service,
+            &project_id,
+            "paging",
+            first.next_cursor.as_deref(),
+        )
+        .unwrap();
+        assert_eq!(second.entries.len(), 3);
+        assert!(second.next_cursor.is_none());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn official_dev_directory_descriptions_are_specific() {
+        assert_eq!(
+            dev_description_id("res/official/bag_ui", GuiDevEntryType::Directory),
+            "res_official_bag_ui"
+        );
+        assert_eq!(
+            dev_description_id("res/item_ground", GuiDevEntryType::Directory),
+            "res_item_ground"
+        );
+        assert_eq!(
+            dev_description_id("anim/monster", GuiDevEntryType::Directory),
+            "anim_monster"
+        );
+        assert_eq!(
+            dev_description_id("scene/smtiles", GuiDevEntryType::Directory),
+            "scene_smtiles"
+        );
+    }
+
+    #[test]
+    fn oversized_gui_source_is_rejected_before_parse() {
+        let source = "x".repeat(MAX_GUI_SOURCE_BYTES + 1);
+        assert!(ensure_source_size(&source)
+            .unwrap_err()
+            .starts_with("GUI_SOURCE_TOO_LARGE"));
+    }
+
+    #[test]
+    fn tree_paths_and_readonly_documents_fail_closed() {
+        let (base, service, project_id) = fixture_service();
+        assert!(list_dev_tree(&service, &project_id, "../引擎", None).is_err());
+        assert!(list_dev_tree(&service, &project_id, "/tmp", None).is_err());
+        let opened = open_readonly_document(&service, &project_id, "GUILayout/demo.lua").unwrap();
+        assert!(opened.read_only);
+        assert!(open_readonly_document(&service, &project_id, "GUIExport/demo/main.lua").is_err());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn asset_metadata_and_binary_limits_are_enforced() {
+        let (base, service, project_id) = fixture_service();
+        let meta = read_asset_meta(&service, &project_id, "res/icons/close.png").unwrap();
+        assert_eq!((meta.width, meta.height), (32, 16));
+        assert_eq!(meta.byte_length, 24);
+        let content = read_asset_content(&service, &project_id, "icons/close.png").unwrap();
+        assert_eq!(content.bytes.len() as u64, meta.byte_length);
+        assert_eq!(content.sha256, meta.sha256);
+        let jpeg = read_asset_meta(&service, &project_id, "icons/photo.jpg").unwrap();
+        assert_eq!((jpeg.width, jpeg.height), (32, 16));
+        assert_eq!(jpeg.mime_type, "image/jpeg");
+
+        let oversized = base.join("project/客户端/dev/res/icons/oversized.png");
+        let file = fs::File::create(&oversized).unwrap();
+        file.set_len(MAX_ASSET_BYTES + 1).unwrap();
+        assert!(
+            read_asset_content(&service, &project_id, "icons/oversized.png")
+                .unwrap_err()
+                .starts_with("GUI_ASSET_TOO_LARGE")
+        );
+        assert!(read_asset_content(&service, &project_id, "../GUIData/secret.lua").is_err());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dev_tree_rejects_symlinked_parent() {
+        use std::os::unix::fs::symlink;
+
+        let (base, service, project_id) = fixture_service();
+        symlink(
+            base.join("project/引擎"),
+            base.join("project/客户端/dev/outside-link"),
+        )
+        .unwrap();
+        assert!(list_dev_tree(&service, &project_id, "outside-link", None)
+            .unwrap_err()
+            .starts_with("GUI_DEV_TREE_SYMLINK"));
         fs::remove_dir_all(base).ok();
     }
 }

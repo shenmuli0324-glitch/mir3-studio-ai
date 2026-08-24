@@ -1,4 +1,4 @@
-import type { Mir3UiNode } from './types'
+import type { BoundValue, GuiPropertyValue, Mir3UiNode } from './types'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useScope } from '@/hooks/use-scope'
@@ -26,6 +26,7 @@ export function DesignerInspector() {
 function InspectorContent({ node }: { node: Mir3UiNode }) {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
+  const genericProperties = inspectorProperties(node)
   return (
     <div>
       <section className="border-b border-line p-3">
@@ -58,22 +59,131 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
           <PropertyInput label={t('studio.gui.inspector.height')} value={node.size.height.value} writable={scope.nodePropertyWritable(node, 'height') && !scope.parsePending} onCommit={value => scope.updateNodeProperty(node.id, 'height', Number(value))} />
         </div>
       </PropertySection>
-      <If cond={node.kind === 'Text'}>
+      <If cond={isTextNode(node)}>
         <PropertySection title={t('studio.gui.inspector.content')}>
           <PropertyInput label={t('studio.gui.inspector.text')} value={node.paint?.text?.value ?? ''} writable={scope.nodePropertyWritable(node, 'text') && !scope.parsePending} onCommit={value => scope.updateNodeProperty(node.id, 'text', value)} />
         </PropertySection>
       </If>
-      <If cond={node.kind === 'Image' || node.kind === 'Button'}>
+      <If cond={isImageNode(node)}>
         <PropertySection title={t('studio.gui.inspector.asset')}>
           <PropertyInput label={t('studio.gui.inspector.image')} value={node.paint?.image?.value ?? ''} writable={scope.nodePropertyWritable(node, 'image') && !scope.parsePending} onCommit={value => scope.updateNodeProperty(node.id, 'image', value)} />
           <p className="mt-2 text-[9px] leading-4 text-muted">{t('studio.gui.inspector.asset_hint')}</p>
         </PropertySection>
       </If>
+      <If cond={genericProperties.length > 0}>
+        <PropertySection title={t('studio.gui.inspector.advanced')}>
+          <div className="grid gap-2">
+            {genericProperties.map(([property, bound]) => (
+              <GenericPropertyInput
+                key={property}
+                property={property}
+                bound={bound}
+                writable={scope.nodeGenericPropertyWritable(node, property) && !scope.parsePending}
+                onCommit={value => scope.updateNodeGenericProperty(node.id, property, value)}
+              />
+            ))}
+          </div>
+        </PropertySection>
+      </If>
+      <PropertySection title={t('studio.gui.inspector.behaviors')}>
+        <p className="mb-3 text-[9px] leading-4 text-muted">{t('studio.gui.inspector.behaviors_hint')}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={!scope.canAddNodeBehavior(node)} onClick={() => scope.addNodeBehavior(node.id, 'timeline')}>{t('studio.gui.inspector.add_timeline')}</button>
+          <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={!scope.canAddNodeBehavior(node)} onClick={() => scope.addNodeBehavior(node.id, 'action')}>{t('studio.gui.inspector.add_action')}</button>
+        </div>
+      </PropertySection>
       <If cond={node.compatibility !== 'supported'}>
-        <div className="m-3 rounded-lg bg-danger/8 px-3 py-2 text-[10px] leading-4 text-danger ring-1 ring-danger/20">{t('studio.gui.inspector.unsupported_hint')}</div>
+        <div className="m-3 rounded-lg bg-danger/8 px-3 py-2 text-[10px] leading-4 text-danger ring-1 ring-danger/20">
+          {compatibilityReason(node, t)}
+        </div>
       </If>
     </div>
   )
+}
+
+function compatibilityReason(node: Mir3UiNode, t: (key: string) => string): string {
+  if (node.compatibilityReasonCode)
+    return t(`studio.gui.compatibility_reason.${node.compatibilityReasonCode}`)
+  return node.compatibilityReason || t(`studio.gui.inspector.compatibility_hint.${node.compatibility}`)
+}
+
+function GenericPropertyInput({ property, bound, writable, onCommit }: {
+  property: string
+  bound: BoundValue<GuiPropertyValue>
+  writable: boolean
+  onCommit: (value: GuiPropertyValue) => void
+}) {
+  const { t } = useTranslation()
+  if (typeof bound.value === 'boolean') {
+    return (
+      <label className="block min-w-0">
+        <span className="mb-1 flex items-center justify-between gap-2 text-[9px] text-muted">
+          <span>{property}</span>
+          <span>{t(`studio.gui.value_source.${bound.source}`)}</span>
+        </span>
+        <select className="h-8 w-full rounded-lg bg-panel-2 px-2 text-[11px] text-ink outline-none ring-1 ring-line focus:ring-accent disabled:opacity-45" value={String(bound.value)} disabled={!writable} onChange={event => onCommit(event.target.value === 'true')}>
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      </label>
+    )
+  }
+  return (
+    <label className="block min-w-0">
+      <span className="mb-1 flex items-center justify-between gap-2 text-[9px] text-muted">
+        <span>{property}</span>
+        <span>{t(`studio.gui.value_source.${bound.source}`)}</span>
+      </span>
+      <input
+        className="h-8 w-full rounded-lg bg-panel-2 px-2 text-[11px] text-ink outline-none ring-1 ring-line focus:ring-accent disabled:opacity-45"
+        key={`${property}:${String(bound.value)}`}
+        defaultValue={propertyDisplayValue(bound.value)}
+        disabled={!writable}
+        onBlur={event => onCommit(parsePropertyInput(event.target.value, bound.value))}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter')
+            event.currentTarget.blur()
+        }}
+      />
+    </label>
+  )
+}
+
+function inspectorProperties(node: Mir3UiNode): Array<[string, BoundValue<GuiPropertyValue>]> {
+  const hidden = new Set(['parent', 'name', 'x', 'y', 'width', 'height', 'text', 'image', 'normalImage'])
+  return Object.entries(node.properties ?? {}).filter(([property]) => !hidden.has(property))
+}
+
+function parsePropertyInput(value: string, current: GuiPropertyValue): GuiPropertyValue {
+  if (typeof current === 'number') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : current
+  }
+  if (current == null && value === 'nil')
+    return null
+  if (isRawLuaLiteral(current))
+    return { luaLiteral: value }
+  return value
+}
+
+function propertyDisplayValue(value: GuiPropertyValue): string | number {
+  if (value == null)
+    return 'nil'
+  if (isRawLuaLiteral(value))
+    return value.luaLiteral
+  return String(value)
+}
+
+function isRawLuaLiteral(value: GuiPropertyValue): value is { luaLiteral: string } {
+  return value != null && typeof value === 'object' && typeof value.luaLiteral === 'string'
+}
+
+function isTextNode(node: Mir3UiNode): boolean {
+  return node.kind === 'Text' || node.kind === 'TextAtlas' || node.kind === 'RichText' || node.kind === 'ScrollText' || node.kind === 'TextInput' || node.kind === 'MenuItem'
+}
+
+function isImageNode(node: Mir3UiNode): boolean {
+  return node.kind === 'Image' || node.kind === 'Button' || node.kind === 'CheckBox' || node.kind === 'Slider' || node.kind === 'ProgressTimer' || node.kind === 'LoadingBar'
 }
 
 function PropertySection({ title, children }: { title: string, children: React.ReactNode }) {
@@ -108,7 +218,7 @@ function compatibilityClass(compatibility: Mir3UiNode['compatibility']): string 
   const base = 'shrink-0 rounded-full px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em]'
   if (compatibility === 'supported')
     return `${base} bg-ok/10 text-ok`
-  if (compatibility === 'partial')
+  if (compatibility === 'approximate' || compatibility === 'dynamic')
     return `${base} bg-accent/10 text-accent`
   return `${base} bg-danger/10 text-danger`
 }

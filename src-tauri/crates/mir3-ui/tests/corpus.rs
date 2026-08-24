@@ -1,4 +1,4 @@
-use mir3_ui::parse_document;
+use mir3_ui::{parse_document, CompatibilityStatus, Mir3UiNodeType};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,6 +15,7 @@ fn parses_optional_official_corpus_without_panicking() {
     );
     let mut nodes = 0usize;
     let mut diagnostics = 0usize;
+    let mut unknown = 0usize;
     for path in &files {
         let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         let source = String::from_utf8_lossy(&bytes);
@@ -23,13 +24,26 @@ fn parses_optional_official_corpus_without_panicking() {
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         nodes += document.nodes.len();
         diagnostics += document.diagnostics.len();
+        unknown += document
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.node_type == Mir3UiNodeType::Unsupported
+                    || node.compatibility.status == CompatibilityStatus::Unknown
+            })
+            .count();
     }
     eprintln!(
-        "MIR3 GUI corpus: files={}, nodes={}, diagnostics={}",
+        "MIR3 GUI corpus: files={}, nodes={}, diagnostics={}, unknown={}",
         files.len(),
         nodes,
-        diagnostics
+        diagnostics,
+        unknown,
     );
+    if files.len() == 249 {
+        assert_eq!(nodes, 5_948);
+    }
+    assert_eq!(unknown, 0, "registered official widget types must be known");
 }
 
 fn lua_files(root: &Path) -> Vec<PathBuf> {

@@ -3,12 +3,13 @@
 //! 这些命令只供 Studio 壳层调用，不注册到 MCP 或 Harness iframe。
 
 use crate::service::gui_designer::{
-    self, GuiAsset, GuiDesignerStatus, GuiDocumentEntry, GuiDocumentEnvelope, GuiDraftChangeSet,
-    GuiDraftPrepareResult, GuiReparseRequest, GuiTemplateRequest, GuiTemplateResponse,
+    self, GuiAssetMeta, GuiDesignerStatus, GuiDevTreePage, GuiDocumentEntry, GuiDocumentEnvelope,
+    GuiDraftChangeSet, GuiDraftPrepareResult, GuiReadonlyDocument, GuiReparseRequest,
+    GuiTemplateRequest, GuiTemplateResponse,
 };
 use crate::service::project::{DraftConfirmation, ProjectService};
 use mir3_domain::Snapshot;
-use tauri::State;
+use tauri::{ipc::Response, State};
 
 #[tauri::command]
 pub fn gui_designer_status(
@@ -19,35 +20,50 @@ pub fn gui_designer_status(
 }
 
 #[tauri::command]
-pub fn gui_document_list(
+pub async fn gui_document_list(
     service: State<'_, ProjectService>,
     project_id: String,
 ) -> Result<Vec<GuiDocumentEntry>, String> {
-    gui_designer::list_documents(&service, &project_id).map(|result| result.entries)
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::list_documents(&service, &project_id).map(|result| result.entries)
+    })
+    .await
+    .map_err(|e| format!("GUI_DOCUMENT_LIST_TASK_FAILED: {e}"))?
 }
 
 #[tauri::command]
-pub fn gui_document_open(
+pub async fn gui_document_open(
     service: State<'_, ProjectService>,
     project_id: String,
     dev_relative_path: String,
     draft_id: Option<String>,
 ) -> Result<GuiDocumentEnvelope, String> {
-    gui_designer::open_document(
-        &service,
-        &project_id,
-        &dev_relative_path,
-        draft_id.as_deref(),
-    )
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::open_document(
+            &service,
+            &project_id,
+            &dev_relative_path,
+            draft_id.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("GUI_DOCUMENT_OPEN_TASK_FAILED: {e}"))?
 }
 
 #[tauri::command]
-pub fn gui_document_reparse(
+pub async fn gui_document_reparse(
     service: State<'_, ProjectService>,
     project_id: String,
     request: GuiReparseRequest,
 ) -> Result<GuiDocumentEnvelope, String> {
-    gui_designer::reparse_document(&service, &project_id, request)
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::reparse_document(&service, &project_id, request)
+    })
+    .await
+    .map_err(|e| format!("GUI_DOCUMENT_REPARSE_TASK_FAILED: {e}"))?
 }
 
 #[tauri::command]
@@ -60,12 +76,61 @@ pub fn gui_document_template(
 }
 
 #[tauri::command]
-pub fn gui_asset_read(
+pub async fn gui_dev_tree_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    parent_path: String,
+    cursor: Option<String>,
+) -> Result<GuiDevTreePage, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::list_dev_tree(&service, &project_id, &parent_path, cursor.as_deref())
+    })
+    .await
+    .map_err(|e| format!("GUI_DEV_TREE_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_asset_meta(
     service: State<'_, ProjectService>,
     project_id: String,
     logical_path: String,
-) -> Result<GuiAsset, String> {
-    gui_designer::read_asset(&service, &project_id, &logical_path)
+) -> Result<GuiAssetMeta, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::read_asset_meta(&service, &project_id, &logical_path)
+    })
+    .await
+    .map_err(|e| format!("GUI_ASSET_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_asset_read(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    logical_path: String,
+) -> Result<Response, String> {
+    let service = service.inner().clone();
+    let content = tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::read_asset_content(&service, &project_id, &logical_path)
+    })
+    .await
+    .map_err(|e| format!("GUI_ASSET_TASK_FAILED: {e}"))??;
+    Ok(Response::new(content.bytes))
+}
+
+#[tauri::command]
+pub async fn gui_readonly_document_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    dev_relative_path: String,
+) -> Result<GuiReadonlyDocument, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::open_readonly_document(&service, &project_id, &dev_relative_path)
+    })
+    .await
+    .map_err(|e| format!("GUI_READONLY_DOCUMENT_TASK_FAILED: {e}"))?
 }
 
 #[tauri::command]
@@ -94,4 +159,19 @@ pub fn gui_draft_apply(
     confirmation_token: String,
 ) -> Result<Snapshot, String> {
     gui_designer::apply_draft(&service, &project_id, &draft_id, &confirmation_token)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tauri::ipc::{InvokeResponseBody, IpcResponse};
+
+    #[test]
+    fn asset_response_uses_raw_ipc_bytes() {
+        let response = Response::new(vec![0_u8, 1, 2, 255]);
+        match response.body().unwrap() {
+            InvokeResponseBody::Raw(bytes) => assert_eq!(bytes, vec![0, 1, 2, 255]),
+            InvokeResponseBody::Json(_) => panic!("素材响应不能经过 JSON 编码"),
+        }
+    }
 }

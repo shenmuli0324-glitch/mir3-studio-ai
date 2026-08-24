@@ -1,8 +1,33 @@
 export type GuiDevice = 'mobile' | 'pc'
 export type GuiMode = 'visual' | 'code' | 'split'
 export type GuiLeftPanel = 'files' | 'layers' | 'components'
-export type GuiNodeKind = 'Panel' | 'Image' | 'Text' | 'Button' | 'Node' | 'Unsupported'
+export type GuiNodeKind
+  = | 'Panel'
+    | 'Image'
+    | 'Text'
+    | 'Button'
+    | 'Node'
+    | 'TextAtlas'
+    | 'RichText'
+    | 'ScrollText'
+    | 'ItemShow'
+    | 'CheckBox'
+    | 'TextInput'
+    | 'Slider'
+    | 'ProgressTimer'
+    | 'LoadingBar'
+    | 'Effect'
+    | 'UIModel'
+    | 'SpineAnim'
+    | 'PageView'
+    | 'ListView'
+    | 'ScrollView'
+    | 'QuickCell'
+    | 'MenuItem'
+    | 'TableView'
+    | 'Unsupported'
 export type GuiValueSource = 'literal' | 'default' | 'dynamic'
+export type GuiCompatibility = 'supported' | 'approximate' | 'dynamic' | 'unknown'
 
 export interface SourceSpan {
   startByte: number
@@ -40,6 +65,36 @@ export interface GuiPaint {
   opacity?: BoundValue<number> | null
 }
 
+export interface GuiTransform {
+  scaleX: BoundValue<number>
+  scaleY: BoundValue<number>
+  rotation: BoundValue<number>
+  skewX: BoundValue<number>
+  skewY: BoundValue<number>
+}
+
+export interface GuiContainer {
+  direction?: BoundValue<number> | null
+  gravity?: BoundValue<number> | null
+  itemsMargin?: BoundValue<number> | null
+  innerWidth?: BoundValue<number> | null
+  innerHeight?: BoundValue<number> | null
+}
+
+export interface GuiScale9 {
+  enabled: BoundValue<boolean>
+  left: BoundValue<number>
+  bottom: BoundValue<number>
+  right: BoundValue<number>
+  top: BoundValue<number>
+}
+
+export interface GuiRawLuaLiteral {
+  luaLiteral: string
+}
+
+export type GuiPropertyValue = string | number | boolean | GuiRawLuaLiteral | null
+
 export interface GuiSourceBinding {
   createCall?: SourceSpan | null
   statement?: SourceSpan | null
@@ -58,9 +113,17 @@ export interface Mir3UiNode {
   position: GuiPoint
   size: GuiSize
   anchor?: GuiPoint | null
+  transform?: GuiTransform | null
   visible?: BoundValue<boolean> | null
+  ignoreContentAdaptWithSize?: BoundValue<boolean> | null
+  clippingEnabled?: BoundValue<boolean> | null
+  scale9?: GuiScale9 | null
+  container?: GuiContainer | null
+  properties?: Record<string, BoundValue<GuiPropertyValue>>
   paint?: GuiPaint | null
-  compatibility: 'supported' | 'partial' | 'unsupported'
+  compatibility: GuiCompatibility
+  compatibilityReasonCode?: string | null
+  compatibilityReason?: string | null
   binding?: GuiSourceBinding | null
 }
 
@@ -91,6 +154,45 @@ export interface GuiDocumentEntry {
   kind: 'editable' | 'readonly'
   platform: 'mobile' | 'pc' | 'shared'
   peerPath?: string | null
+}
+
+export type GuiDevEntryType = 'directory' | 'file'
+export type GuiDevPolicy = 'editable' | 'readonly' | 'asset' | 'info'
+
+export interface GuiDevTreeEntry {
+  path: string
+  name: string
+  entryType: GuiDevEntryType
+  policy: GuiDevPolicy
+  hidden: boolean
+  size: number
+  hasChildren: boolean
+  descriptionId: string
+}
+
+export interface GuiDevTreePage {
+  parentPath: string
+  entries: GuiDevTreeEntry[]
+  nextCursor?: string | null
+  metadataVersion: string
+}
+
+export interface GuiReadonlyDocument {
+  devRelativePath: string
+  source: string
+  sha256: string
+  encoding: string
+  newline: string
+  readOnly: true
+}
+
+export interface GuiAssetMeta {
+  logicalPath: string
+  mimeType: string
+  byteLength: number
+  sha256: string
+  width: number
+  height: number
 }
 
 export interface GuiDesignerStatus {

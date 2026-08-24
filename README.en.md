@@ -8,7 +8,7 @@
 
 <p align="center"><samp><strong>English</strong> · <a href="./README.md">中文</a></samp></p>
 
-> Version `0.4.0` opens projects created by 996 Project Manager and adds domain indexing, Skills, MCP, and a safe Draft review workflow.
+> Version `0.5.0` opens projects created by 996 Project Manager and adds domain indexing, Skills, MCP, and a safe Draft review workflow.
 
 MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastructure foundations. On top of its plugin architecture, we independently develop the project model, knowledge system, development toolchain, and AI workflows for the 996 MIR3 ecosystem.
 
@@ -29,7 +29,7 @@ MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastruct
 | --- | --- |
 | App | MIR3 Studio AI |
 | Core display name | MIR3 AI Core |
-| Version | 0.4.0 |
+| Version | 0.5.0 |
 | Tauri identifier | `ai.mir3.studio` |
 | Data directory | `~/.mir3-studio-ai` |
 | Development data directory | `~/.mir3-studio-ai.dev` |
@@ -45,6 +45,8 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 corepack pnpm install
 corepack pnpm tauri dev
 ```
+
+Use `pnpm package:mac` for the fixed Apple Silicon macOS delivery flow. It builds the `.app` and `.dmg`, verifies the app signature and disk image, and prints the SHA-256 digest. Without a Developer ID, it defaults to an ad-hoc signature suitable for local device testing.
 
 See [Development](./docs/DEVELOPMENT.md), the [runtime baseline policy](./docs/runtime-baseline-policy.md), and the product [CHANGELOG](./CHANGELOG.md).
 
