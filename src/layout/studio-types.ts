@@ -3,10 +3,10 @@ import type { Mir3Project } from '@/features/projects/types'
 export const STUDIO_VIEWS = [
   'project',
   'workbench',
+  'devtools',
   'builds',
   'runtime',
   'feedback',
-  'knowledge',
   'settings',
   'logs',
 ] as const

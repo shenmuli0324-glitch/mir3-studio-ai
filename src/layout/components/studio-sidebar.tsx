@@ -1,6 +1,5 @@
 import type { StudioView } from '../studio-types'
 import {
-  BookOpen,
   Boxes3,
   FileCheck,
   FileText,
@@ -8,6 +7,7 @@ import {
   Gear,
   PlugConnection,
   Sparkles,
+  Wrench,
 } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useTranslation } from 'react-i18next'
@@ -16,10 +16,10 @@ import { If } from 'react-if-lite'
 const NAV_ITEMS = [
   { id: 'project', icon: FolderCode },
   { id: 'workbench', icon: Sparkles },
+  { id: 'devtools', icon: Wrench },
   { id: 'builds', icon: Boxes3 },
   { id: 'runtime', icon: PlugConnection },
   { id: 'feedback', icon: FileCheck },
-  { id: 'knowledge', icon: BookOpen },
   { id: 'settings', icon: Gear },
   { id: 'logs', icon: FileText },
 ] as const
