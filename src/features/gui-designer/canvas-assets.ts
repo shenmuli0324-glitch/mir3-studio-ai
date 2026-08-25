@@ -26,8 +26,8 @@ const blobUrlCache = new Map<string, CachedAssetUrl>()
 const projectReleaseTimers = new Map<string, number>()
 let assetTouchSequence = 0
 
-export function useCanvasAssets(projectId: string | undefined, nodes: Record<string, Mir3UiNode>, enabled: boolean, selectedNodeId?: string | null): CanvasAssetTable {
-  const paths = enabled ? prioritizedAssetPaths(nodes, selectedNodeId) : []
+export function useCanvasAssets(projectId: string | undefined, nodes: Record<string, Mir3UiNode>, enabled: boolean, selectedNodeId?: string | null, extraPaths: readonly string[] = []): CanvasAssetTable {
+  const paths = enabled ? prioritizedAssetPaths(nodes, selectedNodeId, extraPaths) : []
   const activePaths = paths
   const assetKey = `${projectId ?? ''}:${activePaths.join('|')}`
   const [requestWindow, setRequestWindow] = useState({ key: assetKey, count: ASSET_CONCURRENCY })
@@ -97,8 +97,12 @@ function scheduleProjectAssetRelease(projectId: string): void {
   projectReleaseTimers.set(projectId, timer)
 }
 
-function prioritizedAssetPaths(nodes: Record<string, Mir3UiNode>, selectedNodeId?: string | null): string[] {
+function prioritizedAssetPaths(nodes: Record<string, Mir3UiNode>, selectedNodeId?: string | null, extraPaths: readonly string[] = []): string[] {
   const paths = new Set<string>()
+  for (const path of extraPaths) {
+    if (isRasterAsset(path))
+      paths.add(path)
+  }
   const selected = selectedNodeId ? nodes[selectedNodeId] : undefined
   if (selected)
     addNodeAssets(paths, selected, false)

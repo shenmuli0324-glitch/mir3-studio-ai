@@ -7,8 +7,13 @@ import type {
   GuiMode,
   GuiPropertyValue,
   GuiRuntimeDataSource,
+  GuiRuntimeInteractionMode,
+  GuiRuntimeSceneProfileId,
   GuiRuntimeSceneResult,
+  GuiRuntimeWindow,
+  GuiRuntimeWindowKind,
   GuiTemplateRequest,
+  Mir3RuntimeSceneDocument,
   Mir3UiDocument,
   Mir3UiNode,
   SourceSpan,
@@ -18,6 +23,7 @@ import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { defineScope } from '@/hooks/define-scope'
 import { useGuiDesignerStatus, useGuiDocumentActions, useGuiDocumentList, useGuiRuntimeActions, useGuiRuntimeCapabilities, useGuiRuntimeCatalog } from './api'
 import { componentDefinition, isContainerKind } from './component-catalog'
+import { applyRuntimeScenePatch, applyWorldProfile, defaultSceneProfile, fallbackWindow, isRuntimeSceneDocument, resolveProfileCatalogEntry, runtimeNodeWindowKind, sceneComposition, sceneProfile } from './scene-compositor'
 import { MOBILE_VIEWPORT, PC_VIEWPORTS } from './types'
 
 export interface GuiWorkingFile {
@@ -68,7 +74,7 @@ export const GuiDesignerScope = defineScope(() => {
   const [deviceState, setDeviceState] = useState<GuiDevice>('mobile')
   const [pcViewportIndex, setPcViewportIndex] = useState(8)
   const [mode, setMode] = useState<GuiMode>('visual')
-  const [leftPanel, setLeftPanel] = useState<GuiLeftPanel>('files')
+  const [leftPanel, setLeftPanel] = useState<GuiLeftPanel>('scenes')
   const [zoomState, setZoomState] = useState(0.72)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(true)
   const [newDialogOpen, setNewDialogOpen] = useState(false)
@@ -76,6 +82,9 @@ export const GuiDesignerScope = defineScope(() => {
   const [notice, setNotice] = useState<string | null>(null)
   const [parsePending, setParsePending] = useState(false)
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
+  const [activeSceneProfileId, setActiveSceneProfileId] = useState<GuiRuntimeSceneProfileId>('game-mobile')
+  const [interactionMode, setInteractionMode] = useState<GuiRuntimeInteractionMode>('design')
+  const [localSceneWindows, setLocalSceneWindows] = useState<GuiRuntimeWindow[]>([])
   const [runtimeScene, setRuntimeScene] = useState<GuiRuntimeSceneResult | null>(null)
   const [runtimeLastValidScene, setRuntimeLastValidScene] = useState<GuiRuntimeSceneResult | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
@@ -93,6 +102,9 @@ export const GuiDesignerScope = defineScope(() => {
   const viewport = deviceState === 'mobile' ? MOBILE_VIEWPORT : PC_VIEWPORTS[pcViewportIndex]
   const previewDocument = runtimeScene?.scene ?? runtimeLastValidScene?.scene ?? currentFile?.document
   const runtimePreviewActive = runtimeScene?.scene != null || runtimeLastValidScene?.scene != null
+  const activeSceneProfile = sceneProfile(activeSceneProfileId)
+  const runtimeWorldProfile = matchingWorldProfile(runtimeCatalog.data?.worldProfiles ?? [], deviceState)
+  const runtimeComposition = applyWorldProfile(sceneComposition(previewDocument, activeSceneProfile, deviceState, localSceneWindows), runtimeWorldProfile)
 
   useEffect(() => {
     dirtyOutsideScope = dirty
@@ -152,6 +164,8 @@ export const GuiDesignerScope = defineScope(() => {
             parseError: null,
           },
         }))
+        if (valid && runtimeSessionIdRef.current)
+          void reloadRuntimeScene()
       }).catch((error) => {
         if (sequence !== parseSequenceRef.current)
           return
@@ -272,7 +286,7 @@ export const GuiDesignerScope = defineScope(() => {
 
   function updateNodeProperty(nodeId: string, property: 'x' | 'y' | 'width' | 'height' | 'text' | 'image', value: number | string) {
     const file = currentFile
-    const node = file?.document.nodes[nodeId]
+    const node = editableSourceNode(file, previewDocument?.nodes[nodeId])
     if (!file || !node)
       return
     const bound = boundForProperty(node, property)
@@ -292,32 +306,35 @@ export const GuiDesignerScope = defineScope(() => {
   }
 
   function nodePropertyWritable(node: Mir3UiNode, property: 'x' | 'y' | 'width' | 'height' | 'text' | 'image'): boolean {
-    if (runtimePreviewActive)
+    const sourceNode = editableSourceNode(currentFile, node)
+    if (!sourceNode)
       return false
-    const bound = boundForProperty(node, property)
+    const bound = boundForProperty(sourceNode, property)
     if (bound?.writable && bound.span)
       return true
-    return (property === 'width' || property === 'height') && canInsertSizeSetter(node)
+    return (property === 'width' || property === 'height') && canInsertSizeSetter(sourceNode)
   }
 
   function updateNodeGenericProperty(nodeId: string, property: string, value: GuiPropertyValue) {
     const file = currentFile
-    const bound = file?.document.nodes[nodeId]?.properties?.[property]
+    const node = editableSourceNode(file, previewDocument?.nodes[nodeId])
+    const bound = node?.properties?.[property]
     if (!file || !bound?.writable || !bound.span)
       return
     updateWorkingSource(replaceSpans(file.workingSource, [{ span: bound.span, token: luaPropertyToken(value) }]))
   }
 
   function nodeGenericPropertyWritable(node: Mir3UiNode, property: string): boolean {
-    if (runtimePreviewActive)
+    const sourceNode = editableSourceNode(currentFile, node)
+    if (!sourceNode)
       return false
-    const bound = node.properties?.[property]
+    const bound = sourceNode.properties?.[property]
     return Boolean(bound?.writable && bound.span)
   }
 
   function updateNodePosition(nodeId: string, x: number, y: number) {
     const file = currentFile
-    const node = file?.document.nodes[nodeId]
+    const node = editableSourceNode(file, previewDocument?.nodes[nodeId])
     if (!file || !node || !node.position.x.writable || !node.position.y.writable || !node.position.x.span || !node.position.y.span)
       return
     updateWorkingSource(replaceSpans(file.workingSource, [
@@ -417,7 +434,7 @@ export const GuiDesignerScope = defineScope(() => {
     setDraftConfirmation(null)
   }
 
-  function startRuntimeScene(sceneId: string, requestedDevice: GuiDevice = deviceState): Promise<void> {
+  function startRuntimeScene(sceneId: string, requestedDevice: GuiDevice = deviceState, presetId?: GuiRuntimeSceneProfileId): Promise<void> {
     const requestSequence = ++runtimeRequestSequenceRef.current
     setRuntimeError(null)
     setSelectedSceneId(sceneId)
@@ -430,8 +447,13 @@ export const GuiDesignerScope = defineScope(() => {
       runtimeSessionIdRef.current = null
       if (requestSequence !== runtimeRequestSequenceRef.current)
         return
+      const worldProfile = matchingWorldProfile(runtimeCatalog.data?.worldProfiles ?? [], requestedDevice)
       const result = await runtimeActions.start({
         sceneId,
+        presetId,
+        moduleId: presetId == null ? sceneId : undefined,
+        mapId: runtimeMapIdForPreset(presetId, worldProfile?.mapId),
+        mockProfileId: presetId?.startsWith('game-') ? worldProfile?.mockProfileId ?? undefined : undefined,
         device: requestedDevice,
         viewport: requestedDevice === 'mobile' ? MOBILE_VIEWPORT : PC_VIEWPORTS[pcViewportIndex],
         workingSources: workingSources(files),
@@ -450,6 +472,25 @@ export const GuiDesignerScope = defineScope(() => {
     })
     runtimeOperationChainRef.current = operation
     return operation
+  }
+
+  async function startSceneProfile(profileId: GuiRuntimeSceneProfileId) {
+    const profile = sceneProfile(profileId)
+    setActiveSceneProfileId(profileId)
+    setDeviceState(profile.device)
+    setLocalSceneWindows([])
+    setRuntimeError(null)
+    const catalogEntries = runtimeCatalog.data?.presets ?? runtimeCatalog.data?.scenes ?? []
+    const entry = resolveProfileCatalogEntry(profile, catalogEntries)
+    if (!entry) {
+      await stopRuntimeSessionOnly()
+      setSelectedSceneId(null)
+      setRuntimeScene(null)
+      setRuntimeLastValidScene(null)
+      setRuntimeError('GUI_RUNTIME_PROFILE_UNAVAILABLE')
+      return
+    }
+    await startRuntimeScene(entry.id, profile.device, profile.id)
   }
 
   async function reloadRuntimeScene() {
@@ -489,6 +530,37 @@ export const GuiDesignerScope = defineScope(() => {
     }
   }
 
+  function activateRuntimeNode(nodeId: string) {
+    const node = previewDocument?.nodes[nodeId]
+    if (!node)
+      return
+    const windowKind = runtimeNodeWindowKind(node)
+    if (windowKind)
+      addLocalSceneWindow(windowKind)
+    if (runtimeScene?.sessionId)
+      void sendRuntimeEvent(nodeId, 'click').catch(() => {})
+  }
+
+  function openSceneWindow(kind: GuiRuntimeWindowKind) {
+    addLocalSceneWindow(kind)
+    if (runtimeScene?.sessionId)
+      void sendRuntimeEvent('__scene__', `open-${kind}`).catch(() => {})
+  }
+
+  function addLocalSceneWindow(kind: GuiRuntimeWindowKind) {
+    setLocalSceneWindows((windows) => {
+      if (windows.some(window => window.kind === kind))
+        return windows
+      return [...windows, fallbackWindow(kind, windows.length)]
+    })
+  }
+
+  function closeSceneWindow(windowId: string) {
+    setLocalSceneWindows(windows => windows.filter(window => window.id !== windowId))
+    if (runtimeScene?.sessionId)
+      void sendRuntimeEvent('__scene__', 'close-top').catch(() => {})
+  }
+
   function stopRuntimeScene(): Promise<void> {
     const requestSequence = ++runtimeRequestSequenceRef.current
     const operation = runtimeOperationChainRef.current.catch(() => {}).then(async () => {
@@ -502,9 +574,17 @@ export const GuiDesignerScope = defineScope(() => {
       setRuntimeScene(null)
       setRuntimeLastValidScene(null)
       setRuntimeError(null)
+      setLocalSceneWindows([])
     })
     runtimeOperationChainRef.current = operation
     return operation
+  }
+
+  async function stopRuntimeSessionOnly() {
+    const sessionId = runtimeSessionIdRef.current
+    runtimeSessionIdRef.current = null
+    if (sessionId)
+      await runtimeActions.stop(sessionId).catch(() => {})
   }
 
   async function setRuntimeDataSource(mode: GuiRuntimeDataSource) {
@@ -538,6 +618,10 @@ export const GuiDesignerScope = defineScope(() => {
   }
 
   function acceptRuntimeScene(result: GuiRuntimeSceneResult) {
+    if (result.patch && result.scene == null && runtimeLastValidScene?.scene && isRuntimeSceneDocument(runtimeLastValidScene.scene)) {
+      const scene = applyRuntimeScenePatch(runtimeLastValidScene.scene as Mir3RuntimeSceneDocument, result.patch)
+      result = { ...result, scene }
+    }
     const valid = result.scene != null && !result.diagnostics.some(diagnostic => diagnostic.severity === 'error')
     if (valid) {
       runtimeSessionIdRef.current = result.sessionId || null
@@ -553,8 +637,11 @@ export const GuiDesignerScope = defineScope(() => {
 
   function setDevice(nextDevice: GuiDevice) {
     setDeviceState(nextDevice)
+    const nextProfile = defaultSceneProfile(nextDevice)
+    setActiveSceneProfileId(nextProfile)
+    setLocalSceneWindows([])
     if (selectedSceneId) {
-      void startRuntimeScene(selectedSceneId, nextDevice)
+      void startSceneProfile(nextProfile)
       return
     }
     if (!currentPath)
@@ -604,6 +691,11 @@ export const GuiDesignerScope = defineScope(() => {
     currentFile,
     previewDocument,
     runtimePreviewActive,
+    runtimeComposition,
+    activeSceneProfile,
+    activeSceneProfileId,
+    interactionMode,
+    localSceneWindows,
     currentPath,
     selectedNodeId,
     selectedNode: previewDocument && selectedNodeId ? previewDocument.nodes[selectedNodeId] : undefined,
@@ -646,8 +738,12 @@ export const GuiDesignerScope = defineScope(() => {
     prepareDiff,
     applyDiff,
     startRuntimeScene,
+    startSceneProfile,
     reloadRuntimeScene,
     sendRuntimeEvent,
+    activateRuntimeNode,
+    openSceneWindow,
+    closeSceneWindow,
     stopRuntimeScene,
     openRuntimeNodeSource,
     setRuntimeDataSource,
@@ -657,6 +753,7 @@ export const GuiDesignerScope = defineScope(() => {
     setPcViewportIndex,
     setMode,
     setLeftPanel,
+    setInteractionMode,
     setZoom,
     fitCanvas,
     setDiagnosticsOpen,
@@ -670,8 +767,41 @@ function selectedNode(file: GuiWorkingFile, nodeId: string | null): Mir3UiNode |
   return nodeId ? file.document.nodes[nodeId] : undefined
 }
 
+function editableSourceNode(file: GuiWorkingFile | undefined, previewNode: Mir3UiNode | undefined): Mir3UiNode | undefined {
+  if (!file || !previewNode)
+    return undefined
+  const direct = file.document.nodes[previewNode.id]
+  if (direct)
+    return direct
+  const sourceRef = previewNode.sourceRef
+  if (sourceRef?.devRelativePath !== file.path)
+    return undefined
+  if (sourceRef.templateNodeId) {
+    const templateNode = file.document.nodes[sourceRef.templateNodeId]
+    if (templateNode)
+      return templateNode
+  }
+  const name = previewNode.name?.value
+  if (!name)
+    return undefined
+  return Object.values(file.document.nodes).find(node => node.name?.value === name && node.kind === previewNode.kind)
+    ?? Object.values(file.document.nodes).find(node => node.name?.value === name)
+}
+
 function workingSources(files: Record<string, GuiWorkingFile>): Record<string, string> {
   return Object.fromEntries(Object.values(files).map(file => [file.path, file.workingSource]))
+}
+
+function runtimeMapIdForPreset(presetId: GuiRuntimeSceneProfileId | undefined, mapId: string | null | undefined): string | undefined {
+  if (presetId?.startsWith('game-'))
+    return mapId ?? undefined
+  return undefined
+}
+
+function matchingWorldProfile(worldProfiles: NonNullable<ReturnType<typeof useGuiRuntimeCatalog>['data']>['worldProfiles'], device: GuiDevice) {
+  return worldProfiles.find(profile => profile.platform === device)
+    ?? worldProfiles.find(profile => profile.platform === 'shared')
+    ?? worldProfiles[0]
 }
 
 function insertionParent(file: GuiWorkingFile, selected?: Mir3UiNode): Mir3UiNode | undefined {

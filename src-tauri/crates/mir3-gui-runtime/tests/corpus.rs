@@ -45,6 +45,11 @@ fn official_guilayout_corpus_never_panics() {
                 operation: RuntimeOperation::Start(StartRequest {
                     scene_id: format!("project:{}", layout_path.trim_end_matches(".lua")),
                     layout_path: (*layout_path).clone(),
+                    preset_id: None,
+                    module_id: None,
+                    map_id: None,
+                    mock_profile_id: None,
+                    overlay_ids: Vec::new(),
                     modules: modules.clone(),
                     device: DeviceKind::Mobile,
                     viewport: Viewport::default(),
@@ -68,6 +73,55 @@ fn official_guilayout_corpus_never_panics() {
         runtime_success,
         static_fallback
     );
+}
+
+#[test]
+fn official_modules_build_four_runtime_presets() {
+    let Some(root) = corpus_root() else {
+        eprintln!("跳过 996 组合场景测试：未设置 MIR3_GUI_CORPUS");
+        return;
+    };
+    let modules = collect_modules(&root);
+    for preset_id in [
+        "character-create",
+        "character-select",
+        "game-mobile",
+        "game-pc",
+    ] {
+        let mut server = RuntimeServer::new();
+        let response = execute_request(
+            &mut server,
+            RuntimeRequest {
+                protocol_version: PROTOCOL_VERSION,
+                request_id: format!("preset-{preset_id}"),
+                operation: RuntimeOperation::Start(StartRequest {
+                    scene_id: preset_id.to_string(),
+                    layout_path: "GUILayout/GUIInit.lua".to_string(),
+                    preset_id: Some(preset_id.to_string()),
+                    module_id: Some("main".to_string()),
+                    map_id: Some("3".to_string()),
+                    mock_profile_id: Some("corpus".to_string()),
+                    overlay_ids: Vec::new(),
+                    modules: modules.clone(),
+                    device: if preset_id == "game-pc" {
+                        DeviceKind::Pc
+                    } else {
+                        DeviceKind::Mobile
+                    },
+                    viewport: Viewport::default(),
+                    data_profile: DataProfileSnapshot::default(),
+                    limits: None,
+                }),
+            },
+        );
+        assert!(response.ok, "{preset_id}: {:?}", response.error);
+        let Some(mir3_gui_runtime::RuntimeResult::Scene(result)) = response.result else {
+            panic!("{preset_id} 应返回组合场景");
+        };
+        assert!(result.scene.nodes.len() > 1, "{preset_id} 不应为空场景");
+        assert_eq!(result.preset_id, preset_id);
+        assert!(result.window_stack.is_empty());
+    }
 }
 
 fn corpus_root() -> Option<PathBuf> {

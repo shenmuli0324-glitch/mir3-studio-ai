@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { CanvasAssetTable } from './canvas-assets'
 import type { CanvasNodeSize, Matrix2D } from './canvas-render-model'
+import type { GuiSceneAtlasFrame, GuiSceneAtlasResource, GuiSceneStageAssets, GuiSceneWorldFrame } from './scene-assets'
 import type { Mir3UiDocument, Mir3UiNode } from './types'
 import { Component, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +12,8 @@ import { useCanvasAssets } from './canvas-assets'
 import { canvasRenderMode, matrixTransformValue, nodeLocalMatrix, renderedNodeSize, translatedNodeMatrix } from './canvas-render-model'
 import { isGuiComponentKind, renderAssetValue } from './component-catalog'
 import { GuiDesignerScope } from './gui-designer-scope'
+import { useGuiSceneStageAssets } from './scene-assets'
+import { sceneRootNodeIds } from './scene-compositor'
 
 interface DragRuntime {
   nodeId: string
@@ -58,7 +61,11 @@ export function DesignerCanvas() {
   const nodes = document?.nodes ?? {}
   const nodeCount = Object.keys(nodes).length
   const renderMode = canvasRenderMode(nodeCount)
-  const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId)
+  const stageAsset = scope.runtimeComposition.stage.backgroundAsset ?? undefined
+  const sceneStageAssets = useGuiSceneStageAssets(scope.activeProject?.id, scope.activeSceneProfileId, scope.runtimeComposition.stage.mapId)
+  const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId, stageAssetPaths(stageAsset))
+  const resolvedStageAssetHref = resolveStageAssetHref(stageAsset, assets.hrefs)
+  const rootNodeIds = document == null ? [] : sceneRootNodeIds(document, scope.runtimeComposition)
   const viewport = scope.viewport
 
   useEffect(() => {
@@ -80,7 +87,12 @@ export function DesignerCanvas() {
     if (!node)
       return
     scope.setSelectedNodeId(node.id)
-    if (scope.parsePending || scope.runtimePreviewActive || !node.position.x.writable || !node.position.y.writable)
+    if (scope.runtimePreviewActive && shouldActivateRuntimeNode(scope.interactionMode, event.altKey)) {
+      scope.activateRuntimeNode(node.id)
+      event.preventDefault()
+      return
+    }
+    if (scope.parsePending || !scope.nodePropertyWritable(node, 'x') || !scope.nodePropertyWritable(node, 'y'))
       return
     const parentMatrix = (group.parentElement as unknown as SVGGraphicsElement | null)?.getScreenCTM()
     const parentInverse = parentMatrix?.inverse()
@@ -186,32 +198,43 @@ export function DesignerCanvas() {
       onDragOver={event => event.preventDefault()}
       onDrop={handleDrop}
     >
-      <If cond={document == null}>
+      <If cond={document == null && scope.activeSceneProfileId == null}>
         <CanvasMessage title={t('studio.gui.canvas.empty')} description={t('studio.gui.canvas.empty_desc')} />
       </If>
       <If cond={document != null && renderMode === 'blocked'}>
         <CanvasMessage title={t('studio.gui.canvas.too_large')} description={t('studio.gui.canvas.too_large_desc', { count: nodeCount })} />
       </If>
-      <If cond={document != null && renderMode !== 'blocked'}>
+      <If cond={renderMode !== 'blocked'}>
         <div
           className="relative shrink-0 overflow-hidden bg-[#111216] shadow-[0_28px_80px_rgba(0,0,0,0.22)] ring-1 ring-white/15"
           data-gui-surface
           style={{ width: viewport.width * scope.zoom, height: viewport.height * scope.zoom }}
         >
-          <CanvasErrorBoundary key={`${scope.selectedSceneId ?? file?.path ?? 'preview'}:${document?.sourceSha256 ?? scope.runtimeScene?.sequence ?? 'working'}`} fallback={canvasFallback}>
-            <CanvasDocument
-              document={document!}
-              assets={assets}
-              lightweight={renderMode === 'lightweight'}
-              selectedNodeId={scope.selectedNodeId}
-              viewport={viewport}
-              zoom={scope.zoom}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerCancel}
-            />
-          </CanvasErrorBoundary>
+          <SceneWorldCanvas kind={scope.runtimeComposition.stage.kind} viewport={viewport} assets={sceneStageAssets} />
+          <If cond={sceneStageAssets.background == null && resolvedStageAssetHref != null}>
+            <img className="pointer-events-none absolute inset-0 size-full object-cover" src={resolvedStageAssetHref} alt="" data-gui-stage-background />
+          </If>
+          <If cond={document != null}>
+            <div className="absolute inset-0" data-gui-scene-layer="gui">
+              <CanvasErrorBoundary key={`${scope.selectedSceneId ?? file?.path ?? 'preview'}:${document?.sourceSha256 ?? scope.runtimeScene?.sequence ?? 'working'}`} fallback={canvasFallback}>
+                <CanvasDocument
+                  document={document!}
+                  rootNodeIds={rootNodeIds}
+                  assets={assets}
+                  lightweight={renderMode === 'lightweight'}
+                  selectedNodeId={scope.selectedNodeId}
+                  viewport={viewport}
+                  zoom={scope.zoom}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                />
+              </CanvasErrorBoundary>
+            </div>
+          </If>
+          <SceneDomOverlay />
+          <SceneAssetDiagnostics assets={sceneStageAssets} />
           <If cond={renderMode === 'lightweight'}>
             <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[9px] text-white/70">{t('studio.gui.canvas.lightweight', { count: nodeCount })}</div>
           </If>
@@ -228,8 +251,273 @@ export function DesignerCanvas() {
   )
 }
 
-function CanvasDocument({ document, assets, lightweight, selectedNodeId, viewport, zoom, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+function SceneWorldCanvas({ kind, viewport, assets }: { kind: 'login' | 'world' | 'snapshot' | 'empty', viewport: { width: number, height: number }, assets: GuiSceneStageAssets }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context)
+      return
+    const drawingContext = context
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    let disposed = false
+    let animationFrame = 0
+    let loadedImages: SceneLoadedImages | undefined
+    void loadSceneImages(assets).then((images) => {
+      if (disposed) {
+        closeSceneImages(images)
+        return
+      }
+      loadedImages = images
+      function paint(timestamp: number) {
+        if (disposed)
+          return
+        drawWorldStage(drawingContext, viewport.width, viewport.height, kind)
+        drawSceneStage(drawingContext, viewport.width, viewport.height, kind, assets, images, timestamp)
+        if ((kind === 'login' || kind === 'world') && assets.atlases.length > 0)
+          animationFrame = requestAnimationFrame(paint)
+      }
+      paint(0)
+    })
+    return () => {
+      disposed = true
+      cancelAnimationFrame(animationFrame)
+      closeSceneImages(loadedImages)
+    }
+  }, [assets, kind, viewport.height, viewport.width])
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" data-gui-scene-layer="world" />
+}
+
+function SceneAssetDiagnostics({ assets }: { assets: GuiSceneStageAssets }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <If cond={assets.loading}>
+        <div className="pointer-events-none absolute right-2 top-2 rounded-md bg-black/60 px-2 py-1 text-[8px] text-white/70">{t('studio.gui.scene.assets.loading')}</div>
+      </If>
+      <If cond={assets.diagnostics.length > 0}>
+        <div className="pointer-events-none absolute bottom-8 right-2 max-w-[45%] rounded-md bg-warning/90 px-2 py-1.5 text-[8px] leading-3 text-black shadow-lg" title={assets.diagnostics.join('\n')}>
+          {t('studio.gui.scene.assets.partial', { count: assets.diagnostics.length })}
+        </div>
+      </If>
+    </>
+  )
+}
+
+function SceneDomOverlay() {
+  const { t } = useTranslation()
+  const scope = useScope(GuiDesignerScope)
+  const windows = scope.runtimeComposition.windows.filter(window => window.source === 'localFallback')
+  return (
+    <div className="pointer-events-none absolute inset-0" data-gui-scene-layer="dom-overlay">
+      <div className="absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[8px] text-white/65">{t('studio.gui.interaction.alt_hint')}</div>
+      {windows.map((window, index) => (
+        <section
+          className="pointer-events-auto absolute left-1/2 top-1/2 flex min-h-[38%] w-[48%] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg bg-panel/95 shadow-[0_18px_70px_rgba(0,0,0,0.55)] ring-1 ring-line-strong"
+          style={{ marginLeft: index * 14, marginTop: index * 14, zIndex: window.zOrder }}
+          data-gui-scene-window={window.kind}
+          key={window.id}
+        >
+          <header className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3">
+            <strong className="text-[11px] font-medium text-ink">{t(window.titleKey ?? `studio.gui.scene.window.${window.kind}`)}</strong>
+            <button className="grid size-6 place-items-center rounded text-muted hover:bg-panel-hover hover:text-ink" type="button" aria-label={t('studio.gui.scene.window.close')} onClick={() => scope.closeSceneWindow(window.id)}>×</button>
+          </header>
+          <div className="grid flex-1 place-items-center bg-canvas/55 p-5 text-center text-[10px] leading-4 text-muted">{t('studio.gui.scene.window.fallback')}</div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function drawWorldStage(context: CanvasRenderingContext2D, width: number, height: number, kind: 'login' | 'world' | 'snapshot' | 'empty') {
+  const gradient = context.createLinearGradient(0, 0, width, height)
+  if (kind === 'login') {
+    gradient.addColorStop(0, '#171411')
+    gradient.addColorStop(0.55, '#3a2a1c')
+    gradient.addColorStop(1, '#0c0b0a')
+  }
+  else {
+    gradient.addColorStop(0, '#6f7250')
+    gradient.addColorStop(0.5, '#8b8060')
+    gradient.addColorStop(1, '#4c533d')
+  }
+  context.fillStyle = gradient
+  context.fillRect(0, 0, width, height)
+  if (kind !== 'world')
+    return
+  context.globalAlpha = 0.12
+  context.strokeStyle = '#f4e9c8'
+  context.lineWidth = 1
+  const step = Math.max(28, Math.round(Math.min(width, height) / 15))
+  for (let x = -height; x < width; x += step) {
+    context.beginPath()
+    context.moveTo(x, 0)
+    context.lineTo(x + height, height)
+    context.stroke()
+  }
+  for (let x = 0; x < width + height; x += step) {
+    context.beginPath()
+    context.moveTo(x, 0)
+    context.lineTo(x - height, height)
+    context.stroke()
+  }
+  context.globalAlpha = 1
+}
+
+interface SceneLoadedImages {
+  background?: ImageBitmap
+  textures: Map<string, ImageBitmap>
+}
+
+async function loadSceneImages(assets: GuiSceneStageAssets): Promise<SceneLoadedImages> {
+  const textures = new Map<string, ImageBitmap>()
+  let background: ImageBitmap | undefined
+  if (assets.background?.browserRenderable === true)
+    background = await decodeSceneImage(assets.background.blob)
+  await Promise.all(assets.atlases.map(async (resource) => {
+    if (resource.texture?.browserRenderable !== true)
+      return
+    const image = await decodeSceneImage(resource.texture.blob)
+    if (image)
+      textures.set(resource.manifest.textureAssetId, image)
+  }))
+  return { background, textures }
+}
+
+async function decodeSceneImage(blob: Blob): Promise<ImageBitmap | undefined> {
+  if (typeof createImageBitmap !== 'function')
+    return undefined
+  try {
+    return await createImageBitmap(blob)
+  }
+  catch {
+    return undefined
+  }
+}
+
+function closeSceneImages(images: SceneLoadedImages | undefined) {
+  images?.background?.close()
+  for (const image of images?.textures.values() ?? [])
+    image.close()
+}
+
+function drawSceneStage(context: CanvasRenderingContext2D, width: number, height: number, kind: 'login' | 'world' | 'snapshot' | 'empty', assets: GuiSceneStageAssets, images: SceneLoadedImages, timestamp: number) {
+  if (images.background)
+    drawCoverImage(context, images.background, width, height)
+  if (kind === 'world')
+    drawWorldManifest(context, width, height, assets, images)
+  if (kind === 'world')
+    drawSceneActors(context, width, height, assets.atlases, images, timestamp, false)
+  if (kind === 'login') {
+    drawSceneActors(context, width, height, assets.atlases, images, timestamp, true)
+    drawLoginEffects(context, width, height, assets.atlases, images, timestamp)
+  }
+}
+
+function drawCoverImage(context: CanvasRenderingContext2D, image: CanvasImageSource & { width: number, height: number }, width: number, height: number) {
+  const scale = Math.max(width / image.width, height / image.height)
+  const drawWidth = image.width * scale
+  const drawHeight = image.height * scale
+  context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+}
+
+function drawWorldManifest(context: CanvasRenderingContext2D, width: number, height: number, assets: GuiSceneStageAssets, images: SceneLoadedImages) {
+  const world = assets.world
+  if (!world || world.status === 'unsupported')
+    return
+  const atlasById = new Map(assets.atlases.map(resource => [resource.manifest.assetId, resource]))
+  const frames = [...world.frames]
+    .filter(frame => frame.available && frame.atlasAssetId != null)
+    .sort(compareWorldFrames)
+  const centerX = world.chunk.x + world.chunk.width / 2
+  const centerY = world.chunk.y + world.chunk.height / 2
+  for (const reference of frames) {
+    const resource = reference.atlasAssetId == null ? undefined : atlasById.get(reference.atlasAssetId)
+    const texture = resource == null ? undefined : images.textures.get(resource.manifest.textureAssetId)
+    const frame = resource == null ? undefined : atlasFrameForIndex(resource, reference.frameIndex)
+    if (!texture || !frame)
+      continue
+    const point = isometricPoint(reference.x - centerX, reference.y - centerY, width, height)
+    drawAtlasFrame(context, texture, frame, point.x, point.y)
+  }
+}
+
+function compareWorldFrames(left: GuiSceneWorldFrame, right: GuiSceneWorldFrame): number {
+  const layerOrder = { ground: 0, bottom: 1, top: 2 }
+  return layerOrder[left.layer] - layerOrder[right.layer] || left.x + left.y - (right.x + right.y)
+}
+
+function isometricPoint(x: number, y: number, width: number, height: number): { x: number, y: number } {
+  return {
+    x: width / 2 + (x - y) * 24,
+    y: height / 2 - 70 + (x + y) * 16,
+  }
+}
+
+function atlasFrameForIndex(resource: GuiSceneAtlasResource, frameIndex: number): GuiSceneAtlasFrame | undefined {
+  const exact = resource.manifest.frames.find(frame => numericFrameName(frame.name) === frameIndex)
+  if (exact)
+    return exact
+  if (resource.manifest.frames.length === 0)
+    return undefined
+  return resource.manifest.frames[frameIndex % resource.manifest.frames.length]
+}
+
+function numericFrameName(name: string): number | undefined {
+  const values = name.match(/\d+/g)
+  if (!values || values.length === 0)
+    return undefined
+  return Number(values[values.length - 1])
+}
+
+function drawLoginEffects(context: CanvasRenderingContext2D, width: number, height: number, atlases: GuiSceneAtlasResource[], images: SceneLoadedImages, timestamp: number) {
+  const usable = atlases.filter(resource => resource.manifest.assetId.includes('/anim/effect/') && images.textures.has(resource.manifest.textureAssetId) && resource.manifest.frames.length > 0)
+  for (let index = 0; index < usable.length; index += 1) {
+    const resource = usable[index]
+    const texture = images.textures.get(resource.manifest.textureAssetId)
+    if (!texture)
+      continue
+    const frameIndex = Math.floor(timestamp / 100) % resource.manifest.frames.length
+    const frame = resource.manifest.frames[frameIndex]
+    const x = width * ((index + 1) / (usable.length + 1))
+    drawAtlasFrame(context, texture, frame, x, height * 0.78)
+  }
+}
+
+function drawSceneActors(context: CanvasRenderingContext2D, width: number, height: number, atlases: GuiSceneAtlasResource[], images: SceneLoadedImages, timestamp: number, login: boolean) {
+  const actors = atlases.filter(resource => /\/anim\/(?:player|npc|monster)\//.test(resource.manifest.assetId) && images.textures.has(resource.manifest.textureAssetId) && resource.manifest.frames.length > 0)
+  for (let index = 0; index < actors.length; index += 1) {
+    const resource = actors[index]
+    const texture = images.textures.get(resource.manifest.textureAssetId)
+    if (!texture)
+      continue
+    const frame = resource.manifest.frames[Math.floor(timestamp / 120) % resource.manifest.frames.length]
+    const positions = login
+      ? [{ x: 0.34, y: 0.91 }, { x: 0.72, y: 0.91 }]
+      : [{ x: 0.5, y: 0.58 }, { x: 0.68, y: 0.55 }, { x: 0.36, y: 0.48 }]
+    const position = positions[index % positions.length]
+    drawAtlasFrame(context, texture, frame, width * position.x, height * position.y)
+  }
+}
+
+function drawAtlasFrame(context: CanvasRenderingContext2D, texture: CanvasImageSource, frame: GuiSceneAtlasFrame, anchorX: number, anchorY: number) {
+  const drawX = anchorX - frame.sourceWidth / 2 + frame.offsetX
+  const drawY = anchorY - frame.sourceHeight + frame.offsetY
+  if (!frame.rotated) {
+    context.drawImage(texture, frame.x, frame.y, frame.width, frame.height, drawX, drawY, frame.width, frame.height)
+    return
+  }
+  context.save()
+  context.translate(drawX, drawY + frame.width)
+  context.rotate(-Math.PI / 2)
+  context.drawImage(texture, frame.x, frame.y, frame.width, frame.height, 0, 0, frame.width, frame.height)
+  context.restore()
+}
+
+function CanvasDocument({ document, rootNodeIds, assets, lightweight, selectedNodeId, viewport, zoom, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   document: Mir3UiDocument
+  rootNodeIds: string[]
   assets: CanvasAssetTable
   lightweight: boolean
   selectedNodeId: string | null
@@ -250,7 +538,7 @@ function CanvasDocument({ document, assets, lightweight, selectedNodeId, viewpor
       onPointerCancel={onPointerCancel}
     >
       <g transform={`translate(0 ${viewport.height}) scale(1 -1)`}>
-        {document.roots.map(nodeId => (
+        {rootNodeIds.map(nodeId => (
           <CanvasNode
             key={nodeId}
             nodeId={nodeId}
@@ -410,4 +698,22 @@ function localPointerPoint(clientX: number, clientY: number, inverse: DOMMatrix 
     return { x: point.x, y: point.y }
   }
   return { x: clientX / zoom, y: -clientY / zoom }
+}
+
+function stageAssetPaths(stageAsset: string | undefined): string[] {
+  if (stageAsset)
+    return [stageAsset]
+  return []
+}
+
+function resolveStageAssetHref(stageAsset: string | undefined, hrefs: Record<string, string>): string | undefined {
+  if (stageAsset)
+    return hrefs[stageAsset]
+  return undefined
+}
+
+function shouldActivateRuntimeNode(mode: 'design' | 'interact', altKey: boolean): boolean {
+  if (mode === 'interact')
+    return !altKey
+  return altKey
 }

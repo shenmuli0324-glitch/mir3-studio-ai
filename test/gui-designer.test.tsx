@@ -115,6 +115,7 @@ describe('gui designer interaction', () => {
     renderDesigner()
     const user = userEvent.setup()
 
+    await user.click(await screen.findByRole('button', { name: 'Files' }))
     await user.click(await screen.findByRole('button', { name: /GUILayout.*GUI runtime logic/i }))
     await user.click(await screen.findByRole('button', { name: /demo\.lua.*read-only/i }))
     expect(await screen.findByText('Read-only Lua source')).toBeTruthy()
@@ -127,24 +128,50 @@ describe('gui designer interaction', () => {
     renderDesigner()
     const user = userEvent.setup()
 
+    await user.click(await screen.findByRole('button', { name: 'Files' }))
     expect(await screen.findByRole('button', { name: /data_config.*Data configuration/i })).toBeTruthy()
     expect(screen.queryByText(/Official data configuration/i)).toBeNull()
     await user.click(screen.getByRole('button', { name: /scripts.*Scripts directory/i }))
     expect(await screen.findByRole('button', { name: /^game_config$/i })).toBeTruthy()
   })
 
-  it('starts a complete Runtime scene from the Scenes panel', async () => {
+  it('starts the character creation preset with its real scene background', async () => {
     installInvokeFixture()
     renderDesigner()
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Scenes' }))
-    await user.click(await screen.findByRole('button', { name: /Auction interface/i }))
+    expect(await screen.findByRole('button', { name: /Character creation/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Character selection/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Mobile game/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /PC game/i })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: /Character creation/i }))
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_start', expect.objectContaining({
       projectId: 'project-1',
-      request: expect.objectContaining({ sceneId: 'auction' }),
+      request: expect.objectContaining({ sceneId: 'character-create', presetId: 'character-create' }),
     })))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_scene_asset_read', expect.objectContaining({ assetId: 'dev://res/private/login/create_bg.jpg' })))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_scene_atlas_manifest', expect.objectContaining({ assetId: 'cache://stab/anim/player/player_9999_0_0.plist' })))
     expect(document.querySelector('[data-gui-canvas-container]')).toBeTruthy()
+  })
+
+  it('selects the matching Mobile and PC maps and dispatches overlay events', async () => {
+    installInvokeFixture()
+    renderDesigner()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: /Mobile game/i }))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_start', expect.objectContaining({
+      request: expect.objectContaining({ presetId: 'game-mobile', mapId: '01', mockProfileId: 'mobile-hud' }),
+    })))
+    await user.click(screen.getByRole('button', { name: 'Bag' }))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_event', expect.objectContaining({ eventType: 'open-bag' })))
+    await user.click(await screen.findByRole('button', { name: 'Close window' }))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_event', expect.objectContaining({ eventType: 'close-top' })))
+
+    await user.click(screen.getByRole('button', { name: 'PC' }))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_start', expect.objectContaining({
+      request: expect.objectContaining({ presetId: 'game-pc', mapId: '1', mockProfileId: 'pc-hud' }),
+    })))
   })
 
   it('keeps Runtime source references and opens the matching GUIExport in Split mode', async () => {
@@ -152,7 +179,7 @@ describe('gui designer interaction', () => {
     renderDesigner()
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Scenes' }))
+    await user.click(await screen.findByRole('button', { name: 'Modules' }))
     await user.click(await screen.findByRole('button', { name: /Auction interface/i }))
     await user.click(screen.getByRole('button', { name: 'Layers' }))
     await user.click(await screen.findByRole('button', { name: /RuntimeButton/i }))
@@ -163,6 +190,13 @@ describe('gui designer interaction', () => {
     await user.click(sourceJump)
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_open', expect.objectContaining({ devRelativePath: 'GUIExport/demo/main.lua' })))
     expect(screen.getByLabelText('Lua source editor')).toBeTruthy()
+    expect(document.querySelector('[data-gui-scene-layer="world"]')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('X'), { target: { value: '36' } })
+    fireEvent.blur(screen.getByLabelText('X'))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_runtime_scene_reload', expect.objectContaining({
+      sessionId: 'runtime-1',
+      workingSources: expect.objectContaining({ 'GUIExport/demo/main.lua': expect.stringContaining(', 36,') }),
+    })), { timeout: 1500 })
   })
 
   it('keeps the dirty GUI working copy while another Studio menu is visible', async () => {
@@ -223,26 +257,77 @@ function installInvokeFixture(): void {
     }
     if (command === 'gui_runtime_catalog') {
       return Promise.resolve({
-        scenes: [{ id: 'auction', name: 'Auction interface', category: 'auction', layoutPath: 'GUILayout/auction.lua', platform: 'shared', compatibility: 'supported' }],
+        presets: [
+          runtimeCatalogEntry('character-create', 'Character creation', 'shared'),
+          runtimeCatalogEntry('character-select', 'Character selection', 'shared'),
+          runtimeCatalogEntry('game-mobile', 'Mobile game', 'mobile'),
+          runtimeCatalogEntry('game-pc', 'PC game', 'pc'),
+        ],
+        modules: [runtimeCatalogEntry('auction', 'Auction interface', 'shared', 'GUILayout/auction.lua')],
+        worldProfiles: [
+          { id: 'mobile-01', name: 'Mobile', device: 'mobile', mapId: '01', mockProfileId: 'mobile-hud' },
+          { id: 'pc-1', name: 'PC', device: 'pc', mapId: '1', mockProfileId: 'pc-hud' },
+        ],
+        scenes: [],
       })
     }
     if (command === 'gui_runtime_scene_start') {
+      const request = (args.request ?? {}) as { presetId?: string, sceneId?: string, device?: string, mapId?: string }
       return Promise.resolve({
         sessionId: 'runtime-1',
         sequence: 1,
-        scene: runtimeSceneFixture(),
+        scene: runtimeSceneFixture(request.presetId ?? request.sceneId ?? 'game-mobile', request.device, request.mapId),
         fallback: false,
         diagnostics: [],
       })
     }
     if (command === 'gui_runtime_scene_event') {
-      return Promise.resolve({ sessionId: 'runtime-1', sequence: 2, scene: runtimeSceneFixture(), fallback: false, diagnostics: [] })
+      return Promise.resolve({ sessionId: 'runtime-1', sequence: 2, scene: runtimeSceneFixture('game-mobile', 'mobile', '01'), fallback: false, diagnostics: [] })
+    }
+    if (command === 'gui_runtime_scene_reload') {
+      return Promise.resolve({ sessionId: 'runtime-1', sequence: 2, scene: runtimeSceneFixture('game-mobile', 'mobile', '01'), fallback: false, diagnostics: [] })
     }
     if (command === 'gui_runtime_scene_stop')
       return Promise.resolve({ stopped: true })
     if (command === 'gui_runtime_data_source_set') {
       return Promise.resolve({ available: true, backend: 'sidecar', dataSource: 'builtInMock', projectStaticAvailable: false, tables: [], limits: {}, diagnostics: [] })
     }
+    if (command === 'gui_scene_asset_catalog') {
+      return Promise.resolve({ projectId: 'project-1', devAvailable: true, stabAvailable: false, modules: [], acceptedAssetIds: ['dev://res/'] })
+    }
+    if (command === 'gui_scene_login_presets') {
+      return Promise.resolve([
+        {
+          sceneId: 'character-create',
+          backgroundAssetId: 'dev://res/private/login/create_bg.jpg',
+          backgroundAvailable: true,
+          effects: [sceneEffect(3061), sceneEffect(3062)],
+          diagnostics: [],
+        },
+        {
+          sceneId: 'character-select',
+          backgroundAssetId: 'dev://res/private/login/bg_cjzy_02.jpg',
+          backgroundAvailable: true,
+          effects: [],
+          diagnostics: [],
+        },
+      ])
+    }
+    if (command === 'gui_scene_world_manifest') {
+      return Promise.resolve({
+        status: 'supported',
+        chunk: { mapId: String(args.mapId), mapWidth: 256, mapHeight: 256, x: 0, y: 0, width: 32, height: 24 },
+        frames: [],
+        atlasAssetIds: [],
+        diagnostics: [],
+      })
+    }
+    if (command === 'gui_scene_atlas_manifest') {
+      const assetId = String(args.assetId)
+      return Promise.resolve({ assetId, textureAssetId: assetId.replace(/\.plist$/, '.png'), frames: [{ name: '0', x: 0, y: 0, width: 1, height: 1, offsetX: 0, offsetY: 0, sourceWidth: 1, sourceHeight: 1, rotated: false }], sourceSha256: 'atlas' })
+    }
+    if (command === 'gui_scene_asset_read')
+      return Promise.resolve(Uint8Array.from([0xFF, 0xD8, 0xFF, 0xD9]).buffer)
     if (command === 'gui_document_list') {
       return Promise.resolve([
         { path: 'GUIExport/demo/main.lua', kind: 'editable', platform: 'mobile', peerPath: 'GUIExport/demo/main_win32.lua' },
@@ -321,10 +406,10 @@ function installInvokeFixture(): void {
   })
 }
 
-function runtimeSceneFixture() {
+function runtimeSceneFixture(profileId = 'game-mobile', device = 'mobile', mapId?: string) {
   return {
     id: 'scene-auction',
-    profileId: 'auction',
+    profileId,
     viewport: { width: 1136, height: 640, scaleFactor: 1 },
     roots: ['runtime-root'],
     nodes: {
@@ -355,19 +440,35 @@ function runtimeSceneFixture() {
           pressed: 'icons/close_pressed.png',
           disabled: 'icons/close_disabled.png',
         },
-        sourceRef: { devRelativePath: 'GUIExport/demo/main.lua', line: 2, column: 0 },
+        sourceRef: { devRelativePath: 'GUIExport/demo/main.lua', line: 2, column: 0, templateNodeId: 'close' },
         properties: {},
       },
     },
     diagnostics: [],
     provenance: [{ kind: 'sceneMock', key: 'auction', description: 'Simulated scene data' }],
+    runtime: {
+      profileId,
+      device,
+      stage: { kind: profileId.startsWith('character-') ? 'login' : 'world', mapId, compatibility: 'approximate' },
+      layers: [{ id: 'hud', rootNodeIds: ['runtime-root'], zOrder: 200 }],
+      windows: [],
+    },
   }
 }
 
 async function openDemoFile(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: 'Files' }))
   await user.click(await screen.findByRole('button', { name: /GUIExport.*Static GUI layout/i }))
   await user.click(await screen.findByRole('button', { name: /^demo$/i }))
   await user.click(await screen.findByRole('button', { name: /main\.lua.*visual editing/i }))
+}
+
+function runtimeCatalogEntry(id: string, name: string, platform: 'mobile' | 'pc' | 'shared', layoutPath = `GUILayout/${id}.lua`) {
+  return { id, name, category: 'main', layoutPath, platform, compatibility: 'supported' }
+}
+
+function sceneEffect(effectId: number) {
+  return { effectId, available: true, atlasAssetIds: [`cache://stab/sfx_${effectId}_0.plist`] }
 }
 
 function treeDirectory(path: string, descriptionId: string) {

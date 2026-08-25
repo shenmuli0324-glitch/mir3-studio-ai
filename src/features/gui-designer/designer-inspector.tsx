@@ -242,7 +242,7 @@ function AssetPropertyInput({ node, property, hrefs }: { node: Mir3UiNode, prope
         aria-label={t(`studio.gui.inspector.asset_slot.${property}`)}
         key={`${property}:${bound?.value ?? ''}`}
         defaultValue={bound?.value ?? ''}
-        disabled={!writable || scope.parsePending || scope.runtimePreviewActive}
+        disabled={!writable || scope.parsePending}
         onBlur={event => commit(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter')

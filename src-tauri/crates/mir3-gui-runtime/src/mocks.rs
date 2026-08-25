@@ -3,46 +3,32 @@ use crate::model::{DeviceKind, SceneCatalogEntry};
 pub fn catalog() -> Vec<SceneCatalogEntry> {
     vec![
         entry(
-            "auction",
-            "拍卖行",
-            "拍卖列表、筛选与竞价流程的静态运行场景",
+            "character-create",
+            "人物创建",
+            "人物创建背景、职业选择与角色预览的组合场景",
             DeviceKind::Mobile,
-            "GUILayout/auction/auction_main.lua",
+            "GUIExport/login_role/login_role_create.lua",
         ),
         entry(
-            "bag",
-            "背包",
-            "角色背包与物品格的静态运行场景",
+            "character-select",
+            "人物选择",
+            "人物选择背景、角色槽位与操作按钮的组合场景",
             DeviceKind::Mobile,
-            "GUILayout/player_bag/bag.lua",
+            "GUIExport/login_role/login_role.lua",
         ),
         entry(
-            "hud-mobile",
+            "game-mobile",
             "移动端主界面",
-            "移动端 HUD 与常用入口的静态运行场景",
+            "移动端完整 HUD、窗口栈与脱机模拟世界场景",
             DeviceKind::Mobile,
             "GUILayout/GUIInit.lua",
         ),
         entry(
-            "hud-pc",
+            "game-pc",
             "PC 主界面",
-            "PC HUD 与快捷栏的静态运行场景",
+            "PC 完整 HUD、窗口栈与脱机模拟世界场景",
             DeviceKind::Pc,
-            "GUILayout/GUIInit_win32.lua",
-        ),
-        entry(
-            "login",
-            "登录",
-            "登录和角色选择流程的静态运行场景",
-            DeviceKind::Mobile,
-            "GUILayout/login/login.lua",
-        ),
-        entry(
-            "store",
-            "商城",
-            "商城分类、商品与购买流程的静态运行场景",
-            DeviceKind::Mobile,
-            "GUILayout/store/store.lua",
+            "GUILayout/GUIInit.lua",
         ),
     ]
 }
@@ -65,41 +51,28 @@ fn entry(
 
 pub fn source(scene_id: &str) -> Option<&'static str> {
     match scene_id {
-        "auction" => Some(
-            r#"local root = GUI:Layout_Create(parent, "AuctionRoot", 188, 90, 760, 500, false)
-GUI:Layout_setBackGroundImage(root, "res/private/auction/bg.png")
-local title = GUI:Text_Create(root, "Title", 36, 450, 22, "拍卖行")
-local list = GUI:ListView_Create(root, "AuctionList", 30, 65, 700, 360, 1)
-return root"#,
-        ),
-        "bag" => Some(
-            r#"local root = GUI:Layout_Create(parent, "BagRoot", 620, 80, 470, 520, false)
-local title = GUI:Text_Create(root, "Title", 24, 475, 22, "背包")
-local items = GUI:ListView_Create(root, "Items", 24, 80, 420, 370, 1)
-return root"#,
-        ),
-        "hud-mobile" => Some(
+        "game-mobile" | "hud-mobile" => Some(
             r#"local root = GUI:Node_Create(parent, "MobileHud", 0, 0)
 GUI:Image_Create(root, "Avatar", 24, 548, "res/private/main/role.png")
 GUI:Button_Create(root, "BagButton", 1040, 36, "res/private/main/bag.png")
 return root"#,
         ),
-        "hud-pc" => Some(
+        "game-pc" | "hud-pc" => Some(
             r#"local root = GUI:Node_Create(parent, "PcHud", 0, 0)
 GUI:Image_Create(root, "Status", 16, 700, "res/private/main/status.png")
 GUI:Layout_Create(root, "ShortcutBar", 332, 18, 360, 56, false)
 return root"#,
         ),
-        "login" => Some(
+        "character-select" | "login" => Some(
             r#"local root = GUI:Layout_Create(parent, "LoginRoot", 0, 0, 1136, 640, false)
-GUI:Image_Create(root, "Background", 0, 0, "res/private/login/background.jpg")
-GUI:Button_Create(root, "Enter", 488, 86, "res/private/login/enter.png")
+GUI:Image_Create(root, "Background", 568, 320, "res/private/login/bg_cjzy_02.png")
+GUI:Button_Create(root, "Create", 1008, 146, "res/private/login/za_1.png")
 return root"#,
         ),
-        "store" => Some(
-            r#"local root = GUI:Layout_Create(parent, "StoreRoot", 188, 80, 760, 520, false)
-GUI:Text_Create(root, "Title", 30, 475, 22, "商城")
-GUI:ListView_Create(root, "Goods", 190, 70, 540, 370, 1)
+        "character-create" => Some(
+            r#"local root = GUI:Layout_Create(parent, "CreateRoot", 0, 0, 1136, 640, false)
+GUI:Image_Create(root, "Background", 568, 320, "res/private/login/create/img_bg.png")
+GUI:Button_Create(root, "Submit", 638, 70, "res/private/login/create/btn_ok2.png")
 return root"#,
         ),
         _ => None,

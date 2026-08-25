@@ -21,6 +21,11 @@ fn start_request(source: &str) -> StartRequest {
     StartRequest {
         scene_id: "auction".to_string(),
         layout_path: layout_path.clone(),
+        preset_id: None,
+        module_id: None,
+        map_id: None,
+        mock_profile_id: None,
+        overlay_ids: Vec::new(),
         modules: BTreeMap::from([(layout_path, source.to_string())]),
         device: DeviceKind::Mobile,
         viewport: Viewport::default(),
@@ -29,8 +34,29 @@ fn start_request(source: &str) -> StartRequest {
     }
 }
 
+fn preset_request(preset_id: &str) -> StartRequest {
+    StartRequest {
+        scene_id: preset_id.to_string(),
+        layout_path: "GUILayout/GUIInit.lua".to_string(),
+        preset_id: Some(preset_id.to_string()),
+        module_id: Some("main".to_string()),
+        map_id: Some("3".to_string()),
+        mock_profile_id: Some("default".to_string()),
+        overlay_ids: Vec::new(),
+        modules: BTreeMap::new(),
+        device: if preset_id == "game-pc" {
+            DeviceKind::Pc
+        } else {
+            DeviceKind::Mobile
+        },
+        viewport: Viewport::default(),
+        data_profile: DataProfileSnapshot::default(),
+        limits: None,
+    }
+}
+
 #[test]
-fn catalog_exposes_six_safe_profiles() {
+fn catalog_exposes_four_persistent_scene_presets() {
     let mut server = RuntimeServer::new();
     let response = execute_request(
         &mut server,
@@ -40,10 +66,24 @@ fn catalog_exposes_six_safe_profiles() {
     let Some(RuntimeResult::Catalog(catalog)) = response.result else {
         panic!("目录响应类型错误");
     };
-    assert_eq!(catalog.scenes.len(), 6);
+    assert_eq!(
+        catalog
+            .scenes
+            .iter()
+            .map(|scene| scene.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "character-create",
+            "character-select",
+            "game-mobile",
+            "game-pc"
+        ]
+    );
     assert!(!catalog.capabilities.filesystem);
     assert!(!catalog.capabilities.network);
     assert_eq!(catalog.capabilities.lua_version, "Lua 5.1 (vendored)");
+    assert!(catalog.capabilities.persistent_scene);
+    assert!(catalog.capabilities.scene_patch);
 }
 
 #[test]
@@ -84,6 +124,344 @@ fn tauri_start_payload_accepts_viewport_without_scale_and_profile_metadata() {
         panic!("应返回场景结果");
     };
     assert_eq!(result.scene.viewport.scale_factor, 1.0);
+}
+
+#[test]
+fn protocol_v2_accepts_frozen_scene_composition_fields() {
+    let mut server = RuntimeServer::new();
+    let response = execute_json_line(
+        &mut server,
+        r#"{"protocolVersion":2,"requestId":"v2-start","type":"start","payload":{"sceneId":"game-mobile","presetId":"game-mobile","layoutPath":"GUILayout/GUIInit.lua","device":"mobile","viewport":{"width":1136,"height":640},"moduleId":"main","mapId":"3","mockProfileId":"mobile-hud","overlayIds":[],"modules":{},"dataProfile":{"origin":"builtInMock","profileId":"default","values":{},"tables":{},"sourceHashes":{},"redactions":[]}}}"#,
+    );
+    assert!(response.ok, "{:?}", response.error);
+    assert_eq!(response.protocol_version, 2);
+    let Some(RuntimeResult::Scene(result)) = response.result else {
+        panic!("应返回组合场景");
+    };
+    assert_eq!(result.preset_id, "game-mobile");
+    assert!(result.window_stack.is_empty());
+    assert_eq!(result.mock_state.get("mapId"), Some(&json!("3")));
+    assert!(result.scene.nodes.len() > 1);
+    assert!(result
+        .scene
+        .provenance
+        .iter()
+        .any(|item| item.key == "staticCompositionFallback"));
+    assert!(result
+        .diagnostics
+        .iter()
+        .any(|item| item.code == "RUNTIME_STARTUP_MODULE_MISSING"));
+}
+
+#[test]
+fn game_preset_prefers_real_startup_chain_and_main_init_event() {
+    let mut start = preset_request("game-mobile");
+    start.modules = BTreeMap::from([
+        (
+            "GUILayout/UIConst.lua".to_string(),
+            "UIConst = {}".to_string(),
+        ),
+        (
+            "GUILayout/GUIDefine.lua".to_string(),
+            "GUIDefine = {}".to_string(),
+        ),
+        (
+            "GUILayout/UIOperator.lua".to_string(),
+            "UIOperator = {}".to_string(),
+        ),
+        (
+            "GUILayout/GUIFunction.lua".to_string(),
+            "GUIFunction = {}".to_string(),
+        ),
+        (
+            "GUILayout/GUIInit.lua".to_string(),
+            r#"SL:RegisterLUAEvent(LUA_EVENT_MAIN_INIT, "GUIInit", function()
+GUI:Layout_Create(parent, "RuntimeStarted", 0, 0, 1136, 640, false)
+end)"#
+                .to_string(),
+        ),
+    ]);
+    let mut server = RuntimeServer::new();
+    let response = execute_request(
+        &mut server,
+        request("startup-chain", RuntimeOperation::Start(start)),
+    );
+    assert!(response.ok, "{:?}", response.error);
+    let Some(RuntimeResult::Scene(result)) = response.result else {
+        panic!("真实启动链应返回场景");
+    };
+    assert!(result
+        .scene
+        .nodes
+        .values()
+        .any(|node| node.name == "RuntimeStarted"));
+    assert!(result
+        .scene
+        .provenance
+        .iter()
+        .any(|item| item.key == "startupChain"));
+    assert!(!result
+        .scene
+        .provenance
+        .iter()
+        .any(|item| item.key == "staticCompositionFallback"));
+}
+
+#[test]
+fn persistent_vm_keeps_click_and_lua_event_closure_state() {
+    let source = r#"
+local root = GUI:Layout_Create(parent, "Root", 0, 0, 300, 200, false)
+local label = GUI:Text_Create(root, "Counter", 10, 10, 18, "zero")
+local button = GUI:Button_Create(root, "Clicker", 20, 20, "res/button.png")
+local count = 0
+GUI:addOnClickEvent(button, function()
+    count = count + 1
+    if count == 1 then
+        GUI:Text_setString(label, "one")
+    else
+        GUI:Text_setString(label, "two")
+    end
+end)
+SL:RegisterLUAEvent(LUA_EVENT_COUNTER, "CounterTest", function()
+    count = count + 1
+    GUI:Text_setString(label, "event")
+end)
+return root
+"#;
+    let mut server = RuntimeServer::new();
+    let started = execute_request(
+        &mut server,
+        request(
+            "persistent-start",
+            RuntimeOperation::Start(start_request(source)),
+        ),
+    );
+    let Some(RuntimeResult::Scene(started)) = started.result else {
+        panic!("应启动持久 VM");
+    };
+    let session_id = started.session_id;
+    let clicker_id = started
+        .scene
+        .nodes
+        .values()
+        .find(|node| node.name == "Clicker")
+        .map(|node| node.id.clone())
+        .expect("应创建点击按钮");
+
+    let first = execute_request(
+        &mut server,
+        request(
+            "persistent-click-1",
+            RuntimeOperation::Event(EventRequest {
+                session_id: session_id.clone(),
+                name: "node.click".to_string(),
+                payload: json!({"nodeId": clicker_id}),
+            }),
+        ),
+    );
+    let Some(RuntimeResult::Scene(first)) = first.result else {
+        panic!("点击应返回场景 Patch");
+    };
+    assert_eq!(first.sequence, 2);
+    assert_eq!(
+        first
+            .scene
+            .nodes
+            .values()
+            .find(|node| node.name == "Counter")
+            .and_then(|node| node.text.as_deref()),
+        Some("one")
+    );
+    assert!(first.patch.as_ref().is_some_and(|patch| {
+        patch.base_sequence == 1 && patch.sequence == 2 && !patch.upserted_nodes.is_empty()
+    }));
+
+    let second = execute_request(
+        &mut server,
+        request(
+            "persistent-click-2",
+            RuntimeOperation::Event(EventRequest {
+                session_id: session_id.clone(),
+                name: "click".to_string(),
+                payload: json!({"nodeId": clicker_id}),
+            }),
+        ),
+    );
+    let Some(RuntimeResult::Scene(second)) = second.result else {
+        panic!("第二次点击应复用闭包");
+    };
+    assert_eq!(
+        second
+            .scene
+            .nodes
+            .values()
+            .find(|node| node.name == "Counter")
+            .and_then(|node| node.text.as_deref()),
+        Some("two")
+    );
+
+    let lua_event = execute_request(
+        &mut server,
+        request(
+            "persistent-lua-event",
+            RuntimeOperation::Event(EventRequest {
+                session_id,
+                name: "LUA_EVENT_COUNTER".to_string(),
+                payload: json!({}),
+            }),
+        ),
+    );
+    let Some(RuntimeResult::Scene(lua_event)) = lua_event.result else {
+        panic!("注册事件应在同一 VM 中执行");
+    };
+    assert_eq!(
+        lua_event
+            .scene
+            .nodes
+            .values()
+            .find(|node| node.name == "Counter")
+            .and_then(|node| node.text.as_deref()),
+        Some("event")
+    );
+}
+
+#[test]
+fn win_open_signal_opens_overlay_and_reload_restores_stack() {
+    let source = r#"
+local button = GUI:Button_Create(parent, "OpenOverlay", 0, 0, "res/button.png")
+GUI:addOnClickEvent(button, function()
+    GUI:Win_Open("LUA_FILE_LAYER_BAG")
+end)
+return button
+"#;
+    let mut server = RuntimeServer::new();
+    let started = execute_request(
+        &mut server,
+        request(
+            "window-signal-start",
+            RuntimeOperation::Start(start_request(source)),
+        ),
+    );
+    let Some(RuntimeResult::Scene(started)) = started.result else {
+        panic!("应启动窗口信号场景");
+    };
+    let session_id = started.session_id;
+    let node_id = started
+        .scene
+        .nodes
+        .values()
+        .find(|node| node.name == "OpenOverlay")
+        .map(|node| node.id.clone())
+        .expect("应创建开窗按钮");
+    let opened = execute_request(
+        &mut server,
+        request(
+            "window-signal-click",
+            RuntimeOperation::Event(EventRequest {
+                session_id: session_id.clone(),
+                name: "click".to_string(),
+                payload: json!({"nodeId": node_id}),
+            }),
+        ),
+    );
+    let Some(RuntimeResult::Scene(opened)) = opened.result else {
+        panic!("Win_Open 应生成窗口 Patch");
+    };
+    assert_eq!(opened.window_stack.len(), 1);
+    assert_eq!(opened.window_stack[0].kind, "bag");
+    assert!(opened
+        .scene
+        .nodes
+        .values()
+        .any(|node| node.name == "BagWindow"));
+
+    let reloaded = execute_request(
+        &mut server,
+        request(
+            "window-signal-reload",
+            RuntimeOperation::Reload(ReloadRequest {
+                session_id,
+                layout_path: String::new(),
+                modules: BTreeMap::new(),
+                data_profile: None,
+            }),
+        ),
+    );
+    let Some(RuntimeResult::Scene(reloaded)) = reloaded.result else {
+        panic!("重载应恢复窗口栈");
+    };
+    assert_eq!(reloaded.window_stack.len(), 1);
+    assert_eq!(reloaded.window_stack[0].kind, "bag");
+    assert!(reloaded
+        .scene
+        .nodes
+        .values()
+        .any(|node| node.name == "BagWindow"));
+}
+
+#[test]
+fn direct_overlay_events_preserve_order_and_close_only_top() {
+    let mut server = RuntimeServer::new();
+    let started = execute_request(
+        &mut server,
+        request(
+            "overlay-start",
+            RuntimeOperation::Start(preset_request("game-mobile")),
+        ),
+    );
+    let Some(RuntimeResult::Scene(started)) = started.result else {
+        panic!("应启动移动端场景");
+    };
+    let session_id = started.session_id;
+    assert!(started.window_stack.is_empty());
+    for (index, action) in ["open-bag", "open-team", "open-store"]
+        .into_iter()
+        .enumerate()
+    {
+        let response = execute_request(
+            &mut server,
+            request(
+                &format!("overlay-{index}"),
+                RuntimeOperation::Event(EventRequest {
+                    session_id: session_id.clone(),
+                    name: action.to_string(),
+                    payload: json!({}),
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+    }
+    let closed = execute_request(
+        &mut server,
+        request(
+            "overlay-close",
+            RuntimeOperation::Event(EventRequest {
+                session_id,
+                name: "close-top".to_string(),
+                payload: json!({}),
+            }),
+        ),
+    );
+    let Some(RuntimeResult::Scene(closed)) = closed.result else {
+        panic!("关闭顶层应返回 Patch");
+    };
+    assert_eq!(
+        closed
+            .window_stack
+            .iter()
+            .map(|window| window.kind.as_str())
+            .collect::<Vec<_>>(),
+        vec!["bag", "team"]
+    );
+    assert!(closed
+        .patch
+        .as_ref()
+        .is_some_and(|patch| !patch.removed_node_ids.is_empty()));
+    assert!(!closed
+        .scene
+        .nodes
+        .values()
+        .any(|node| node.name == "StoreWindow"));
 }
 
 #[test]
@@ -278,6 +656,11 @@ return ui
     let start = StartRequest {
         scene_id: "project:sample-main".to_string(),
         layout_path: layout_path.clone(),
+        preset_id: None,
+        module_id: None,
+        map_id: None,
+        mock_profile_id: None,
+        overlay_ids: Vec::new(),
         modules: BTreeMap::from([
             (layout_path, layout.to_string()),
             (

@@ -1,6 +1,9 @@
 export type GuiDevice = 'mobile' | 'pc'
 export type GuiMode = 'visual' | 'code' | 'split'
-export type GuiLeftPanel = 'files' | 'scenes' | 'layers' | 'components'
+export type GuiLeftPanel = 'scenes' | 'files' | 'modules' | 'layers' | 'components'
+export type GuiRuntimeInteractionMode = 'design' | 'interact'
+export type GuiRuntimeSceneProfileId = 'character-create' | 'character-select' | 'game-mobile' | 'game-pc'
+export type GuiRuntimeWindowKind = 'bag' | 'team' | 'store'
 export type GuiNodeKind
   = | 'Panel'
     | 'Image'
@@ -167,6 +170,58 @@ export interface Mir3UiDocument {
   diagnostics: GuiDiagnostic[]
 }
 
+export interface GuiRuntimeStage {
+  kind: 'login' | 'world' | 'snapshot' | 'empty'
+  backgroundAsset?: string | null
+  mapId?: string | null
+  cameraX?: number
+  cameraY?: number
+  scale?: number
+  compatibility: GuiCompatibility
+}
+
+export interface GuiRuntimeWindow {
+  id: string
+  kind: GuiRuntimeWindowKind | 'custom'
+  titleKey?: string | null
+  layoutPath?: string | null
+  rootNodeIds: string[]
+  modal: boolean
+  zOrder: number
+  source: 'runtime' | 'localFallback'
+}
+
+export interface GuiRuntimeSceneLayer {
+  id: 'stage' | 'world' | 'hud' | 'windows'
+  rootNodeIds: string[]
+  zOrder: number
+}
+
+export interface GuiRuntimeSceneComposition {
+  profileId: GuiRuntimeSceneProfileId | string
+  device: GuiDevice
+  stage: GuiRuntimeStage
+  layers: GuiRuntimeSceneLayer[]
+  windows: GuiRuntimeWindow[]
+}
+
+export interface Mir3RuntimeSceneDocument extends Mir3UiDocument {
+  runtime: GuiRuntimeSceneComposition
+}
+
+export interface GuiRuntimeScenePatch {
+  sequence: number
+  addedNodes?: Record<string, Mir3UiNode>
+  updatedNodes?: Record<string, Mir3UiNode>
+  removedNodeIds?: string[]
+  roots?: string[]
+  stage?: GuiRuntimeStage
+  layers?: GuiRuntimeSceneLayer[]
+  windows?: GuiRuntimeWindow[]
+  diagnostics?: GuiDiagnostic[]
+  provenance?: GuiDataProvenance[]
+}
+
 export interface GuiDocumentEntry {
   path: string
   kind: 'editable' | 'readonly'
@@ -247,9 +302,23 @@ export interface GuiRuntimeSceneCatalogEntry {
   layoutPath: string
   platform: 'mobile' | 'pc' | 'shared'
   compatibility: GuiCompatibility
+  defaultMapId?: string | null
+  overlayIds?: string[]
+}
+
+export interface GuiRuntimeWorldProfile {
+  id: string
+  name?: string
+  mapId?: string | null
+  backgroundAsset?: string | null
+  platform?: 'mobile' | 'pc' | 'shared'
+  mockProfileId?: string | null
 }
 
 export interface GuiRuntimeSceneCatalog {
+  presets: GuiRuntimeSceneCatalogEntry[]
+  modules: GuiRuntimeSceneCatalogEntry[]
+  worldProfiles: GuiRuntimeWorldProfile[]
   scenes: GuiRuntimeSceneCatalogEntry[]
 }
 
@@ -257,6 +326,7 @@ export interface GuiRuntimeSceneResult {
   sessionId: string
   sequence: number
   scene?: Mir3UiDocument | null
+  patch?: GuiRuntimeScenePatch | null
   fallback: boolean
   diagnostics: GuiDiagnostic[]
 }

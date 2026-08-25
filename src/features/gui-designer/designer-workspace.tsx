@@ -91,7 +91,7 @@ function sourceOffsetForLine(source: string, line: number): number {
 function DiagnosticsDrawer() {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
-  const diagnostics = scope.currentFile?.document.diagnostics ?? []
+  const diagnostics = scope.previewDocument?.diagnostics ?? scope.currentFile?.document.diagnostics ?? []
   return (
     <div className="shrink-0 border-t border-line bg-panel">
       <button className="flex h-8 w-full items-center gap-2 px-3 text-[10px] text-muted hover:bg-panel-hover" type="button" onClick={() => scope.setDiagnosticsOpen(!scope.diagnosticsOpen)}>

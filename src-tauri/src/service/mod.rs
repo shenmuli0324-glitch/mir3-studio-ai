@@ -3,6 +3,7 @@ pub mod core;
 pub mod download;
 pub mod gui_designer;
 pub mod gui_runtime;
+pub mod gui_scene_assets;
 pub mod plugin;
 pub mod profile;
 pub mod project;

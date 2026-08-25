@@ -15,9 +15,14 @@ import type {
   GuiRuntimeCapabilities,
   GuiRuntimeDataSource,
   GuiRuntimeSceneCatalog,
+  GuiRuntimeSceneComposition,
+  GuiRuntimeScenePatch,
   GuiRuntimeSceneResult,
+  GuiRuntimeStage,
+  GuiRuntimeWindow,
   GuiTemplateRequest,
   GuiTemplateResult,
+  Mir3RuntimeSceneDocument,
   Mir3UiDocument,
   Mir3UiNode,
   SourceSpan,
@@ -98,7 +103,7 @@ export function useGuiRuntimeCatalog(projectId?: string) {
 export function useGuiRuntimeActions(projectId?: string) {
   const queryClient = useQueryClient()
   const start = useMutation({
-    mutationFn: (request: { sceneId: string, device: string, viewport: { width: number, height: number }, workingSources?: Record<string, string> }) => {
+    mutationFn: (request: { sceneId?: string, presetId?: string, moduleId?: string, mapId?: string, mockProfileId?: string, device: string, viewport: { width: number, height: number }, workingSources?: Record<string, string> }) => {
       if (!projectId)
         throw new Error('GUI_PROJECT_REQUIRED')
       return invoke<unknown>('gui_runtime_scene_start', { projectId, request }).then(normalizeRuntimeSceneResult)
@@ -442,20 +447,45 @@ function normalizeRuntimeCapabilities(input: unknown): GuiRuntimeCapabilities {
 
 function normalizeRuntimeCatalog(input: unknown): GuiRuntimeSceneCatalog {
   const wire = isRecord(input) ? input : {}
-  const scenes = Array.isArray(wire.scenes) ? wire.scenes : []
+  const legacyScenes = normalizeRuntimeCatalogEntries(wire.scenes)
+  const presets = Array.isArray(wire.presets) ? normalizeRuntimeCatalogEntries(wire.presets) : legacyScenes
+  const modules = Array.isArray(wire.modules) ? normalizeRuntimeCatalogEntries(wire.modules) : legacyScenes
+  const worldProfiles = Array.isArray(wire.worldProfiles)
+    ? wire.worldProfiles.map((profile) => {
+        const value = isRecord(profile) ? profile : {}
+        return {
+          id: String(value.id ?? ''),
+          name: stringValue(value.name),
+          mapId: stringValue(value.mapId),
+          backgroundAsset: stringValue(value.backgroundAsset),
+          platform: runtimePlatform(value.platform ?? value.device),
+          mockProfileId: stringValue(value.mockProfileId),
+        }
+      }).filter(profile => profile.id.length > 0)
+    : []
   return {
-    scenes: scenes.map((scene) => {
-      const value = isRecord(scene) ? scene : {}
-      return {
-        id: String(value.id ?? ''),
-        name: String(value.name ?? value.id ?? ''),
-        category: String(value.category ?? 'general'),
-        layoutPath: String(value.layoutPath ?? ''),
-        platform: runtimePlatform(value.platform),
-        compatibility: compatibilityValue(value.compatibility),
-      }
-    }).filter(scene => scene.id.length > 0),
+    presets,
+    modules,
+    worldProfiles,
+    scenes: legacyScenes.length > 0 ? legacyScenes : modules,
   }
+}
+
+function normalizeRuntimeCatalogEntries(input: unknown): GuiRuntimeSceneCatalog['scenes'] {
+  const entries = Array.isArray(input) ? input : []
+  return entries.map((scene) => {
+    const value = isRecord(scene) ? scene : {}
+    return {
+      id: String(value.id ?? value.presetId ?? value.moduleId ?? ''),
+      name: String(value.name ?? value.title ?? value.id ?? ''),
+      category: String(value.category ?? 'general'),
+      layoutPath: String(value.layoutPath ?? value.entryPath ?? ''),
+      platform: runtimePlatform(value.platform ?? value.device),
+      compatibility: compatibilityValue(value.compatibility),
+      defaultMapId: stringValue(value.defaultMapId),
+      overlayIds: arrayStrings(value.overlayIds),
+    }
+  }).filter(scene => scene.id.length > 0)
 }
 
 function normalizeRuntimeSceneResult(input: unknown): GuiRuntimeSceneResult {
@@ -465,19 +495,22 @@ function normalizeRuntimeSceneResult(input: unknown): GuiRuntimeSceneResult {
     sessionId: String(wire.sessionId ?? ''),
     sequence: numberValue(wire.sequence) ?? 0,
     scene,
+    patch: isRecord(wire.patch) ? normalizeRuntimeScenePatch(wire.patch) : null,
     fallback: wire.fallback === true,
     diagnostics: normalizeDiagnostics(wire.diagnostics),
   }
 }
 
-function normalizeRuntimeScene(scene: Record<string, unknown>): Mir3UiDocument {
+function normalizeRuntimeScene(scene: Record<string, unknown>): Mir3RuntimeSceneDocument {
   const rawNodes = Array.isArray(scene.nodes)
     ? scene.nodes
     : isRecord(scene.nodes)
       ? Object.values(scene.nodes)
       : []
-  if (rawNodes.some(node => isRecord(node) && isRecord(node.position)))
-    return normalizeDocument(scene as WireDocument)
+  if (rawNodes.some(node => isRecord(node) && isRecord(node.position))) {
+    const document = normalizeDocument(scene as WireDocument)
+    return { ...document, runtime: normalizeRuntimeComposition(scene, document) }
+  }
   const runtimeNodes = rawNodes.map((node) => {
     const value = isRecord(node) ? node : {}
     const transform = isRecord(value.transform) ? value.transform : {}
@@ -538,7 +571,7 @@ function normalizeRuntimeScene(scene: Record<string, unknown>): Mir3UiDocument {
           },
     }
   })
-  return normalizeDocument({
+  const document = normalizeDocument({
     schemaVersion: String(scene.schemaVersion ?? 'runtime-1'),
     projectId: '',
     devRelativePath: runtimeSceneSourcePath(rawNodes),
@@ -549,6 +582,108 @@ function normalizeRuntimeScene(scene: Record<string, unknown>): Mir3UiDocument {
     nodes: Object.fromEntries(runtimeNodes.map(node => [node.id, node])),
     diagnostics: Array.isArray(scene.diagnostics) ? scene.diagnostics : [],
     provenance: Array.isArray(scene.provenance) ? scene.provenance : [],
+  })
+  return { ...document, runtime: normalizeRuntimeComposition(scene, document) }
+}
+
+function normalizeRuntimeScenePatch(input: Record<string, unknown>): GuiRuntimeScenePatch {
+  const upsertedNodes = normalizeRuntimePatchNodes(input.upsertedNodes)
+  const updatedNodes = normalizeRuntimePatchNodes(input.updatedNodes)
+  return {
+    sequence: numberValue(input.sequence) ?? 0,
+    addedNodes: normalizeRuntimePatchNodes(input.addedNodes),
+    updatedNodes: mergeRuntimePatchNodes(upsertedNodes, updatedNodes),
+    removedNodeIds: arrayStrings(input.removedNodeIds),
+    roots: Array.isArray(input.roots) ? arrayStrings(input.roots) : undefined,
+    stage: isRecord(input.stage) ? normalizeRuntimeStage(input.stage) : undefined,
+    layers: Array.isArray(input.layers) ? normalizeRuntimeLayers(input.layers) : undefined,
+    windows: Array.isArray(input.windows) ? normalizeRuntimeWindows(input.windows) : undefined,
+    diagnostics: Array.isArray(input.diagnostics) ? normalizeDiagnostics(input.diagnostics) : undefined,
+    provenance: Array.isArray(input.provenance) ? normalizeProvenance(input.provenance) : undefined,
+  }
+}
+
+function mergeRuntimePatchNodes(base: Record<string, Mir3UiNode> | undefined, override: Record<string, Mir3UiNode> | undefined): Record<string, Mir3UiNode> | undefined {
+  if (base == null)
+    return override
+  if (override == null)
+    return base
+  return { ...base, ...override }
+}
+
+function normalizeRuntimePatchNodes(input: unknown): Record<string, Mir3UiNode> | undefined {
+  if (!isRecord(input))
+    return undefined
+  const nodes = Object.values(input)
+  if (nodes.length === 0)
+    return {}
+  const document = normalizeRuntimeScene({ nodes: input, roots: [], diagnostics: [] })
+  return document.nodes
+}
+
+function normalizeRuntimeComposition(scene: Record<string, unknown>, document: Mir3UiDocument): GuiRuntimeSceneComposition {
+  const runtime = isRecord(scene.runtime) ? scene.runtime : scene
+  const profileId = String(runtime.profileId ?? scene.profileId ?? 'hud-mobile')
+  const device = runtime.device === 'pc' || profileId === 'game-pc' || profileId === 'hud-pc' ? 'pc' : 'mobile'
+  return {
+    profileId,
+    device,
+    stage: isRecord(runtime.stage) ? normalizeRuntimeStage(runtime.stage) : defaultRuntimeStage(profileId),
+    layers: Array.isArray(runtime.layers)
+      ? normalizeRuntimeLayers(runtime.layers)
+      : [
+          { id: 'stage', rootNodeIds: [], zOrder: 0 },
+          { id: 'world', rootNodeIds: [], zOrder: 100 },
+          { id: 'hud', rootNodeIds: document.roots, zOrder: 200 },
+          { id: 'windows', rootNodeIds: [], zOrder: 300 },
+        ],
+    windows: Array.isArray(runtime.windows) ? normalizeRuntimeWindows(runtime.windows) : [],
+  }
+}
+
+function normalizeRuntimeStage(input: Record<string, unknown>): GuiRuntimeStage {
+  const kind = input.kind === 'login' || input.kind === 'snapshot' || input.kind === 'empty' ? input.kind : 'world'
+  return {
+    kind,
+    backgroundAsset: stringValue(input.backgroundAsset),
+    mapId: stringValue(input.mapId),
+    cameraX: numberValue(input.cameraX),
+    cameraY: numberValue(input.cameraY),
+    scale: numberValue(input.scale),
+    compatibility: compatibilityValue(input.compatibility),
+  }
+}
+
+function defaultRuntimeStage(profileId: string): GuiRuntimeStage {
+  return {
+    kind: profileId.startsWith('character-') || profileId.startsWith('role-') ? 'login' : 'world',
+    compatibility: 'approximate',
+  }
+}
+
+function normalizeRuntimeLayers(input: unknown[]): GuiRuntimeSceneComposition['layers'] {
+  return input.map((entry, index) => {
+    const value = isRecord(entry) ? entry : {}
+    const rawId = String(value.id ?? 'hud')
+    const id = rawId === 'stage' || rawId === 'world' || rawId === 'windows' ? rawId : 'hud'
+    return { id, rootNodeIds: arrayStrings(value.rootNodeIds), zOrder: numberValue(value.zOrder) ?? index * 100 }
+  })
+}
+
+function normalizeRuntimeWindows(input: unknown[]): GuiRuntimeWindow[] {
+  return input.map((entry, index) => {
+    const value = isRecord(entry) ? entry : {}
+    const kind = value.kind === 'bag' || value.kind === 'team' || value.kind === 'store' ? value.kind : 'custom'
+    return {
+      id: String(value.id ?? `runtime-window-${index}`),
+      kind,
+      titleKey: stringValue(value.titleKey),
+      layoutPath: stringValue(value.layoutPath),
+      rootNodeIds: arrayStrings(value.rootNodeIds),
+      modal: value.modal === true,
+      zOrder: numberValue(value.zOrder) ?? 300 + index,
+      source: value.source === 'localFallback' ? 'localFallback' : 'runtime',
+    }
   })
 }
 

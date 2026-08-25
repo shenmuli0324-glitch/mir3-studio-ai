@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::chunk::ChunkMode;
-use mlua::{HookTriggers, Lua, LuaOptions, MultiValue, StdLib, Table, Value, VmState};
+use mlua::{Function, HookTriggers, Lua, LuaOptions, MultiValue, StdLib, Table, Value, VmState};
 use serde_json::{json, Value as JsonValue};
 
 use crate::model::{
@@ -16,6 +16,23 @@ struct SceneBuilder {
     next_node: usize,
     max_nodes: usize,
     source_ref: SourceRef,
+}
+
+#[derive(Default)]
+struct CallbackRegistry {
+    clicks: BTreeMap<String, Function>,
+    events: BTreeMap<String, Vec<(String, Function)>>,
+    window_signals: Vec<String>,
+}
+
+/// 每个 Runtime 会话独占一个 Lua VM，事件回调因此可以延续启动阶段的闭包状态。
+pub struct RuntimeVm {
+    lua: Lua,
+    builder: Arc<Mutex<SceneBuilder>>,
+    callbacks: Arc<Mutex<CallbackRegistry>>,
+    modules: BTreeMap<String, String>,
+    data_profile: DataProfileSnapshot,
+    instruction_count: Arc<AtomicU64>,
 }
 
 impl SceneBuilder {
@@ -256,6 +273,7 @@ impl SceneBuilder {
     }
 }
 
+#[allow(dead_code)]
 pub fn execute_scene(
     profile_id: &str,
     layout_path: &str,
@@ -265,71 +283,262 @@ pub fn execute_scene(
     limits: RuntimeLimits,
     fallback_source: Option<&str>,
 ) -> Result<RuntimeScene, String> {
-    validate_inputs(layout_path, modules, limits)?;
-    let source_ref = SourceRef {
-        dev_relative_path: layout_path.to_string(),
-        line: None,
-        column: None,
-        template_node_id: None,
-    };
-    let builder = Arc::new(Mutex::new(SceneBuilder::new(
-        profile_id,
-        &data_profile.origin,
-        viewport,
-        limits.max_nodes,
-        source_ref,
-    )));
-    let lua = Lua::new_with(
-        StdLib::TABLE | StdLib::STRING | StdLib::MATH,
-        LuaOptions::default(),
-    )
-    .map_err(|error| format!("RUNTIME_LUA_INIT: {error}"))?;
-    lua.set_memory_limit(limits.max_memory_bytes)
-        .map_err(|error| format!("RUNTIME_MEMORY_LIMIT: {error}"))?;
-    install_instruction_limit(&lua, limits.max_instructions)?;
-    remove_dangerous_globals(&lua)?;
-    install_compatibility(&lua, Arc::clone(&builder), modules, data_profile)?;
-    let root = builder
-        .lock()
-        .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
-        .root_handle(&lua)
-        .map_err(lua_error)?;
-    lua.globals()
-        .set("parent", root.clone())
-        .map_err(lua_error)?;
-    let source = modules
-        .get(layout_path)
-        .map(String::as_str)
-        .or(fallback_source)
-        .ok_or_else(|| format!("RUNTIME_ENTRY_NOT_FOUND: 虚拟模块中不存在 {layout_path}"))?;
-    let result: Value = lua
-        .load(source)
-        .set_name(format!("@{layout_path}"))
-        .set_mode(ChunkMode::Text)
-        .eval()
-        .map_err(lua_error)?;
-    call_entry_if_needed(&lua, result, root, data_profile).map_err(lua_error)?;
-    let mut state = builder
-        .lock()
-        .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?;
-    if !data_profile.values.is_empty() || !data_profile.meta_values.is_empty() {
-        state.scene.provenance.push(DataProvenance {
-            kind: DataProvenanceKind::UserSnapshot,
-            key: "dataProfile".to_string(),
-            description: "数据由调用方提供的只读快照注入".to_string(),
-        });
-    }
-    Ok(state.scene.clone())
+    let vm = RuntimeVm::new(profile_id, viewport, modules, data_profile, limits)?;
+    vm.execute_entry(layout_path, fallback_source)?;
+    Ok(vm.scene()?)
 }
 
-fn validate_inputs(
-    layout_path: &str,
-    modules: &BTreeMap<String, String>,
-    limits: RuntimeLimits,
-) -> Result<(), String> {
+impl RuntimeVm {
+    pub fn new(
+        profile_id: &str,
+        viewport: Viewport,
+        modules: &BTreeMap<String, String>,
+        data_profile: &DataProfileSnapshot,
+        limits: RuntimeLimits,
+    ) -> Result<Self, String> {
+        validate_modules(modules, limits)?;
+        let source_ref = SourceRef {
+            dev_relative_path: "GUILayout/__runtime/session.lua".to_string(),
+            line: None,
+            column: None,
+            template_node_id: None,
+        };
+        let builder = Arc::new(Mutex::new(SceneBuilder::new(
+            profile_id,
+            &data_profile.origin,
+            viewport,
+            limits.max_nodes,
+            source_ref,
+        )));
+        let callbacks = Arc::new(Mutex::new(CallbackRegistry::default()));
+        let lua = Lua::new_with(
+            StdLib::TABLE | StdLib::STRING | StdLib::MATH,
+            LuaOptions::default(),
+        )
+        .map_err(|error| format!("RUNTIME_LUA_INIT: {error}"))?;
+        lua.set_memory_limit(limits.max_memory_bytes)
+            .map_err(|error| format!("RUNTIME_MEMORY_LIMIT: {error}"))?;
+        let instruction_count = install_instruction_limit(&lua, limits.max_instructions)?;
+        remove_dangerous_globals(&lua)?;
+        install_compatibility(
+            &lua,
+            Arc::clone(&builder),
+            Arc::clone(&callbacks),
+            modules,
+            data_profile,
+        )?;
+        install_event_constants(&lua, modules)?;
+        let root = builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
+            .root_handle(&lua)
+            .map_err(lua_error)?;
+        lua.globals().set("parent", root).map_err(lua_error)?;
+        Ok(Self {
+            lua,
+            builder,
+            callbacks,
+            modules: modules.clone(),
+            data_profile: data_profile.clone(),
+            instruction_count,
+        })
+    }
+
+    pub fn execute_entry(
+        &self,
+        layout_path: &str,
+        fallback_source: Option<&str>,
+    ) -> Result<(), String> {
+        validate_layout_path(layout_path)?;
+        self.reset_instruction_budget();
+        let source = self
+            .modules
+            .get(layout_path)
+            .map(String::as_str)
+            .or(fallback_source)
+            .ok_or_else(|| format!("RUNTIME_ENTRY_NOT_FOUND: 虚拟模块中不存在 {layout_path}"))?;
+        let previous_source_ref = {
+            let mut state = self
+                .builder
+                .lock()
+                .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?;
+            let previous = state.source_ref.clone();
+            state.source_ref.dev_relative_path = layout_path.to_string();
+            previous
+        };
+        let execution = (|| {
+            let root = self
+                .builder
+                .lock()
+                .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
+                .root_handle(&self.lua)
+                .map_err(lua_error)?;
+            let result: Value = self
+                .lua
+                .load(source)
+                .set_name(format!("@{layout_path}"))
+                .set_mode(ChunkMode::Text)
+                .eval()
+                .map_err(lua_error)?;
+            call_entry_if_needed(&self.lua, result, root, &self.data_profile).map_err(lua_error)
+        })();
+        self.builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
+            .source_ref = previous_source_ref;
+        execution
+    }
+
+    pub fn scene(&self) -> Result<RuntimeScene, String> {
+        let mut state = self
+            .builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?;
+        if (!self.data_profile.values.is_empty() || !self.data_profile.meta_values.is_empty())
+            && !state
+                .scene
+                .provenance
+                .iter()
+                .any(|item| item.key == "dataProfile")
+        {
+            state.scene.provenance.push(DataProvenance {
+                kind: DataProvenanceKind::UserSnapshot,
+                key: "dataProfile".to_string(),
+                description: "数据由调用方提供的只读快照注入".to_string(),
+            });
+        }
+        Ok(state.scene.clone())
+    }
+
+    pub fn node_ids(&self) -> Result<HashSet<String>, String> {
+        Ok(self
+            .builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
+            .scene
+            .nodes
+            .keys()
+            .cloned()
+            .collect())
+    }
+
+    pub fn remove_nodes(&self, ids: &HashSet<String>) -> Result<(), String> {
+        let mut state = self
+            .builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?;
+        for node in state.scene.nodes.values_mut() {
+            node.children.retain(|child| !ids.contains(child));
+        }
+        for id in ids {
+            if id != "runtime-root" {
+                state.scene.nodes.remove(id);
+            }
+        }
+        drop(state);
+        self.callbacks
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 回调状态不可用".to_string())?
+            .clicks
+            .retain(|id, _| !ids.contains(id));
+        Ok(())
+    }
+
+    pub fn dispatch_click(&self, node_id: &str, payload: &JsonValue) -> Result<bool, String> {
+        let callback = self
+            .callbacks
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 回调状态不可用".to_string())?
+            .clicks
+            .get(node_id)
+            .cloned();
+        let Some(callback) = callback else {
+            return Ok(false);
+        };
+        self.reset_instruction_budget();
+        let sender = node_handle(&self.lua, node_id).map_err(lua_error)?;
+        let event = json_to_lua(&self.lua, payload).map_err(lua_error)?;
+        callback.call::<()>((sender, event)).map_err(lua_error)?;
+        Ok(true)
+    }
+
+    pub fn dispatch_registered_event(
+        &self,
+        event: &str,
+        payload: &JsonValue,
+    ) -> Result<usize, String> {
+        let callbacks = self
+            .callbacks
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 回调状态不可用".to_string())?
+            .events
+            .get(event)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|(_, callback)| callback.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        self.reset_instruction_budget();
+        for callback in &callbacks {
+            callback
+                .call::<()>(json_to_lua(&self.lua, payload).map_err(lua_error)?)
+                .map_err(lua_error)?;
+        }
+        Ok(callbacks.len())
+    }
+
+    pub fn take_window_signals(&self) -> Result<Vec<String>, String> {
+        let mut registry = self
+            .callbacks
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 回调状态不可用".to_string())?;
+        Ok(std::mem::take(&mut registry.window_signals))
+    }
+
+    pub fn push_diagnostic(&self, code: &str, message: String) -> Result<(), String> {
+        self.builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
+            .scene
+            .diagnostics
+            .push(RuntimeDiagnostic {
+                severity: DiagnosticSeverity::Warning,
+                code: code.to_string(),
+                message,
+                source_ref: None,
+                provenance: None,
+            });
+        Ok(())
+    }
+
+    pub fn push_provenance(&self, provenance: DataProvenance) -> Result<(), String> {
+        self.builder
+            .lock()
+            .map_err(|_| "RUNTIME_STATE_POISONED: 场景状态不可用".to_string())?
+            .scene
+            .provenance
+            .push(provenance);
+        Ok(())
+    }
+
+    fn reset_instruction_budget(&self) {
+        self.instruction_count.store(0, Ordering::Relaxed);
+    }
+}
+
+fn validate_layout_path(layout_path: &str) -> Result<(), String> {
     if layout_path.is_empty() || layout_path.starts_with('/') || layout_path.contains("..") {
         return Err("RUNTIME_PATH_DENIED: layoutPath 必须是安全的 dev 相对路径".to_string());
     }
+    Ok(())
+}
+
+fn validate_modules(
+    modules: &BTreeMap<String, String>,
+    limits: RuntimeLimits,
+) -> Result<(), String> {
     if modules.len() > limits.max_modules {
         return Err(format!(
             "RUNTIME_MODULE_LIMIT: 虚拟模块数量超过 {}",
@@ -352,13 +561,14 @@ fn validate_inputs(
     Ok(())
 }
 
-fn install_instruction_limit(lua: &Lua, max_instructions: u64) -> Result<(), String> {
+fn install_instruction_limit(lua: &Lua, max_instructions: u64) -> Result<Arc<AtomicU64>, String> {
     let step = 1_000_u32;
     let count = Arc::new(AtomicU64::new(0));
+    let hook_count = Arc::clone(&count);
     lua.set_global_hook(
         HookTriggers::new().every_nth_instruction(step),
         move |_, _| {
-            let current = count.fetch_add(step as u64, Ordering::Relaxed) + step as u64;
+            let current = hook_count.fetch_add(step as u64, Ordering::Relaxed) + step as u64;
             if current > max_instructions {
                 return Err(mlua::Error::RuntimeError(
                     "RUNTIME_INSTRUCTION_LIMIT: Lua 执行预算已耗尽".to_string(),
@@ -367,7 +577,8 @@ fn install_instruction_limit(lua: &Lua, max_instructions: u64) -> Result<(), Str
             Ok(VmState::Continue)
         },
     )
-    .map_err(|error| format!("RUNTIME_HOOK_INIT: {error}"))
+    .map_err(|error| format!("RUNTIME_HOOK_INIT: {error}"))?;
+    Ok(count)
 }
 
 fn remove_dangerous_globals(lua: &Lua) -> Result<(), String> {
@@ -401,6 +612,7 @@ fn remove_dangerous_globals(lua: &Lua) -> Result<(), String> {
 fn install_compatibility(
     lua: &Lua,
     builder: Arc<Mutex<SceneBuilder>>,
+    callbacks: Arc<Mutex<CallbackRegistry>>,
     modules: &BTreeMap<String, String>,
     data_profile: &DataProfileSnapshot,
 ) -> Result<(), String> {
@@ -409,6 +621,7 @@ fn install_compatibility(
     let gui = lua.create_table().map_err(lua_error)?;
     let gui_meta = lua.create_table().map_err(lua_error)?;
     let gui_builder = Arc::clone(&builder);
+    let gui_callbacks = Arc::downgrade(&callbacks);
     gui_meta
         .set(
             "__index",
@@ -417,6 +630,7 @@ fn install_compatibility(
                 let method_for_call = method.clone();
                 let state = Arc::clone(&gui_builder);
                 let virtual_modules = Arc::clone(&gui_modules);
+                let callback_registry = gui_callbacks.clone();
                 lua.create_function(move |lua, args: MultiValue| {
                     if method_for_call == "LoadExport" {
                         return load_export(lua, &args, &virtual_modules, Arc::clone(&state));
@@ -426,6 +640,61 @@ fn install_compatibility(
                     }
                     if method_for_call == "getChildByName" {
                         return get_child_by_name(lua, &args, Arc::clone(&state));
+                    }
+                    if method_for_call == "addOnClickEvent" {
+                        let node = args.iter().find_map(node_id);
+                        let callback = args.iter().find_map(|value| match value {
+                            Value::Function(function) => Some(function.clone()),
+                            _ => None,
+                        });
+                        if let (Some(node), Some(callback)) = (node, callback) {
+                            let registry = callback_registry.upgrade().ok_or_else(|| {
+                                mlua::Error::RuntimeError("RUNTIME_STATE_UNAVAILABLE".into())
+                            })?;
+                            registry
+                                .lock()
+                                .map_err(|_| {
+                                    mlua::Error::RuntimeError("RUNTIME_STATE_POISONED".into())
+                                })?
+                                .clicks
+                                .insert(node.clone(), callback);
+                            if let Some(widget) = state
+                                .lock()
+                                .map_err(|_| {
+                                    mlua::Error::RuntimeError("RUNTIME_STATE_POISONED".into())
+                                })?
+                                .scene
+                                .nodes
+                                .get_mut(&node)
+                            {
+                                widget
+                                    .properties
+                                    .insert("runtimeHasClick".to_string(), json!(true));
+                            }
+                        }
+                        return Ok(Value::Nil);
+                    }
+                    if matches!(method_for_call.as_str(), "Win_Open" | "Win_Close") {
+                        let value = args
+                            .iter()
+                            .find_map(lua_scalar_key)
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let signal = if method_for_call == "Win_Close" {
+                            "close-top".to_string()
+                        } else {
+                            format!("open:{value}")
+                        };
+                        let registry = callback_registry.upgrade().ok_or_else(|| {
+                            mlua::Error::RuntimeError("RUNTIME_STATE_UNAVAILABLE".into())
+                        })?;
+                        registry
+                            .lock()
+                            .map_err(|_| {
+                                mlua::Error::RuntimeError("RUNTIME_STATE_POISONED".into())
+                            })?
+                            .window_signals
+                            .push(signal);
+                        return Ok(Value::Nil);
                     }
                     if matches!(
                         method_for_call.as_str(),
@@ -498,13 +767,66 @@ fn install_compatibility(
     install_snapshot_getter(lua, &sl, "GetMetaValue", meta_values)?;
     let sl_meta = lua.create_table().map_err(lua_error)?;
     let sl_builder = Arc::clone(&builder);
+    let sl_callbacks = Arc::downgrade(&callbacks);
     sl_meta
         .set(
             "__index",
             lua.create_function(move |lua, (_table, key): (Table, String)| {
                 let api = key.clone();
                 let state = Arc::clone(&sl_builder);
-                lua.create_function(move |_, _args: MultiValue| {
+                let callback_registry = sl_callbacks.clone();
+                lua.create_function(move |_, args: MultiValue| {
+                    if api == "RegisterLUAEvent" {
+                        let event = args
+                            .iter()
+                            .find_map(lua_scalar_key)
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let owner = args
+                            .iter()
+                            .filter_map(lua_scalar_key)
+                            .nth(1)
+                            .unwrap_or_else(|| "anonymous".to_string());
+                        let callback = args.iter().find_map(|value| match value {
+                            Value::Function(function) => Some(function.clone()),
+                            _ => None,
+                        });
+                        if let Some(callback) = callback {
+                            let registry = callback_registry.upgrade().ok_or_else(|| {
+                                mlua::Error::RuntimeError("RUNTIME_STATE_UNAVAILABLE".into())
+                            })?;
+                            registry
+                                .lock()
+                                .map_err(|_| {
+                                    mlua::Error::RuntimeError("RUNTIME_STATE_POISONED".into())
+                                })?
+                                .events
+                                .entry(event)
+                                .or_default()
+                                .push((owner, callback));
+                        }
+                        return Ok(Value::Nil);
+                    }
+                    if api == "UnRegisterLUAEvent" {
+                        let event = args.iter().find_map(lua_scalar_key);
+                        let owner = args.iter().filter_map(lua_scalar_key).nth(1);
+                        if let Some(event) = event {
+                            let registry = callback_registry.upgrade().ok_or_else(|| {
+                                mlua::Error::RuntimeError("RUNTIME_STATE_UNAVAILABLE".into())
+                            })?;
+                            let mut registry = registry.lock().map_err(|_| {
+                                mlua::Error::RuntimeError("RUNTIME_STATE_POISONED".into())
+                            })?;
+                            if let Some(items) = registry.events.get_mut(&event) {
+                                if let Some(owner) = owner {
+                                    items
+                                        .retain(|(registered_owner, _)| registered_owner != &owner);
+                                } else {
+                                    items.clear();
+                                }
+                            }
+                        }
+                        return Ok(Value::Nil);
+                    }
                     if is_denied_api(&api) || api.starts_with("Request") {
                         state
                             .lock()
@@ -693,6 +1015,31 @@ fn install_symbol_globals(lua: &Lua) -> Result<(), String> {
     Ok(())
 }
 
+fn install_event_constants(lua: &Lua, modules: &BTreeMap<String, String>) -> Result<(), String> {
+    let globals = lua.globals();
+    let mut constants = HashSet::new();
+    for source in modules.values() {
+        for token in
+            source.split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+        {
+            if token.starts_with("LUA_EVENT_") && token.len() > "LUA_EVENT_".len() {
+                constants.insert(token.to_string());
+            }
+        }
+    }
+    for constant in constants {
+        if globals
+            .get::<Value>(constant.as_str())
+            .is_ok_and(|value| value.is_nil())
+        {
+            globals
+                .set(constant.as_str(), constant.as_str())
+                .map_err(lua_error)?;
+        }
+    }
+    Ok(())
+}
+
 fn make_require(
     lua: &Lua,
     modules: Arc<BTreeMap<String, String>>,
@@ -833,6 +1180,15 @@ fn node_id_from_value(value: &Value) -> bool {
 fn node_id(value: &Value) -> Option<String> {
     match value {
         Value::Table(table) => table.get::<String>("__nodeId").ok(),
+        _ => None,
+    }
+}
+
+fn lua_scalar_key(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => value.to_str().ok().map(|value| value.to_string()),
+        Value::Integer(value) => Some(value.to_string()),
+        Value::Number(value) => Some(value.to_string()),
         _ => None,
     }
 }

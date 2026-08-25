@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
+pub const LEGACY_PROTOCOL_VERSION: u32 = 1;
 pub const PROTOCOL_NAME: &str = "mir3-gui-runtime";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -35,6 +36,16 @@ pub struct StartRequest {
     pub scene_id: String,
     pub layout_path: String,
     #[serde(default)]
+    pub preset_id: Option<String>,
+    #[serde(default)]
+    pub module_id: Option<String>,
+    #[serde(default)]
+    pub map_id: Option<String>,
+    #[serde(default)]
+    pub mock_profile_id: Option<String>,
+    #[serde(default)]
+    pub overlay_ids: Vec<String>,
+    #[serde(default)]
     pub modules: BTreeMap<String, String>,
     #[serde(default)]
     pub device: DeviceKind,
@@ -59,6 +70,7 @@ pub struct EventRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ReloadRequest {
     pub session_id: String,
+    #[serde(default)]
     pub layout_path: String,
     #[serde(default)]
     pub modules: BTreeMap<String, String>,
@@ -129,6 +141,10 @@ pub struct RuntimeCapabilities {
     pub filesystem: bool,
     pub network: bool,
     pub lua_version: String,
+    #[serde(default)]
+    pub persistent_scene: bool,
+    #[serde(default)]
+    pub scene_patch: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -137,8 +153,38 @@ pub struct SceneResult {
     pub session_id: String,
     pub sequence: u64,
     pub scene: RuntimeScene,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch: Option<RuntimeScenePatch>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub preset_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub window_stack: Vec<RuntimeWindowState>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mock_state: BTreeMap<String, Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<RuntimeDiagnostic>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeScenePatch {
+    pub base_sequence: u64,
+    pub sequence: u64,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub upserted_nodes: BTreeMap<String, RuntimeNode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed_node_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roots: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeWindowState {
+    pub id: String,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

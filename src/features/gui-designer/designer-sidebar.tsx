@@ -8,6 +8,7 @@ import { useScope } from '@/hooks/use-scope'
 import { GUI_COMPONENTS, isContainerKind } from './component-catalog'
 import { DevFileTree } from './dev-file-tree'
 import { GuiDesignerScope } from './gui-designer-scope'
+import { GUI_SCENE_PROFILES, resolveProfileCatalogEntry } from './scene-compositor'
 
 const COMPONENT_CATEGORIES: readonly GuiComponentCategory[] = ['basic', 'text-input', 'container', 'progress', 'runtime']
 
@@ -16,15 +17,17 @@ export function DesignerSidebar() {
   const scope = useScope(GuiDesignerScope)
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
-      <div className="grid h-10 shrink-0 grid-cols-4 border-b border-line p-1">
-        <SideTab active={scope.leftPanel === 'files'} label={t('studio.gui.panel.files')} onPress={() => scope.setLeftPanel('files')} />
+      <div className="grid h-10 shrink-0 grid-cols-5 border-b border-line p-1">
         <SideTab active={scope.leftPanel === 'scenes'} label={t('studio.gui.panel.scenes')} onPress={() => scope.setLeftPanel('scenes')} />
+        <SideTab active={scope.leftPanel === 'files'} label={t('studio.gui.panel.files')} onPress={() => scope.setLeftPanel('files')} />
+        <SideTab active={scope.leftPanel === 'modules'} label={t('studio.gui.panel.modules')} onPress={() => scope.setLeftPanel('modules')} />
         <SideTab active={scope.leftPanel === 'layers'} label={t('studio.gui.panel.layers')} onPress={() => scope.setLeftPanel('layers')} />
         <SideTab active={scope.leftPanel === 'components'} label={t('studio.gui.panel.components')} onPress={() => scope.setLeftPanel('components')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <If cond={scope.leftPanel === 'files'}><FilePanel /></If>
         <If cond={scope.leftPanel === 'scenes'}><ScenePanel /></If>
+        <If cond={scope.leftPanel === 'files'}><FilePanel /></If>
+        <If cond={scope.leftPanel === 'modules'}><ModulePanel /></If>
         <If cond={scope.leftPanel === 'layers'}><LayerPanel /></If>
         <If cond={scope.leftPanel === 'components'}><ComponentPanel /></If>
       </div>
@@ -42,11 +45,41 @@ function ScenePanel() {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
   const capabilities = scope.runtimeCapabilities
-  const scenes = scope.runtimeCatalog?.scenes ?? []
+  const catalog = scope.runtimeCatalog?.presets ?? scope.runtimeCatalog?.scenes ?? []
+  const showWindowActions = scope.activeSceneProfileId === 'game-mobile' || scope.activeSceneProfileId === 'game-pc'
   return (
     <div>
       <PanelHeading icon={<CirclePlay />} title={t('studio.gui.scenes.title')} />
       <p className="mb-3 px-2 text-[10px] leading-4 text-muted">{t('studio.gui.scenes.hint')}</p>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        {GUI_SCENE_PROFILES.map((profile) => {
+          const entry = resolveProfileCatalogEntry(profile, catalog)
+          return (
+            <button
+              className={sceneProfileClass(scope.activeSceneProfileId === profile.id)}
+              type="button"
+              disabled={scope.busy}
+              onClick={() => void scope.startSceneProfile(profile.id)}
+              key={profile.id}
+            >
+              <strong className="block text-[10px] font-medium text-ink">{t(profile.titleKey)}</strong>
+              <span className="mt-1 block text-[8px] leading-3 text-muted">{t(profile.descriptionKey)}</span>
+              <If
+                cond={entry != null}
+                then={<span className="mt-2 block text-[8px] text-success">{t('studio.gui.scene.available')}</span>}
+                else={<span className="mt-2 block text-[8px] text-warning">{t('studio.gui.scene.static_shell')}</span>}
+              />
+            </button>
+          )
+        })}
+      </div>
+      <If cond={showWindowActions}>
+        <div className="mb-3 grid grid-cols-3 gap-1.5">
+          {(['bag', 'team', 'store'] as const).map(kind => (
+            <button className="h-8 rounded-lg bg-panel-2 text-[9px] text-ink ring-1 ring-line hover:ring-accent" type="button" onClick={() => scope.openSceneWindow(kind)} key={kind}>{t(`studio.gui.scene.window.${kind}`)}</button>
+          ))}
+        </div>
+      </If>
       <label className="mb-3 block px-1">
         <span className="mb-1 block text-[9px] text-muted">{t('studio.gui.scenes.data_source')}</span>
         <select
@@ -77,24 +110,39 @@ function ScenePanel() {
           <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-muted ring-1 ring-line hover:text-ink disabled:opacity-40" type="button" disabled={scope.busy} onClick={() => void scope.stopRuntimeScene()}>{t('studio.gui.scenes.stop')}</button>
         </div>
       </If>
+      <If cond={!scope.runtimeCatalogLoading && catalog.length === 0}>
+        <p className="px-2 py-5 text-center text-[10px] leading-4 text-muted">{t('studio.gui.scenes.empty')}</p>
+      </If>
+    </div>
+  )
+}
+
+function ModulePanel() {
+  const { t } = useTranslation()
+  const scope = useScope(GuiDesignerScope)
+  const modules = scope.runtimeCatalog?.modules ?? scope.runtimeCatalog?.scenes ?? []
+  return (
+    <div>
+      <PanelHeading icon={<Layers />} title={t('studio.gui.scene.modules.title')} />
+      <p className="mb-3 px-2 text-[10px] leading-4 text-muted">{t('studio.gui.scene.modules.hint')}</p>
       <div className="grid gap-1.5">
-        {scenes.map(scene => (
+        {modules.map(module => (
           <button
-            className={sceneButtonClass(scope.selectedSceneId === scene.id)}
+            className={sceneButtonClass(scope.selectedSceneId === module.id)}
             type="button"
             disabled={scope.busy}
-            onClick={() => void scope.startRuntimeScene(scene.id)}
-            key={scene.id}
+            onClick={() => void scope.startRuntimeScene(module.id)}
+            key={module.id}
           >
             <span className="flex items-center justify-between gap-2">
-              <strong className="truncate text-[10px] font-medium text-ink">{scene.name}</strong>
-              <span className="shrink-0 text-[8px] uppercase text-muted">{scene.platform}</span>
+              <strong className="truncate text-[10px] font-medium text-ink">{module.name}</strong>
+              <span className="shrink-0 text-[8px] uppercase text-muted">{module.platform}</span>
             </span>
-            <span className="mt-1 block truncate text-[9px] text-muted">{scene.layoutPath}</span>
+            <span className="mt-1 block truncate text-[9px] text-muted">{module.layoutPath}</span>
           </button>
         ))}
       </div>
-      <If cond={!scope.runtimeCatalogLoading && scenes.length === 0}>
+      <If cond={!scope.runtimeCatalogLoading && modules.length === 0}>
         <p className="px-2 py-5 text-center text-[10px] leading-4 text-muted">{t('studio.gui.scenes.empty')}</p>
       </If>
     </div>
@@ -270,6 +318,13 @@ function sceneButtonClass(active: boolean): string {
   if (active)
     return `${base} bg-accent/10 ring-accent/40`
   return `${base} bg-panel-2 ring-line hover:ring-accent/50`
+}
+
+function sceneProfileClass(active: boolean): string {
+  const base = 'min-h-24 rounded-xl p-2.5 text-left ring-1 disabled:opacity-40'
+  if (active)
+    return `${base} bg-accent/10 ring-accent/45`
+  return `${base} bg-panel-2 ring-line hover:ring-accent/45`
 }
 
 function layerClass(active: boolean, unsupported: boolean): string {

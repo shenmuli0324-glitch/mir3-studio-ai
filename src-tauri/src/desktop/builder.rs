@@ -292,6 +292,17 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::gui_runtime_scene_reload,
         crate::bridge::gui_runtime_scene_stop,
         crate::bridge::gui_runtime_data_source_set,
+        crate::bridge::gui_scene_asset_catalog,
+        crate::bridge::gui_scene_asset_manifest,
+        crate::bridge::gui_scene_asset_meta,
+        crate::bridge::gui_scene_asset_read,
+        crate::bridge::gui_scene_atlas_manifest,
+        crate::bridge::gui_scene_animation_manifest,
+        crate::bridge::gui_scene_effect_resolve,
+        crate::bridge::gui_scene_map_capabilities,
+        crate::bridge::gui_scene_world_chunk,
+        crate::bridge::gui_scene_world_manifest,
+        crate::bridge::gui_scene_login_presets,
     ];
     move |invoke| {
         let command = invoke.message.command().to_string();
