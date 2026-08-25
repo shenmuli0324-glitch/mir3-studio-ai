@@ -56,6 +56,19 @@ pub fn parse_document(
         }
     }
 
+    // setter 可能把创建时的动态表达式覆盖为字面量，最终诊断必须反映当前 DOM，
+    // 否则 Inspector 会在属性已经可写时仍显示过期的 Dynamic 警告。
+    diagnostics.retain(|diagnostic| {
+        if diagnostic.code != "GUI_DYNAMIC_PROPERTY" {
+            return true;
+        }
+        diagnostic
+            .node_id
+            .as_ref()
+            .and_then(|node_id| nodes.iter().find(|node| &node.id == node_id))
+            .is_some_and(node_has_dynamic)
+    });
+
     let known_ids: HashMap<String, usize> = nodes
         .iter()
         .enumerate()
@@ -640,10 +653,25 @@ fn process_setter(
 }
 
 fn finish_setter(node: &mut Mir3UiNode, call: &GuiCall) {
-    if node.node_type != Mir3UiNodeType::Unsupported && node_has_dynamic(node) {
+    if node.node_type == Mir3UiNodeType::Unsupported {
+        // 文档外 API 始终保持 Unknown，setter 不应把它伪装成已支持控件。
+    } else if node.compatibility.reason_code.as_deref() == Some("unresolved_parent") {
+        // 属性 setter 无法解决父级绑定，保留未解析父级状态。
+    } else if node_has_dynamic(node) {
         node.compatibility.status = CompatibilityStatus::Dynamic;
         node.compatibility.reason = Some("包含动态 Lua 属性；动态 token 保持只读".to_string());
         node.compatibility.reason_code = Some("dynamic_property".to_string());
+    } else if widget_adapter_registry()
+        .find_by_node_type(node.node_type)
+        .is_some_and(|adapter| adapter.approximate)
+    {
+        node.compatibility.status = CompatibilityStatus::Approximate;
+        node.compatibility.reason = Some("运行时控件使用近似占位预览".to_string());
+        node.compatibility.reason_code = Some("runtime_approximation".to_string());
+    } else {
+        node.compatibility.status = CompatibilityStatus::Supported;
+        node.compatibility.reason = None;
+        node.compatibility.reason_code = None;
     }
     node.source_binding.insert_byte = node
         .source_binding

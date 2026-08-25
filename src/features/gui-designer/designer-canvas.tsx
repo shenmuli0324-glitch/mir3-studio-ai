@@ -11,7 +11,6 @@ import { useCanvasAssets } from './canvas-assets'
 import { canvasRenderMode, matrixTransformValue, nodeLocalMatrix, renderedNodeSize, translatedNodeMatrix } from './canvas-render-model'
 import { isGuiComponentKind, renderAssetValue } from './component-catalog'
 import { GuiDesignerScope } from './gui-designer-scope'
-import { sceneRootNodeIds } from './scene-compositor'
 
 interface DragRuntime {
   nodeId: string
@@ -54,15 +53,12 @@ export function DesignerCanvas() {
   const scope = useScope(GuiDesignerScope)
   const dragRef = useRef<DragRuntime | null>(null)
   const animationFrameRef = useRef<number | null>(null)
-  const file = scope.currentFile
   const document = scope.previewDocument
   const nodes = document?.nodes ?? {}
   const nodeCount = Object.keys(nodes).length
   const renderMode = canvasRenderMode(nodeCount)
-  const stageAsset = devStageAssetPath(scope.runtimeComposition.stage.backgroundAsset)
-  const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId, stageAssetPaths(stageAsset))
-  const resolvedStageAssetHref = resolveStageAssetHref(stageAsset, assets.hrefs)
-  const rootNodeIds = document == null ? [] : sceneRootNodeIds(document, scope.runtimeComposition)
+  const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId)
+  const rootNodeIds = document?.roots ?? []
   const viewport = scope.viewport
 
   useEffect(() => {
@@ -84,11 +80,6 @@ export function DesignerCanvas() {
     if (!node)
       return
     scope.setSelectedNodeId(node.id)
-    if (scope.runtimePreviewActive && shouldActivateRuntimeNode(scope.interactionMode, event.altKey)) {
-      scope.activateRuntimeNode(node.id)
-      event.preventDefault()
-      return
-    }
     if (scope.parsePending || !scope.nodePropertyWritable(node, 'x') || !scope.nodePropertyWritable(node, 'y'))
       return
     const parentMatrix = (group.parentElement as unknown as SVGGraphicsElement | null)?.getScreenCTM()
@@ -165,8 +156,6 @@ export function DesignerCanvas() {
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault()
-    if (scope.runtimePreviewActive)
-      return
     const kind = event.dataTransfer.getData('application/x-mir3-ui-kind')
     if (!isGuiComponentKind(kind))
       return
@@ -195,7 +184,7 @@ export function DesignerCanvas() {
       onDragOver={event => event.preventDefault()}
       onDrop={handleDrop}
     >
-      <If cond={document == null && scope.activeSceneProfileId == null}>
+      <If cond={document == null}>
         <CanvasMessage title={t('studio.gui.canvas.empty')} description={t('studio.gui.canvas.empty_desc')} />
       </If>
       <If cond={document != null && renderMode === 'blocked'}>
@@ -207,13 +196,9 @@ export function DesignerCanvas() {
           data-gui-surface
           style={{ width: viewport.width * scope.zoom, height: viewport.height * scope.zoom }}
         >
-          <StaticSceneStage kind={scope.runtimeComposition.stage.kind} />
-          <If cond={resolvedStageAssetHref != null}>
-            <img className="pointer-events-none absolute inset-0 size-full object-cover" src={resolvedStageAssetHref} alt="" data-gui-stage-background />
-          </If>
           <If cond={document != null}>
-            <div className="absolute inset-0" data-gui-scene-layer="gui">
-              <CanvasErrorBoundary key={`${scope.selectedSceneId ?? file?.path ?? 'preview'}:${document?.sourceSha256 ?? scope.runtimeScene?.sequence ?? 'working'}`} fallback={canvasFallback}>
+            <div className="absolute inset-0">
+              <CanvasErrorBoundary key={`${scope.currentFile?.path ?? 'preview'}:${document?.sourceSha256 ?? 'working'}`} fallback={canvasFallback}>
                 <CanvasDocument
                   document={document!}
                   rootNodeIds={rootNodeIds}
@@ -230,7 +215,6 @@ export function DesignerCanvas() {
               </CanvasErrorBoundary>
             </div>
           </If>
-          <SceneDomOverlay />
           <If cond={renderMode === 'lightweight'}>
             <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[9px] text-white/70">{t('studio.gui.canvas.lightweight', { count: nodeCount })}</div>
           </If>
@@ -243,35 +227,6 @@ export function DesignerCanvas() {
           </div>
         </div>
       </If>
-    </div>
-  )
-}
-
-function StaticSceneStage({ kind }: { kind: 'login' | 'world' | 'snapshot' | 'empty' }) {
-  return <div className={staticStageClass(kind)} data-gui-scene-layer="world" />
-}
-
-function SceneDomOverlay() {
-  const { t } = useTranslation()
-  const scope = useScope(GuiDesignerScope)
-  const windows = scope.runtimeComposition.windows.filter(window => window.source === 'localFallback')
-  return (
-    <div className="pointer-events-none absolute inset-0" data-gui-scene-layer="dom-overlay">
-      <div className="absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[8px] text-white/65">{t('studio.gui.interaction.alt_hint')}</div>
-      {windows.map((window, index) => (
-        <section
-          className="pointer-events-auto absolute left-1/2 top-1/2 flex min-h-[38%] w-[48%] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg bg-panel/95 shadow-[0_18px_70px_rgba(0,0,0,0.55)] ring-1 ring-line-strong"
-          style={{ marginLeft: index * 14, marginTop: index * 14, zIndex: window.zOrder }}
-          data-gui-scene-window={window.kind}
-          key={window.id}
-        >
-          <header className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3">
-            <strong className="text-[11px] font-medium text-ink">{t(window.titleKey ?? `studio.gui.scene.window.${window.kind}`)}</strong>
-            <button className="grid size-6 place-items-center rounded text-muted hover:bg-panel-hover hover:text-ink" type="button" aria-label={t('studio.gui.scene.window.close')} onClick={() => scope.closeSceneWindow(window.id)}>×</button>
-          </header>
-          <div className="grid flex-1 place-items-center bg-canvas/55 p-5 text-center text-[10px] leading-4 text-muted">{t('studio.gui.scene.window.fallback')}</div>
-        </section>
-      ))}
     </div>
   )
 }
@@ -443,36 +398,4 @@ function localPointerPoint(clientX: number, clientY: number, inverse: DOMMatrix 
     return { x: point.x, y: point.y }
   }
   return { x: clientX / zoom, y: -clientY / zoom }
-}
-
-function stageAssetPaths(stageAsset: string | undefined): string[] {
-  if (stageAsset)
-    return [stageAsset]
-  return []
-}
-
-function resolveStageAssetHref(stageAsset: string | undefined, hrefs: Record<string, string>): string | undefined {
-  if (stageAsset)
-    return hrefs[stageAsset]
-  return undefined
-}
-
-function devStageAssetPath(stageAsset: string | null | undefined): string | undefined {
-  if (!stageAsset || stageAsset.startsWith('cache://'))
-    return undefined
-  if (stageAsset.startsWith('dev://res/'))
-    return stageAsset.slice('dev://res/'.length)
-  return stageAsset.replace(/^res\//, '')
-}
-
-function staticStageClass(kind: 'login' | 'world' | 'snapshot' | 'empty'): string {
-  if (kind === 'login')
-    return 'pointer-events-none absolute inset-0 bg-[#100f12]'
-  return 'pointer-events-none absolute inset-0 bg-[#15171b] bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:32px_32px]'
-}
-
-function shouldActivateRuntimeNode(mode: 'design' | 'interact', altKey: boolean): boolean {
-  if (mode === 'interact')
-    return !altKey
-  return altKey
 }

@@ -1,6 +1,6 @@
 import type { GuiComponentCategory, GuiComponentKind } from './component-catalog'
 import type { Mir3UiNode } from './types'
-import { ChevronRight, CirclePlay, Layers, Picture, Square, Text } from '@gravity-ui/icons'
+import { ChevronRight, Layers, Picture, Square, Text } from '@gravity-ui/icons'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
@@ -8,7 +8,6 @@ import { useScope } from '@/hooks/use-scope'
 import { GUI_COMPONENTS, isContainerKind } from './component-catalog'
 import { DevFileTree } from './dev-file-tree'
 import { GuiDesignerScope } from './gui-designer-scope'
-import { GUI_SCENE_PROFILES, resolveProfileCatalogEntry } from './scene-compositor'
 
 const COMPONENT_CATEGORIES: readonly GuiComponentCategory[] = ['basic', 'text-input', 'container', 'progress', 'runtime']
 
@@ -17,14 +16,12 @@ export function DesignerSidebar() {
   const scope = useScope(GuiDesignerScope)
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
-      <div className="grid h-10 shrink-0 grid-cols-4 border-b border-line p-1">
-        <SideTab active={scope.leftPanel === 'scenes'} label={t('studio.gui.panel.scenes')} onPress={() => scope.setLeftPanel('scenes')} />
+      <div className="grid h-10 shrink-0 grid-cols-3 border-b border-line p-1">
         <SideTab active={scope.leftPanel === 'files'} label={t('studio.gui.panel.files')} onPress={() => scope.setLeftPanel('files')} />
         <SideTab active={scope.leftPanel === 'layers'} label={t('studio.gui.panel.layers')} onPress={() => scope.setLeftPanel('layers')} />
         <SideTab active={scope.leftPanel === 'components'} label={t('studio.gui.panel.components')} onPress={() => scope.setLeftPanel('components')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <If cond={scope.leftPanel === 'scenes'}><ScenePanel /></If>
         <If cond={scope.leftPanel === 'files'}><FilePanel /></If>
         <If cond={scope.leftPanel === 'layers'}><LayerPanel /></If>
         <If cond={scope.leftPanel === 'components'}><ComponentPanel /></If>
@@ -36,80 +33,6 @@ export function DesignerSidebar() {
         </span>
       </footer>
     </aside>
-  )
-}
-
-function ScenePanel() {
-  const { t } = useTranslation()
-  const scope = useScope(GuiDesignerScope)
-  const capabilities = scope.runtimeCapabilities
-  const catalog = scope.runtimeCatalog?.presets ?? scope.runtimeCatalog?.scenes ?? []
-  const showWindowActions = scope.activeSceneProfileId === 'game-mobile' || scope.activeSceneProfileId === 'game-pc'
-  return (
-    <div>
-      <PanelHeading icon={<CirclePlay />} title={t('studio.gui.scenes.title')} />
-      <p className="mb-3 px-2 text-[10px] leading-4 text-muted">{t('studio.gui.scenes.hint')}</p>
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        {GUI_SCENE_PROFILES.map((profile) => {
-          const entry = resolveProfileCatalogEntry(profile, catalog)
-          const failed = scope.activeSceneProfileId === profile.id && scope.runtimeError != null
-          const status = sceneAvailability(entry?.compatibility, capabilities?.available === true, failed)
-          return (
-            <button
-              className={sceneProfileClass(scope.activeSceneProfileId === profile.id)}
-              type="button"
-              disabled={scope.busy}
-              onClick={() => void scope.startSceneProfile(profile.id)}
-              key={profile.id}
-            >
-              <strong className="block text-[10px] font-medium text-ink">{t(profile.titleKey)}</strong>
-              <span className="mt-1 block text-[8px] leading-3 text-muted">{t(profile.descriptionKey)}</span>
-              <span className={sceneAvailabilityClass(status)}>{t(`studio.gui.scene.${status}`)}</span>
-            </button>
-          )
-        })}
-      </div>
-      <If cond={showWindowActions}>
-        <div className="mb-3 grid grid-cols-3 gap-1.5">
-          {(['bag', 'team', 'store'] as const).map(kind => (
-            <button className="h-8 rounded-lg bg-panel-2 text-[9px] text-ink ring-1 ring-line hover:ring-accent" type="button" onClick={() => scope.openSceneWindow(kind)} key={kind}>{t(`studio.gui.scene.window.${kind}`)}</button>
-          ))}
-        </div>
-      </If>
-      <label className="mb-3 block px-1">
-        <span className="mb-1 block text-[9px] text-muted">{t('studio.gui.scenes.data_source')}</span>
-        <select
-          className="h-8 w-full rounded-lg bg-panel-2 px-2 text-[10px] text-ink outline-none ring-1 ring-line focus:ring-accent disabled:opacity-45"
-          value={capabilities?.dataSource ?? 'builtInMock'}
-          disabled={!capabilities?.available || scope.busy}
-          onChange={event => void scope.setRuntimeDataSource(event.target.value as 'builtInMock' | 'projectStatic')}
-        >
-          <option value="builtInMock">{t('studio.gui.scenes.data_source.built_in_mock')}</option>
-          <option value="projectStatic" disabled={!capabilities?.projectStaticAvailable}>{t('studio.gui.scenes.data_source.project_static')}</option>
-        </select>
-      </label>
-      <If cond={scope.runtimeCapabilitiesLoading || scope.runtimeCatalogLoading}>
-        <p className="px-2 py-4 text-center text-[10px] text-muted">{t('studio.gui.scenes.loading')}</p>
-      </If>
-      <If cond={!scope.runtimeCapabilitiesLoading && capabilities?.available === false}>
-        <div className="mb-3 rounded-lg bg-warning/8 px-3 py-2 text-[10px] leading-4 text-warning ring-1 ring-warning/20">{t('studio.gui.scenes.unavailable')}</div>
-      </If>
-      <If cond={scope.runtimeError != null}>
-        <div className="mb-3 rounded-lg bg-danger/8 px-3 py-2 text-[10px] leading-4 text-danger ring-1 ring-danger/20">
-          <span className="block">{t('studio.gui.scenes.fallback')}</span>
-          <span className="mt-1 block break-words opacity-80">{scope.runtimeError}</span>
-        </div>
-      </If>
-      <If cond={scope.selectedSceneId != null}>
-        <div className="mb-3 grid grid-cols-2 gap-2">
-          <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={scope.busy || scope.runtimeScene == null} onClick={() => void scope.reloadRuntimeScene()}>{t('studio.gui.scenes.reload')}</button>
-          <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-muted ring-1 ring-line hover:text-ink disabled:opacity-40" type="button" disabled={scope.busy} onClick={() => void scope.stopRuntimeScene()}>{t('studio.gui.scenes.stop')}</button>
-        </div>
-      </If>
-      <If cond={!scope.runtimeCatalogLoading && catalog.length === 0}>
-        <p className="px-2 py-5 text-center text-[10px] leading-4 text-muted">{t('studio.gui.scenes.empty')}</p>
-      </If>
-    </div>
   )
 }
 
@@ -275,29 +198,6 @@ function tabClass(active: boolean): string {
   if (active)
     return 'rounded-md bg-panel-2 text-[10px] font-medium text-ink'
   return 'rounded-md text-[10px] text-muted hover:text-ink'
-}
-
-function sceneProfileClass(active: boolean): string {
-  const base = 'min-h-24 rounded-xl p-2.5 text-left ring-1 disabled:opacity-40'
-  if (active)
-    return `${base} bg-accent/10 ring-accent/45`
-  return `${base} bg-panel-2 ring-line hover:ring-accent/45`
-}
-
-function sceneAvailability(compatibility: Mir3UiNode['compatibility'] | undefined, runtimeAvailable: boolean, failed: boolean): 'static_available' | 'partial_available' | 'load_failed' {
-  if (compatibility == null || failed)
-    return 'load_failed'
-  if (!runtimeAvailable || compatibility !== 'supported')
-    return 'partial_available'
-  return 'static_available'
-}
-
-function sceneAvailabilityClass(status: 'static_available' | 'partial_available' | 'load_failed'): string {
-  if (status === 'static_available')
-    return 'mt-2 block text-[8px] text-success'
-  if (status === 'partial_available')
-    return 'mt-2 block text-[8px] text-warning'
-  return 'mt-2 block text-[8px] text-danger'
 }
 
 function layerClass(active: boolean, unsupported: boolean): string {

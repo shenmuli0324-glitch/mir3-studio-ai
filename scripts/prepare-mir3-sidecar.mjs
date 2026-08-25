@@ -24,7 +24,7 @@ if (!hostTarget || !target) {
   throw new Error('Unable to detect Rust host target')
 }
 
-const packages = ['mir3-mcp', 'mir3-gui-runtime']
+const packages = ['mir3-mcp']
 const cargoArgs = ['build', '--manifest-path', manifest]
 for (const packageName of packages)
   cargoArgs.push('-p', packageName)

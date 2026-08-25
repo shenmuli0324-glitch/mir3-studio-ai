@@ -58,6 +58,86 @@ GUI:setContentSize(A, 90, 80)
 }
 
 #[test]
+fn parent_links_form_the_same_nested_tree_as_the_lua_variables() {
+    let source = r##"local Root = GUI:Node_Create(parent, "Root", 0, 0)
+local Panel = GUI:Layout_Create(Root, "Panel", 10, 20, 300, 200, false)
+GUI:setAnchorPoint(Panel, 0.5, 1)
+local Image = GUI:Image_Create(Panel, "Image", 30, 40, "res/a.png")
+local Missing = GUI:Text_Create(dynamicParent, "Missing", 1, 2, 14, "#fff", "text")
+"##;
+    let document = parse_document(source, "GUIExport/tree.lua", "sha", "utf-8", "\n").unwrap();
+    let root = &document.nodes[0];
+    let panel = &document.nodes[1];
+    let image = &document.nodes[2];
+    let missing = &document.nodes[3];
+
+    assert_eq!(document.roots, vec![root.id.clone(), missing.id.clone()]);
+    assert_eq!(root.children, vec![panel.id.clone()]);
+    assert_eq!(panel.parent_id.as_deref(), Some(root.id.as_str()));
+    assert_eq!(panel.children, vec![image.id.clone()]);
+    assert_eq!(image.parent_id.as_deref(), Some(panel.id.as_str()));
+    assert_eq!(panel.position.x.value, 10.0);
+    assert_eq!(panel.position.y.value, 20.0);
+    assert_eq!(panel.anchor.x.value, 0.5);
+    assert_eq!(panel.anchor.y.value, 1.0);
+    assert_eq!(panel.size.width.value, 300.0);
+    assert_eq!(panel.size.height.value, 200.0);
+    assert_eq!(missing.compatibility.status, CompatibilityStatus::Dynamic);
+    assert_eq!(
+        missing.compatibility.reason_code.as_deref(),
+        Some("unresolved_parent")
+    );
+}
+
+#[test]
+fn literal_setters_clear_only_the_overridden_dynamic_properties() {
+    let source = r#"local Image = GUI:Image_Create(parent, "Image", runtimeX, 2, runtimeImage)
+GUI:setPosition(Image, 10, 20)
+GUI:Image_loadTexture(Image, "res/final.png")
+"#;
+    let document = parse_document(source, "GUIExport/dynamic.lua", "sha", "utf-8", "\n").unwrap();
+    let image = &document.nodes[0];
+
+    assert_eq!(image.position.x.source, BoundValueSource::Literal);
+    assert_eq!(image.position.y.source, BoundValueSource::Literal);
+    assert_eq!(image.image.source, BoundValueSource::Literal);
+    assert_eq!(image.image.value, "res/final.png");
+    assert_eq!(image.compatibility.status, CompatibilityStatus::Supported);
+    assert_eq!(image.compatibility.reason_code, None);
+    assert!(!document
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.code == "GUI_DYNAMIC_PROPERTY"));
+}
+
+#[test]
+fn dynamic_setter_locks_only_its_property_and_unknown_create_never_panics() {
+    let source = r#"local Button = GUI:Button_Create(parent, "Button", 1, 2, "res/normal.png")
+GUI:Button_loadTexturePressed(Button, pressedTexture)
+local Future = GUI:FutureWidget_Create(Button, dynamicName, runtimeX, 4, { any = value })
+"#;
+    let document = parse_document(source, "GUIExport/unknown.lua", "sha", "utf-8", "\n").unwrap();
+    let button = &document.nodes[0];
+    let future = &document.nodes[1];
+
+    assert_eq!(button.position.x.source, BoundValueSource::Literal);
+    assert!(button.position.x.writable);
+    assert_eq!(
+        button.asset_slots["normal"].source,
+        BoundValueSource::Literal
+    );
+    assert_eq!(
+        button.asset_slots["pressed"].source,
+        BoundValueSource::Dynamic
+    );
+    assert!(!button.asset_slots["pressed"].writable);
+    assert_eq!(button.compatibility.status, CompatibilityStatus::Dynamic);
+    assert_eq!(future.node_type, Mir3UiNodeType::Unsupported);
+    assert_eq!(future.compatibility.status, CompatibilityStatus::Unknown);
+    assert_eq!(future.parent_id.as_deref(), Some(button.id.as_str()));
+}
+
+#[test]
 fn malformed_lua_returns_document_with_diagnostic() {
     let document = parse_document(
         "local A = GUI:Image_Create(parent, \"A\", 1,",

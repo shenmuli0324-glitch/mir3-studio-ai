@@ -285,13 +285,6 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::gui_draft_prepare,
         crate::bridge::gui_draft_confirm,
         crate::bridge::gui_draft_apply,
-        crate::bridge::gui_runtime_capabilities,
-        crate::bridge::gui_runtime_catalog,
-        crate::bridge::gui_runtime_scene_start,
-        crate::bridge::gui_runtime_scene_event,
-        crate::bridge::gui_runtime_scene_reload,
-        crate::bridge::gui_runtime_scene_stop,
-        crate::bridge::gui_runtime_data_source_set,
     ];
     move |invoke| {
         let command = invoke.message.command().to_string();
@@ -352,10 +345,6 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             let project_service = crate::service::project::ProjectService::new(project_data)
                 .map_err(std::io::Error::other)?;
             app.manage(project_service);
-            let runtime_data = crate::config::get_dsh_data_path(&app_handle).join("gui-runtime");
-            let runtime_service = crate::service::gui_runtime::GuiRuntimeService::new(runtime_data)
-                .map_err(std::io::Error::other)?;
-            app.manage(runtime_service);
             build_main_window(&app_handle)?;
             tray(&app_handle)?;
             setup(app_handle.clone());

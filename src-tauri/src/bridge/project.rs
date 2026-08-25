@@ -1,6 +1,5 @@
 //! 996 项目、索引、Draft、备份和知识治理的 Tauri 命令。
 
-use crate::service::gui_runtime::GuiRuntimeService;
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
     Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
@@ -64,42 +63,28 @@ pub fn project_get_active(
 #[tauri::command]
 pub fn project_activate(
     service: State<'_, ProjectService>,
-    runtime_service: State<'_, GuiRuntimeService>,
     project_id: String,
 ) -> Result<Mir3Project, String> {
-    let previous = service.store().active_project()?;
-    let project = service.store().activate_project(&project_id)?;
-    if let Some(previous) = previous {
-        if previous.id != project.id {
-            runtime_service.stop_project_sessions(&previous.id);
-        }
-    }
-    Ok(project)
+    service.store().activate_project(&project_id)
 }
 
 #[tauri::command]
 pub fn project_relink(
     service: State<'_, ProjectService>,
-    runtime_service: State<'_, GuiRuntimeService>,
     project_id: String,
     path: String,
 ) -> Result<Mir3Project, String> {
-    let project = service
+    service
         .store()
-        .relink_project(&project_id, Path::new(&path))?;
-    runtime_service.stop_project_sessions(&project_id);
-    Ok(project)
+        .relink_project(&project_id, Path::new(&path))
 }
 
 #[tauri::command]
 pub fn project_remove(
     service: State<'_, ProjectService>,
-    runtime_service: State<'_, GuiRuntimeService>,
     project_id: String,
 ) -> Result<(), String> {
-    service.store().remove_project(&project_id)?;
-    runtime_service.stop_project_sessions(&project_id);
-    Ok(())
+    service.store().remove_project(&project_id)
 }
 
 #[tauri::command]

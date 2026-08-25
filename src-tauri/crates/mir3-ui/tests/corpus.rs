@@ -1,4 +1,5 @@
 use mir3_ui::{parse_document, CompatibilityStatus, Mir3UiNodeType};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -24,7 +25,38 @@ fn parses_optional_official_corpus_without_panicking() {
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         serde_json::to_vec(&document)
             .unwrap_or_else(|error| panic!("{} serialization: {error}", path.display()));
+        let node_by_id: HashMap<_, _> = document
+            .nodes
+            .iter()
+            .map(|node| (node.id.as_str(), node))
+            .collect();
+        let mut linked_children = HashSet::new();
         for node in &document.nodes {
+            if let Some(parent_id) = &node.parent_id {
+                let parent = node_by_id.get(parent_id.as_str()).unwrap_or_else(|| {
+                    panic!("{} missing parent node {}", path.display(), parent_id)
+                });
+                assert!(
+                    parent.children.contains(&node.id),
+                    "{} parent {} does not link child {}",
+                    path.display(),
+                    parent_id,
+                    node.id
+                );
+                assert!(
+                    linked_children.insert(node.id.as_str()),
+                    "{} child {} is linked more than once",
+                    path.display(),
+                    node.id
+                );
+            } else {
+                assert!(
+                    document.roots.contains(&node.id),
+                    "{} root list is missing {}",
+                    path.display(),
+                    node.id
+                );
+            }
             for asset in node.asset_slots.values() {
                 if asset.value.trim().is_empty() {
                     continue;
@@ -37,6 +69,13 @@ fn parses_optional_official_corpus_without_panicking() {
                     "{} missing asset index entry for {}",
                     path.display(),
                     asset.value
+                );
+            }
+            for span in node.source_binding.property_spans.values() {
+                assert!(
+                    span.start_byte <= span.end_byte && span.end_byte <= source.len(),
+                    "{} property span is outside source",
+                    path.display()
                 );
             }
         }

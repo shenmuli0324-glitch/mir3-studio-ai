@@ -33,7 +33,6 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
   const genericProperties = inspectorProperties(node)
   const assetSlots = node.kind === 'Unsupported' ? [] : componentDefinition(node.kind).assetSlots
   const inspectorAssets = useCanvasAssets(scope.activeProject?.id, { [node.id]: node }, true, node.id)
-  const provenance = scope.runtimePreviewActive ? scope.previewDocument?.provenance ?? [] : []
   return (
     <div>
       <section className="border-b border-line p-3">
@@ -52,18 +51,6 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
         </div>
         <If cond={node.binding?.statement != null}>
           <p className="mt-3 text-[9px] tabular-nums text-muted">{t('studio.gui.inspector.source_line', { line: (node.binding?.statement?.startLine ?? 0) + 1 })}</p>
-        </If>
-        <If cond={node.sourceRef?.devRelativePath != null}>
-          <button
-            className="mt-2 block max-w-full truncate text-left text-[9px] text-accent disabled:cursor-default disabled:text-muted"
-            type="button"
-            disabled={!node.sourceRef?.devRelativePath.startsWith('GUIExport/')}
-            onClick={() => void scope.openRuntimeNodeSource(node.id)}
-          >
-            {node.sourceRef?.devRelativePath}
-            <If cond={node.sourceRef?.line != null}>{`:${node.sourceRef?.line}`}</If>
-            <If cond={node.sourceRef?.devRelativePath.startsWith('GUIExport/')}>{` · ${t('studio.gui.inspector.source_jump')}`}</If>
-          </button>
         </If>
       </section>
       <PropertySection title={t('studio.gui.inspector.position')}>
@@ -93,18 +80,6 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
           <p className="mt-2 text-[9px] leading-4 text-muted">{t('studio.gui.inspector.asset_hint')}</p>
         </PropertySection>
       </If>
-      <If cond={provenance.length > 0}>
-        <PropertySection title={t('studio.gui.inspector.data_source')}>
-          <div className="grid gap-2">
-            {provenance.map(item => (
-              <div className="rounded-lg bg-panel-2 px-2.5 py-2 ring-1 ring-line" key={`${item.kind}:${item.key}`}>
-                <span className="block text-[9px] font-medium text-accent">{t(`studio.gui.data_source.${item.kind}`)}</span>
-                <span className="mt-1 block break-words text-[9px] leading-4 text-muted">{item.description}</span>
-              </div>
-            ))}
-          </div>
-        </PropertySection>
-      </If>
       <If cond={genericProperties.length > 0}>
         <PropertySection title={t('studio.gui.inspector.advanced')}>
           <div className="grid gap-2">
@@ -126,9 +101,6 @@ function InspectorContent({ node }: { node: Mir3UiNode }) {
           <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={!scope.canAddNodeBehavior(node)} onClick={() => scope.addNodeBehavior(node.id, 'timeline')}>{t('studio.gui.inspector.add_timeline')}</button>
           <button className="h-8 rounded-lg bg-panel-2 text-[10px] text-ink ring-1 ring-line hover:ring-accent disabled:opacity-40" type="button" disabled={!scope.canAddNodeBehavior(node)} onClick={() => scope.addNodeBehavior(node.id, 'action')}>{t('studio.gui.inspector.add_action')}</button>
         </div>
-        <If cond={scope.runtimePreviewActive}>
-          <button className="mt-2 h-8 w-full rounded-lg bg-accent/10 text-[10px] text-accent ring-1 ring-accent/30 hover:bg-accent/15 disabled:opacity-40" type="button" disabled={scope.busy} onClick={() => void scope.sendRuntimeEvent(node.id, 'click')}>{t('studio.gui.inspector.runtime_click')}</button>
-        </If>
       </PropertySection>
       <If cond={node.compatibility !== 'supported'}>
         <div className="m-3 rounded-lg bg-danger/8 px-3 py-2 text-[10px] leading-4 text-danger ring-1 ring-danger/20">

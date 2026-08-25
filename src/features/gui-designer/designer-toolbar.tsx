@@ -35,10 +35,6 @@ export function DesignerToolbar() {
       </If>
       <span className="mx-1 h-5 w-px bg-line" />
       <div className="flex items-center rounded-lg bg-panel-2 p-0.5">
-        <ToolbarSegment active={scope.interactionMode === 'design'} label={t('studio.gui.interaction.design')} onPress={() => scope.setInteractionMode('design')} />
-        <ToolbarSegment active={scope.interactionMode === 'interact'} label={t('studio.gui.interaction.interact')} onPress={() => scope.setInteractionMode('interact')} />
-      </div>
-      <div className="flex items-center rounded-lg bg-panel-2 p-0.5">
         <ToolbarSegment active={scope.mode === 'visual'} label={t('studio.gui.mode.visual')} onPress={() => scope.setMode('visual')} />
         <ToolbarSegment active={scope.mode === 'code'} label={t('studio.gui.mode.code')} onPress={() => scope.setMode('code')} />
         <ToolbarSegment active={scope.mode === 'split'} label={t('studio.gui.mode.split')} onPress={() => scope.setMode('split')} />
@@ -46,8 +42,8 @@ export function DesignerToolbar() {
       <ToolbarIcon label={t('studio.gui.undo')} disabled={!file || file.history.length === 0} onPress={scope.undo}><ArrowUturnCcwLeft /></ToolbarIcon>
       <ToolbarIcon label={t('studio.gui.redo')} disabled={!file || file.future.length === 0} onPress={scope.redo}><ArrowUturnCwRight /></ToolbarIcon>
       <span className="min-w-0 flex-1 truncate text-center text-[11px] text-muted">
-        <span>{t(scope.activeSceneProfile.titleKey)}</span>
-        <If cond={file != null}><span className="ml-2 opacity-65">{file?.path}</span></If>
+        <If cond={file == null}><span>{t('studio.gui.no_file')}</span></If>
+        <If cond={file != null}><span>{file?.path}</span></If>
         <If cond={file != null && (file?.workingSource !== file?.originalSource || file?.isNew)}><span className="ml-2 text-accent">●</span></If>
       </span>
       <ToolbarIcon label={t('studio.gui.zoom_out')} onPress={() => scope.setZoom(scope.zoom - 0.1)}><MagnifierMinus /></ToolbarIcon>

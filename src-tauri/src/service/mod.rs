@@ -2,7 +2,6 @@ pub mod cli;
 pub mod core;
 pub mod download;
 pub mod gui_designer;
-pub mod gui_runtime;
 pub mod plugin;
 pub mod profile;
 pub mod project;

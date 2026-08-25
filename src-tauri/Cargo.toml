@@ -1,6 +1,6 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.7.1"
+version = "0.8.0"
 description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"
@@ -8,7 +8,6 @@ edition = "2021"
 [workspace]
 members = [
   "crates/mir3-domain",
-  "crates/mir3-gui-runtime",
   "crates/mir3-mcp",
   "crates/mir3-ui"
 ]
