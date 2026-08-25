@@ -103,7 +103,7 @@ export function useGuiRuntimeCatalog(projectId?: string) {
 export function useGuiRuntimeActions(projectId?: string) {
   const queryClient = useQueryClient()
   const start = useMutation({
-    mutationFn: (request: { sceneId?: string, presetId?: string, moduleId?: string, mapId?: string, mockProfileId?: string, device: string, viewport: { width: number, height: number }, workingSources?: Record<string, string> }) => {
+    mutationFn: (request: { sceneId?: string, presetId?: string, mockProfileId?: string, device: string, viewport: { width: number, height: number }, workingSources?: Record<string, string> }) => {
       if (!projectId)
         throw new Error('GUI_PROJECT_REQUIRED')
       return invoke<unknown>('gui_runtime_scene_start', { projectId, request }).then(normalizeRuntimeSceneResult)
@@ -449,25 +449,9 @@ function normalizeRuntimeCatalog(input: unknown): GuiRuntimeSceneCatalog {
   const wire = isRecord(input) ? input : {}
   const legacyScenes = normalizeRuntimeCatalogEntries(wire.scenes)
   const presets = Array.isArray(wire.presets) ? normalizeRuntimeCatalogEntries(wire.presets) : legacyScenes
-  const modules = Array.isArray(wire.modules) ? normalizeRuntimeCatalogEntries(wire.modules) : legacyScenes
-  const worldProfiles = Array.isArray(wire.worldProfiles)
-    ? wire.worldProfiles.map((profile) => {
-        const value = isRecord(profile) ? profile : {}
-        return {
-          id: String(value.id ?? ''),
-          name: stringValue(value.name),
-          mapId: stringValue(value.mapId),
-          backgroundAsset: stringValue(value.backgroundAsset),
-          platform: runtimePlatform(value.platform ?? value.device),
-          mockProfileId: stringValue(value.mockProfileId),
-        }
-      }).filter(profile => profile.id.length > 0)
-    : []
   return {
     presets,
-    modules,
-    worldProfiles,
-    scenes: legacyScenes.length > 0 ? legacyScenes : modules,
+    scenes: legacyScenes.length > 0 ? legacyScenes : presets,
   }
 }
 
@@ -476,13 +460,12 @@ function normalizeRuntimeCatalogEntries(input: unknown): GuiRuntimeSceneCatalog[
   return entries.map((scene) => {
     const value = isRecord(scene) ? scene : {}
     return {
-      id: String(value.id ?? value.presetId ?? value.moduleId ?? ''),
+      id: String(value.id ?? value.presetId ?? ''),
       name: String(value.name ?? value.title ?? value.id ?? ''),
       category: String(value.category ?? 'general'),
       layoutPath: String(value.layoutPath ?? value.entryPath ?? ''),
       platform: runtimePlatform(value.platform ?? value.device),
       compatibility: compatibilityValue(value.compatibility),
-      defaultMapId: stringValue(value.defaultMapId),
       overlayIds: arrayStrings(value.overlayIds),
     }
   }).filter(scene => scene.id.length > 0)
@@ -646,7 +629,6 @@ function normalizeRuntimeStage(input: Record<string, unknown>): GuiRuntimeStage 
   return {
     kind,
     backgroundAsset: stringValue(input.backgroundAsset),
-    mapId: stringValue(input.mapId),
     cameraX: numberValue(input.cameraX),
     cameraY: numberValue(input.cameraY),
     scale: numberValue(input.scale),

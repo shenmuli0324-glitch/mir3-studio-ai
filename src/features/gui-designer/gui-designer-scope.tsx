@@ -23,7 +23,7 @@ import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { defineScope } from '@/hooks/define-scope'
 import { useGuiDesignerStatus, useGuiDocumentActions, useGuiDocumentList, useGuiRuntimeActions, useGuiRuntimeCapabilities, useGuiRuntimeCatalog } from './api'
 import { componentDefinition, isContainerKind } from './component-catalog'
-import { applyRuntimeScenePatch, applyWorldProfile, defaultSceneProfile, fallbackWindow, isRuntimeSceneDocument, resolveProfileCatalogEntry, runtimeNodeWindowKind, sceneComposition, sceneProfile } from './scene-compositor'
+import { applyRuntimeScenePatch, defaultSceneProfile, fallbackWindow, isRuntimeSceneDocument, resolveProfileCatalogEntry, runtimeNodeWindowKind, sceneComposition, sceneProfile } from './scene-compositor'
 import { MOBILE_VIEWPORT, PC_VIEWPORTS } from './types'
 
 export interface GuiWorkingFile {
@@ -103,8 +103,7 @@ export const GuiDesignerScope = defineScope(() => {
   const previewDocument = runtimeScene?.scene ?? runtimeLastValidScene?.scene ?? currentFile?.document
   const runtimePreviewActive = runtimeScene?.scene != null || runtimeLastValidScene?.scene != null
   const activeSceneProfile = sceneProfile(activeSceneProfileId)
-  const runtimeWorldProfile = matchingWorldProfile(runtimeCatalog.data?.worldProfiles ?? [], deviceState)
-  const runtimeComposition = applyWorldProfile(sceneComposition(previewDocument, activeSceneProfile, deviceState, localSceneWindows), runtimeWorldProfile)
+  const runtimeComposition = sceneComposition(previewDocument, activeSceneProfile, deviceState, localSceneWindows)
 
   useEffect(() => {
     dirtyOutsideScope = dirty
@@ -447,13 +446,10 @@ export const GuiDesignerScope = defineScope(() => {
       runtimeSessionIdRef.current = null
       if (requestSequence !== runtimeRequestSequenceRef.current)
         return
-      const worldProfile = matchingWorldProfile(runtimeCatalog.data?.worldProfiles ?? [], requestedDevice)
       const result = await runtimeActions.start({
         sceneId,
         presetId,
-        moduleId: presetId == null ? sceneId : undefined,
-        mapId: runtimeMapIdForPreset(presetId, worldProfile?.mapId),
-        mockProfileId: presetId?.startsWith('game-') ? worldProfile?.mockProfileId ?? undefined : undefined,
+        mockProfileId: presetId?.startsWith('game-') ? `${requestedDevice}-hud` : undefined,
         device: requestedDevice,
         viewport: requestedDevice === 'mobile' ? MOBILE_VIEWPORT : PC_VIEWPORTS[pcViewportIndex],
         workingSources: workingSources(files),
@@ -591,10 +587,9 @@ export const GuiDesignerScope = defineScope(() => {
     setRuntimeError(null)
     try {
       await runtimeActions.setDataSource(mode)
-      const sceneId = selectedSceneId
-      if (sceneId) {
+      if (selectedSceneId) {
         await stopRuntimeScene()
-        await startRuntimeScene(sceneId)
+        await startSceneProfile(activeSceneProfileId)
       }
     }
     catch (error) {
@@ -737,7 +732,6 @@ export const GuiDesignerScope = defineScope(() => {
     createPage,
     prepareDiff,
     applyDiff,
-    startRuntimeScene,
     startSceneProfile,
     reloadRuntimeScene,
     sendRuntimeEvent,
@@ -790,18 +784,6 @@ function editableSourceNode(file: GuiWorkingFile | undefined, previewNode: Mir3U
 
 function workingSources(files: Record<string, GuiWorkingFile>): Record<string, string> {
   return Object.fromEntries(Object.values(files).map(file => [file.path, file.workingSource]))
-}
-
-function runtimeMapIdForPreset(presetId: GuiRuntimeSceneProfileId | undefined, mapId: string | null | undefined): string | undefined {
-  if (presetId?.startsWith('game-'))
-    return mapId ?? undefined
-  return undefined
-}
-
-function matchingWorldProfile(worldProfiles: NonNullable<ReturnType<typeof useGuiRuntimeCatalog>['data']>['worldProfiles'], device: GuiDevice) {
-  return worldProfiles.find(profile => profile.platform === device)
-    ?? worldProfiles.find(profile => profile.platform === 'shared')
-    ?? worldProfiles[0]
 }
 
 function insertionParent(file: GuiWorkingFile, selected?: Mir3UiNode): Mir3UiNode | undefined {

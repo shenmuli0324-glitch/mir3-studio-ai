@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import type { CanvasAssetTable } from './canvas-assets'
 import type { CanvasNodeSize, Matrix2D } from './canvas-render-model'
-import type { GuiSceneAtlasFrame, GuiSceneAtlasResource, GuiSceneStageAssets, GuiSceneWorldFrame } from './scene-assets'
 import type { Mir3UiDocument, Mir3UiNode } from './types'
 import { Component, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,7 +11,6 @@ import { useCanvasAssets } from './canvas-assets'
 import { canvasRenderMode, matrixTransformValue, nodeLocalMatrix, renderedNodeSize, translatedNodeMatrix } from './canvas-render-model'
 import { isGuiComponentKind, renderAssetValue } from './component-catalog'
 import { GuiDesignerScope } from './gui-designer-scope'
-import { useGuiSceneStageAssets } from './scene-assets'
 import { sceneRootNodeIds } from './scene-compositor'
 
 interface DragRuntime {
@@ -61,8 +59,7 @@ export function DesignerCanvas() {
   const nodes = document?.nodes ?? {}
   const nodeCount = Object.keys(nodes).length
   const renderMode = canvasRenderMode(nodeCount)
-  const stageAsset = scope.runtimeComposition.stage.backgroundAsset ?? undefined
-  const sceneStageAssets = useGuiSceneStageAssets(scope.activeProject?.id, scope.activeSceneProfileId, scope.runtimeComposition.stage.mapId)
+  const stageAsset = devStageAssetPath(scope.runtimeComposition.stage.backgroundAsset)
   const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId, stageAssetPaths(stageAsset))
   const resolvedStageAssetHref = resolveStageAssetHref(stageAsset, assets.hrefs)
   const rootNodeIds = document == null ? [] : sceneRootNodeIds(document, scope.runtimeComposition)
@@ -210,8 +207,8 @@ export function DesignerCanvas() {
           data-gui-surface
           style={{ width: viewport.width * scope.zoom, height: viewport.height * scope.zoom }}
         >
-          <SceneWorldCanvas kind={scope.runtimeComposition.stage.kind} viewport={viewport} assets={sceneStageAssets} />
-          <If cond={sceneStageAssets.background == null && resolvedStageAssetHref != null}>
+          <StaticSceneStage kind={scope.runtimeComposition.stage.kind} />
+          <If cond={resolvedStageAssetHref != null}>
             <img className="pointer-events-none absolute inset-0 size-full object-cover" src={resolvedStageAssetHref} alt="" data-gui-stage-background />
           </If>
           <If cond={document != null}>
@@ -234,7 +231,6 @@ export function DesignerCanvas() {
             </div>
           </If>
           <SceneDomOverlay />
-          <SceneAssetDiagnostics assets={sceneStageAssets} />
           <If cond={renderMode === 'lightweight'}>
             <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[9px] text-white/70">{t('studio.gui.canvas.lightweight', { count: nodeCount })}</div>
           </If>
@@ -251,58 +247,8 @@ export function DesignerCanvas() {
   )
 }
 
-function SceneWorldCanvas({ kind, viewport, assets }: { kind: 'login' | 'world' | 'snapshot' | 'empty', viewport: { width: number, height: number }, assets: GuiSceneStageAssets }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  useEffect(() => {
-    const canvas = canvasRef.current
-    const context = canvas?.getContext('2d')
-    if (!canvas || !context)
-      return
-    const drawingContext = context
-    canvas.width = viewport.width
-    canvas.height = viewport.height
-    let disposed = false
-    let animationFrame = 0
-    let loadedImages: SceneLoadedImages | undefined
-    void loadSceneImages(assets).then((images) => {
-      if (disposed) {
-        closeSceneImages(images)
-        return
-      }
-      loadedImages = images
-      function paint(timestamp: number) {
-        if (disposed)
-          return
-        drawWorldStage(drawingContext, viewport.width, viewport.height, kind)
-        drawSceneStage(drawingContext, viewport.width, viewport.height, kind, assets, images, timestamp)
-        if ((kind === 'login' || kind === 'world') && assets.atlases.length > 0)
-          animationFrame = requestAnimationFrame(paint)
-      }
-      paint(0)
-    })
-    return () => {
-      disposed = true
-      cancelAnimationFrame(animationFrame)
-      closeSceneImages(loadedImages)
-    }
-  }, [assets, kind, viewport.height, viewport.width])
-  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" data-gui-scene-layer="world" />
-}
-
-function SceneAssetDiagnostics({ assets }: { assets: GuiSceneStageAssets }) {
-  const { t } = useTranslation()
-  return (
-    <>
-      <If cond={assets.loading}>
-        <div className="pointer-events-none absolute right-2 top-2 rounded-md bg-black/60 px-2 py-1 text-[8px] text-white/70">{t('studio.gui.scene.assets.loading')}</div>
-      </If>
-      <If cond={assets.diagnostics.length > 0}>
-        <div className="pointer-events-none absolute bottom-8 right-2 max-w-[45%] rounded-md bg-warning/90 px-2 py-1.5 text-[8px] leading-3 text-black shadow-lg" title={assets.diagnostics.join('\n')}>
-          {t('studio.gui.scene.assets.partial', { count: assets.diagnostics.length })}
-        </div>
-      </If>
-    </>
-  )
+function StaticSceneStage({ kind }: { kind: 'login' | 'world' | 'snapshot' | 'empty' }) {
+  return <div className={staticStageClass(kind)} data-gui-scene-layer="world" />
 }
 
 function SceneDomOverlay() {
@@ -328,191 +274,6 @@ function SceneDomOverlay() {
       ))}
     </div>
   )
-}
-
-function drawWorldStage(context: CanvasRenderingContext2D, width: number, height: number, kind: 'login' | 'world' | 'snapshot' | 'empty') {
-  const gradient = context.createLinearGradient(0, 0, width, height)
-  if (kind === 'login') {
-    gradient.addColorStop(0, '#171411')
-    gradient.addColorStop(0.55, '#3a2a1c')
-    gradient.addColorStop(1, '#0c0b0a')
-  }
-  else {
-    gradient.addColorStop(0, '#6f7250')
-    gradient.addColorStop(0.5, '#8b8060')
-    gradient.addColorStop(1, '#4c533d')
-  }
-  context.fillStyle = gradient
-  context.fillRect(0, 0, width, height)
-  if (kind !== 'world')
-    return
-  context.globalAlpha = 0.12
-  context.strokeStyle = '#f4e9c8'
-  context.lineWidth = 1
-  const step = Math.max(28, Math.round(Math.min(width, height) / 15))
-  for (let x = -height; x < width; x += step) {
-    context.beginPath()
-    context.moveTo(x, 0)
-    context.lineTo(x + height, height)
-    context.stroke()
-  }
-  for (let x = 0; x < width + height; x += step) {
-    context.beginPath()
-    context.moveTo(x, 0)
-    context.lineTo(x - height, height)
-    context.stroke()
-  }
-  context.globalAlpha = 1
-}
-
-interface SceneLoadedImages {
-  background?: ImageBitmap
-  textures: Map<string, ImageBitmap>
-}
-
-async function loadSceneImages(assets: GuiSceneStageAssets): Promise<SceneLoadedImages> {
-  const textures = new Map<string, ImageBitmap>()
-  let background: ImageBitmap | undefined
-  if (assets.background?.browserRenderable === true)
-    background = await decodeSceneImage(assets.background.blob)
-  await Promise.all(assets.atlases.map(async (resource) => {
-    if (resource.texture?.browserRenderable !== true)
-      return
-    const image = await decodeSceneImage(resource.texture.blob)
-    if (image)
-      textures.set(resource.manifest.textureAssetId, image)
-  }))
-  return { background, textures }
-}
-
-async function decodeSceneImage(blob: Blob): Promise<ImageBitmap | undefined> {
-  if (typeof createImageBitmap !== 'function')
-    return undefined
-  try {
-    return await createImageBitmap(blob)
-  }
-  catch {
-    return undefined
-  }
-}
-
-function closeSceneImages(images: SceneLoadedImages | undefined) {
-  images?.background?.close()
-  for (const image of images?.textures.values() ?? [])
-    image.close()
-}
-
-function drawSceneStage(context: CanvasRenderingContext2D, width: number, height: number, kind: 'login' | 'world' | 'snapshot' | 'empty', assets: GuiSceneStageAssets, images: SceneLoadedImages, timestamp: number) {
-  if (images.background)
-    drawCoverImage(context, images.background, width, height)
-  if (kind === 'world')
-    drawWorldManifest(context, width, height, assets, images)
-  if (kind === 'world')
-    drawSceneActors(context, width, height, assets.atlases, images, timestamp, false)
-  if (kind === 'login') {
-    drawSceneActors(context, width, height, assets.atlases, images, timestamp, true)
-    drawLoginEffects(context, width, height, assets.atlases, images, timestamp)
-  }
-}
-
-function drawCoverImage(context: CanvasRenderingContext2D, image: CanvasImageSource & { width: number, height: number }, width: number, height: number) {
-  const scale = Math.max(width / image.width, height / image.height)
-  const drawWidth = image.width * scale
-  const drawHeight = image.height * scale
-  context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
-}
-
-function drawWorldManifest(context: CanvasRenderingContext2D, width: number, height: number, assets: GuiSceneStageAssets, images: SceneLoadedImages) {
-  const world = assets.world
-  if (!world || world.status === 'unsupported')
-    return
-  const atlasById = new Map(assets.atlases.map(resource => [resource.manifest.assetId, resource]))
-  const frames = [...world.frames]
-    .filter(frame => frame.available && frame.atlasAssetId != null)
-    .sort(compareWorldFrames)
-  const centerX = world.chunk.x + world.chunk.width / 2
-  const centerY = world.chunk.y + world.chunk.height / 2
-  for (const reference of frames) {
-    const resource = reference.atlasAssetId == null ? undefined : atlasById.get(reference.atlasAssetId)
-    const texture = resource == null ? undefined : images.textures.get(resource.manifest.textureAssetId)
-    const frame = resource == null ? undefined : atlasFrameForIndex(resource, reference.frameIndex)
-    if (!texture || !frame)
-      continue
-    const point = isometricPoint(reference.x - centerX, reference.y - centerY, width, height)
-    drawAtlasFrame(context, texture, frame, point.x, point.y)
-  }
-}
-
-function compareWorldFrames(left: GuiSceneWorldFrame, right: GuiSceneWorldFrame): number {
-  const layerOrder = { ground: 0, bottom: 1, top: 2 }
-  return layerOrder[left.layer] - layerOrder[right.layer] || left.x + left.y - (right.x + right.y)
-}
-
-function isometricPoint(x: number, y: number, width: number, height: number): { x: number, y: number } {
-  return {
-    x: width / 2 + (x - y) * 24,
-    y: height / 2 - 70 + (x + y) * 16,
-  }
-}
-
-function atlasFrameForIndex(resource: GuiSceneAtlasResource, frameIndex: number): GuiSceneAtlasFrame | undefined {
-  const exact = resource.manifest.frames.find(frame => numericFrameName(frame.name) === frameIndex)
-  if (exact)
-    return exact
-  if (resource.manifest.frames.length === 0)
-    return undefined
-  return resource.manifest.frames[frameIndex % resource.manifest.frames.length]
-}
-
-function numericFrameName(name: string): number | undefined {
-  const values = name.match(/\d+/g)
-  if (!values || values.length === 0)
-    return undefined
-  return Number(values[values.length - 1])
-}
-
-function drawLoginEffects(context: CanvasRenderingContext2D, width: number, height: number, atlases: GuiSceneAtlasResource[], images: SceneLoadedImages, timestamp: number) {
-  const usable = atlases.filter(resource => resource.manifest.assetId.includes('/anim/effect/') && images.textures.has(resource.manifest.textureAssetId) && resource.manifest.frames.length > 0)
-  for (let index = 0; index < usable.length; index += 1) {
-    const resource = usable[index]
-    const texture = images.textures.get(resource.manifest.textureAssetId)
-    if (!texture)
-      continue
-    const frameIndex = Math.floor(timestamp / 100) % resource.manifest.frames.length
-    const frame = resource.manifest.frames[frameIndex]
-    const x = width * ((index + 1) / (usable.length + 1))
-    drawAtlasFrame(context, texture, frame, x, height * 0.78)
-  }
-}
-
-function drawSceneActors(context: CanvasRenderingContext2D, width: number, height: number, atlases: GuiSceneAtlasResource[], images: SceneLoadedImages, timestamp: number, login: boolean) {
-  const actors = atlases.filter(resource => /\/anim\/(?:player|npc|monster)\//.test(resource.manifest.assetId) && images.textures.has(resource.manifest.textureAssetId) && resource.manifest.frames.length > 0)
-  for (let index = 0; index < actors.length; index += 1) {
-    const resource = actors[index]
-    const texture = images.textures.get(resource.manifest.textureAssetId)
-    if (!texture)
-      continue
-    const frame = resource.manifest.frames[Math.floor(timestamp / 120) % resource.manifest.frames.length]
-    const positions = login
-      ? [{ x: 0.34, y: 0.91 }, { x: 0.72, y: 0.91 }]
-      : [{ x: 0.5, y: 0.58 }, { x: 0.68, y: 0.55 }, { x: 0.36, y: 0.48 }]
-    const position = positions[index % positions.length]
-    drawAtlasFrame(context, texture, frame, width * position.x, height * position.y)
-  }
-}
-
-function drawAtlasFrame(context: CanvasRenderingContext2D, texture: CanvasImageSource, frame: GuiSceneAtlasFrame, anchorX: number, anchorY: number) {
-  const drawX = anchorX - frame.sourceWidth / 2 + frame.offsetX
-  const drawY = anchorY - frame.sourceHeight + frame.offsetY
-  if (!frame.rotated) {
-    context.drawImage(texture, frame.x, frame.y, frame.width, frame.height, drawX, drawY, frame.width, frame.height)
-    return
-  }
-  context.save()
-  context.translate(drawX, drawY + frame.width)
-  context.rotate(-Math.PI / 2)
-  context.drawImage(texture, frame.x, frame.y, frame.width, frame.height, 0, 0, frame.width, frame.height)
-  context.restore()
 }
 
 function CanvasDocument({ document, rootNodeIds, assets, lightweight, selectedNodeId, viewport, zoom, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
@@ -574,13 +335,15 @@ function CanvasNode({ nodeId, document, assets, lightweight, selectedNodeId, zoo
   const matrix = nodeLocalMatrix(node, size)
   const opacity = Math.min(1, Math.max(0, (node.paint?.opacity?.value ?? 255) / 255))
   const clipId = `gui-clip-${node.id.replace(/[^\w-]/g, '-')}`
+  const visual = !isDynamicRuntimePaint(node.kind)
+  const selectedVisual = selectedNodeId === node.id && visual
   return (
     <g data-gui-node-id={node.id} transform={matrixTransformValue(matrix)} opacity={opacity}>
       <If cond={node.clippingEnabled?.value === true}>
         <defs><clipPath id={clipId}><rect width={size.width} height={size.height} /></clipPath></defs>
       </If>
-      <NodePaint node={node} path={path} href={lightweight || !path ? undefined : assets.hrefs[path]} width={size.width} height={size.height} lightweight={lightweight} />
-      <If cond={selectedNodeId === node.id}>
+      <If cond={visual}><NodePaint node={node} path={path} href={lightweight || !path ? undefined : assets.hrefs[path]} width={size.width} height={size.height} lightweight={lightweight} /></If>
+      <If cond={selectedVisual}>
         <rect x={-3} y={-3} width={size.width + 6} height={size.height + 6} fill="none" stroke="var(--color-accent)" strokeWidth={1.5 / zoom} vectorEffect="non-scaling-stroke" />
       </If>
       <g clipPath={node.clippingEnabled?.value === true ? `url(#${clipId})` : undefined}>
@@ -615,27 +378,9 @@ function NodePaint({ node, path, href, width, height, lightweight }: { node: Mir
         </g>
       </If>
       <If cond={node.kind === 'Node'}><circle r={4} fill="var(--color-accent)" /></If>
-      <If cond={isApproximatePaint(node.kind)}><ApproximatePaint node={node} width={width} height={height} /></If>
       <If cond={node.kind === 'Unsupported'}><rect width={width} height={height} fill="rgba(242,90,90,0.06)" stroke="var(--color-danger)" strokeDasharray="5 4" /></If>
     </>
   )
-}
-
-function ApproximatePaint({ node, width, height }: { node: Mir3UiNode, width: number, height: number }) {
-  const detail = genericPreviewDetail(node)
-  return (
-    <>
-      <rect width={width} height={height} rx={4} fill="rgba(103,158,254,0.08)" stroke="rgba(103,158,254,0.55)" strokeDasharray="5 3" />
-      <g transform={`translate(${width / 2} ${height / 2}) scale(1 -1)`}>
-        <text textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.72)" fontSize="10">{detail}</text>
-      </g>
-    </>
-  )
-}
-
-function genericPreviewDetail(node: Mir3UiNode): string {
-  const value = Object.values(node.properties ?? {}).find(property => typeof property.value === 'string' && property.value.length > 0)?.value
-  return typeof value === 'string' ? `${node.kind} · ${value}` : node.kind
 }
 
 function isContainerPaint(kind: Mir3UiNode['kind']): boolean {
@@ -646,7 +391,7 @@ function isTextPaint(kind: Mir3UiNode['kind']): boolean {
   return kind === 'Text' || kind === 'TextAtlas' || kind === 'RichText' || kind === 'ScrollText' || kind === 'TextInput' || kind === 'MenuItem'
 }
 
-function isApproximatePaint(kind: Mir3UiNode['kind']): boolean {
+function isDynamicRuntimePaint(kind: Mir3UiNode['kind']): boolean {
   return kind === 'ItemShow' || kind === 'Effect' || kind === 'UIModel' || kind === 'SpineAnim'
 }
 
@@ -710,6 +455,20 @@ function resolveStageAssetHref(stageAsset: string | undefined, hrefs: Record<str
   if (stageAsset)
     return hrefs[stageAsset]
   return undefined
+}
+
+function devStageAssetPath(stageAsset: string | null | undefined): string | undefined {
+  if (!stageAsset || stageAsset.startsWith('cache://'))
+    return undefined
+  if (stageAsset.startsWith('dev://res/'))
+    return stageAsset.slice('dev://res/'.length)
+  return stageAsset.replace(/^res\//, '')
+}
+
+function staticStageClass(kind: 'login' | 'world' | 'snapshot' | 'empty'): string {
+  if (kind === 'login')
+    return 'pointer-events-none absolute inset-0 bg-[#100f12]'
+  return 'pointer-events-none absolute inset-0 bg-[#15171b] bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:32px_32px]'
 }
 
 function shouldActivateRuntimeNode(mode: 'design' | 'interact', altKey: boolean): boolean {

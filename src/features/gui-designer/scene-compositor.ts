@@ -7,7 +7,6 @@ import type {
   GuiRuntimeStage,
   GuiRuntimeWindow,
   GuiRuntimeWindowKind,
-  GuiRuntimeWorldProfile,
   Mir3RuntimeSceneDocument,
   Mir3UiDocument,
   Mir3UiNode,
@@ -47,7 +46,7 @@ export const GUI_SCENE_PROFILES: readonly GuiSceneProfile[] = [
     device: 'mobile',
     titleKey: 'studio.gui.scene.hud_mobile',
     descriptionKey: 'studio.gui.scene.hud_mobile.description',
-    stage: { kind: 'world', compatibility: 'approximate' },
+    stage: { kind: 'snapshot', compatibility: 'approximate' },
     catalogIds: ['game-mobile', 'hud-mobile', 'main-mobile', 'GUIInit'],
     layoutSuffixes: ['GUILayout/GUIInit.lua'],
   },
@@ -56,14 +55,13 @@ export const GUI_SCENE_PROFILES: readonly GuiSceneProfile[] = [
     device: 'pc',
     titleKey: 'studio.gui.scene.hud_pc',
     descriptionKey: 'studio.gui.scene.hud_pc.description',
-    stage: { kind: 'world', compatibility: 'approximate' },
+    stage: { kind: 'snapshot', compatibility: 'approximate' },
     catalogIds: ['game-pc', 'hud-pc', 'main-pc', 'GUIInit_win32'],
     layoutSuffixes: ['GUILayout/GUIInit_win32.lua', 'GUILayout/GUIInit.lua'],
   },
 ]
 
 export const GUI_SCENE_I18N_KEYS = [
-  'studio.gui.panel.modules',
   'studio.gui.scene.role_create',
   'studio.gui.scene.role_create.description',
   'studio.gui.scene.role_select',
@@ -72,10 +70,9 @@ export const GUI_SCENE_I18N_KEYS = [
   'studio.gui.scene.hud_mobile.description',
   'studio.gui.scene.hud_pc',
   'studio.gui.scene.hud_pc.description',
-  'studio.gui.scene.available',
-  'studio.gui.scene.static_shell',
-  'studio.gui.scene.modules.title',
-  'studio.gui.scene.modules.hint',
+  'studio.gui.scene.static_available',
+  'studio.gui.scene.partial_available',
+  'studio.gui.scene.load_failed',
   'studio.gui.interaction.design',
   'studio.gui.interaction.interact',
   'studio.gui.interaction.alt_hint',
@@ -84,8 +81,6 @@ export const GUI_SCENE_I18N_KEYS = [
   'studio.gui.scene.window.store',
   'studio.gui.scene.window.close',
   'studio.gui.scene.window.fallback',
-  'studio.gui.scene.assets.loading',
-  'studio.gui.scene.assets.partial',
 ] as const
 
 export function sceneProfile(profileId: GuiRuntimeSceneProfileId): GuiSceneProfile {
@@ -134,19 +129,6 @@ export function sceneRootNodeIds(document: Mir3UiDocument, composition: GuiRunti
   if (ordered.length > 0 || windowRoots.length > 0)
     rootIds = [...ordered, ...windowRoots]
   return [...new Set(rootIds)].filter(nodeId => document.nodes[nodeId] != null)
-}
-
-export function applyWorldProfile(composition: GuiRuntimeSceneComposition, worldProfile: GuiRuntimeWorldProfile | undefined): GuiRuntimeSceneComposition {
-  if (composition.stage.kind !== 'world' || worldProfile == null)
-    return composition
-  return {
-    ...composition,
-    stage: {
-      ...composition.stage,
-      backgroundAsset: composition.stage.backgroundAsset ?? worldProfile.backgroundAsset,
-      mapId: composition.stage.mapId ?? worldProfile.mapId,
-    },
-  }
 }
 
 export function applyRuntimeScenePatch(document: Mir3RuntimeSceneDocument, patch: GuiRuntimeScenePatch): Mir3RuntimeSceneDocument {

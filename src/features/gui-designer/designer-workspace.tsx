@@ -1,4 +1,5 @@
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
+import type { GuiDiagnostic } from './types'
 import { StreamLanguage } from '@codemirror/language'
 import { lua } from '@codemirror/legacy-modes/mode/lua'
 import { TriangleExclamation } from '@gravity-ui/icons'
@@ -92,6 +93,7 @@ function DiagnosticsDrawer() {
   const { t } = useTranslation()
   const scope = useScope(GuiDesignerScope)
   const diagnostics = scope.previewDocument?.diagnostics ?? scope.currentFile?.document.diagnostics ?? []
+  const summaries = summarizeDiagnostics(diagnostics)
   return (
     <div className="shrink-0 border-t border-line bg-panel">
       <button className="flex h-8 w-full items-center gap-2 px-3 text-[10px] text-muted hover:bg-panel-hover" type="button" onClick={() => scope.setDiagnosticsOpen(!scope.diagnosticsOpen)}>
@@ -103,10 +105,11 @@ function DiagnosticsDrawer() {
       <If cond={scope.diagnosticsOpen}>
         <div className="max-h-28 overflow-y-auto border-t border-line px-3 py-2">
           <If cond={diagnostics.length === 0}><p className="text-[10px] text-muted">{t('studio.gui.diagnostics.empty')}</p></If>
-          {diagnostics.map(diagnostic => (
-            <div className="flex gap-2 py-1 text-[10px]" key={`${diagnostic.code}-${diagnostic.span?.startByte ?? diagnostic.message}`}>
+          {summaries.map(({ diagnostic, count }) => (
+            <div className="flex gap-2 py-1 text-[10px]" key={`${diagnostic.severity}-${diagnostic.code}-${diagnostic.message}`}>
               <span className={diagnostic.severity === 'error' ? 'text-danger' : 'text-accent'}>{diagnostic.code}</span>
-              <span className="text-muted">{diagnostic.message}</span>
+              <span className="min-w-0 flex-1 text-muted">{diagnostic.message}</span>
+              <If cond={count > 1}><span className="shrink-0 text-warning">{t('studio.gui.diagnostics.repeated', { count })}</span></If>
             </div>
           ))}
           <If cond={scope.currentFile?.parseError != null}><p className="py-1 text-[10px] text-danger">{scope.currentFile?.parseError}</p></If>
@@ -115,4 +118,18 @@ function DiagnosticsDrawer() {
       </If>
     </div>
   )
+}
+
+function summarizeDiagnostics(diagnostics: GuiDiagnostic[]): Array<{ diagnostic: GuiDiagnostic, count: number }> {
+  const summaries = new Map<string, { diagnostic: GuiDiagnostic, count: number }>()
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.severity}\u0000${diagnostic.code}\u0000${diagnostic.message}`
+    const existing = summaries.get(key)
+    if (existing) {
+      existing.count += 1
+      continue
+    }
+    summaries.set(key, { diagnostic, count: 1 })
+  }
+  return [...summaries.values()]
 }

@@ -2,7 +2,6 @@ import type { GuiRuntimeSceneComposition, Mir3RuntimeSceneDocument, Mir3UiNode }
 import { describe, expect, it } from 'vitest'
 import {
   applyRuntimeScenePatch,
-  applyWorldProfile,
   defaultSceneProfile,
   GUI_SCENE_PROFILES,
   resolveProfileCatalogEntry,
@@ -56,15 +55,6 @@ describe('gui scene compositor', () => {
     expect(patched.nodes.stable.compatibility).toBe('approximate')
     expect(patched.runtime.windows[0].kind).toBe('team')
     expect(patched.runtime.profileId).toBe('game-mobile')
-  })
-
-  it('adds a world snapshot only when runtime did not provide one', () => {
-    const document = runtimeDocument({}, [])
-    const enriched = applyWorldProfile(document.runtime, { id: 'map', mapId: '0', backgroundAsset: 'res/map/0.jpg' })
-    expect(enriched.stage.mapId).toBe('0')
-    expect(enriched.stage.backgroundAsset).toBe('res/map/0.jpg')
-    const preserved = applyWorldProfile({ ...enriched, stage: { ...enriched.stage, backgroundAsset: 'res/map/custom.jpg' } }, { id: 'map', backgroundAsset: 'res/map/other.jpg' })
-    expect(preserved.stage.backgroundAsset).toBe('res/map/custom.jpg')
   })
 
   it('maps familiar HUD controls to composited windows', () => {

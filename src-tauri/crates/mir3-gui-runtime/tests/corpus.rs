@@ -8,7 +8,7 @@ use mir3_gui_runtime::{
 };
 
 #[test]
-fn official_guilayout_corpus_never_panics() {
+fn official_guilayout_corpus_is_inventory_only() {
     let Some(root) = corpus_root() else {
         eprintln!("跳过 996 GUI Runtime 语料测试：未设置 MIR3_GUI_CORPUS");
         return;
@@ -33,45 +33,38 @@ fn official_guilayout_corpus_never_panics() {
         runnable.len()
     );
 
-    let mut runtime_success = 0usize;
-    let mut static_fallback = 0usize;
-    for (index, (layout_path, _)) in runnable.iter().enumerate() {
-        let mut server = RuntimeServer::new();
-        let response = execute_request(
-            &mut server,
-            RuntimeRequest {
-                protocol_version: PROTOCOL_VERSION,
-                request_id: format!("corpus-{index}"),
-                operation: RuntimeOperation::Start(StartRequest {
-                    scene_id: format!("project:{}", layout_path.trim_end_matches(".lua")),
-                    layout_path: (*layout_path).clone(),
-                    preset_id: None,
-                    module_id: None,
-                    map_id: None,
-                    mock_profile_id: None,
-                    overlay_ids: Vec::new(),
-                    modules: modules.clone(),
-                    device: DeviceKind::Mobile,
-                    viewport: Viewport::default(),
-                    data_profile: DataProfileSnapshot::default(),
-                    limits: None,
-                }),
-            },
-        );
-        if response.ok {
-            runtime_success += 1;
-        } else {
-            // 主界面会保留 last-valid scene，并转到静态 Scene Composition。
-            static_fallback += 1;
-        }
-    }
-    assert_eq!(runtime_success + static_fallback, runnable.len());
+    let (layout_path, _) = runnable.first().expect("应存在可运行 GUILayout");
+    let mut server = RuntimeServer::new();
+    let response = execute_request(
+        &mut server,
+        RuntimeRequest {
+            protocol_version: PROTOCOL_VERSION,
+            request_id: "corpus-custom-rejected".to_string(),
+            operation: RuntimeOperation::Start(StartRequest {
+                scene_id: format!("project:{}", layout_path.trim_end_matches(".lua")),
+                layout_path: (*layout_path).clone(),
+                preset_id: None,
+                module_id: None,
+                map_id: None,
+                mock_profile_id: None,
+                overlay_ids: Vec::new(),
+                modules: modules.clone(),
+                device: DeviceKind::Mobile,
+                viewport: Viewport::default(),
+                data_profile: DataProfileSnapshot::default(),
+                limits: None,
+            }),
+        },
+    );
+    assert!(!response.ok);
+    assert_eq!(
+        response.error.as_ref().map(|error| error.code.as_str()),
+        Some("RUNTIME_PRESET_NOT_SUPPORTED")
+    );
     eprintln!(
-        "996 GUI Runtime corpus: layouts={}, runnable={}, runtime={}, static_fallback={}",
+        "996 GUI Runtime corpus inventory: layouts={}, runnable={}, custom_scenes=disabled",
         layouts.len(),
-        runnable.len(),
-        runtime_success,
-        static_fallback
+        runnable.len()
     );
 }
 
@@ -121,6 +114,15 @@ fn official_modules_build_four_runtime_presets() {
         assert!(result.scene.nodes.len() > 1, "{preset_id} 不应为空场景");
         assert_eq!(result.preset_id, preset_id);
         assert!(result.window_stack.is_empty());
+        assert!(result
+            .scene
+            .provenance
+            .iter()
+            .any(|item| item.key == "controlledComposition"));
+        assert!(!result
+            .diagnostics
+            .iter()
+            .any(|item| { item.code.contains("STARTUP") || item.code.contains("MAIN_INIT") }));
     }
 }
 

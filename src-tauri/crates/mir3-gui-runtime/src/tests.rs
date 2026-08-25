@@ -17,11 +17,11 @@ fn request(request_id: &str, operation: RuntimeOperation) -> RuntimeRequest {
 }
 
 fn start_request(source: &str) -> StartRequest {
-    let layout_path = "GUILayout/test.lua".to_string();
+    let layout_path = "GUIExport/login_role/login_role_create.lua".to_string();
     StartRequest {
-        scene_id: "auction".to_string(),
+        scene_id: "character-create".to_string(),
         layout_path: layout_path.clone(),
-        preset_id: None,
+        preset_id: Some("character-create".to_string()),
         module_id: None,
         map_id: None,
         mock_profile_id: None,
@@ -87,15 +87,20 @@ fn catalog_exposes_four_persistent_scene_presets() {
 }
 
 #[test]
-fn custom_scene_ids_execute_without_catalog_registration() {
+fn custom_scene_ids_are_rejected() {
     let mut start = start_request("return GUI:Node_Create(parent, 'Custom', 0, 0)");
     start.scene_id = "project:custom/scene".to_string();
+    start.preset_id = None;
     let mut server = RuntimeServer::new();
     let response = execute_request(
         &mut server,
         request("custom-1", RuntimeOperation::Start(start)),
     );
-    assert!(response.ok, "{:?}", response.error);
+    assert!(!response.ok);
+    assert_eq!(
+        response.error.as_ref().map(|error| error.code.as_str()),
+        Some("RUNTIME_PRESET_NOT_SUPPORTED")
+    );
 }
 
 #[test]
@@ -117,7 +122,7 @@ fn tauri_start_payload_accepts_viewport_without_scale_and_profile_metadata() {
     let mut server = RuntimeServer::new();
     let response = execute_json_line(
         &mut server,
-        r#"{"protocolVersion":1,"requestId":"wire-start","type":"start","payload":{"sceneId":"project:sample","layoutPath":"GUILayout/sample.lua","device":"mobile","viewport":{"width":1136,"height":640},"modules":{"GUILayout/sample.lua":"return GUI:Node_Create(parent, 'Root', 0, 0)"},"dataProfile":{"origin":"builtInMock","profileId":"default","values":{},"tables":{},"sourceHashes":{},"redactions":[]}}}"#,
+        r#"{"protocolVersion":1,"requestId":"wire-start","type":"start","payload":{"sceneId":"character-create","presetId":"character-create","layoutPath":"GUIExport/login_role/login_role_create.lua","device":"mobile","viewport":{"width":1136,"height":640},"modules":{"GUIExport/login_role/login_role_create.lua":"return GUI:Node_Create(parent, 'Root', 0, 0)"},"dataProfile":{"origin":"builtInMock","profileId":"default","values":{},"tables":{},"sourceHashes":{},"redactions":[]}}}"#,
     );
     assert!(response.ok, "{:?}", response.error);
     let Some(RuntimeResult::Scene(result)) = response.result else {
@@ -146,38 +151,24 @@ fn protocol_v2_accepts_frozen_scene_composition_fields() {
         .scene
         .provenance
         .iter()
-        .any(|item| item.key == "staticCompositionFallback"));
-    assert!(result
+        .any(|item| item.key == "controlledComposition"));
+    assert!(!result
         .diagnostics
         .iter()
-        .any(|item| item.code == "RUNTIME_STARTUP_MODULE_MISSING"));
+        .any(|item| { item.code.contains("STARTUP") || item.code.contains("MAIN_INIT") }));
 }
 
 #[test]
-fn game_preset_prefers_real_startup_chain_and_main_init_event() {
+fn game_preset_ignores_startup_chain_and_uses_controlled_exports() {
     let mut start = preset_request("game-mobile");
     start.modules = BTreeMap::from([
         (
-            "GUILayout/UIConst.lua".to_string(),
-            "UIConst = {}".to_string(),
-        ),
-        (
-            "GUILayout/GUIDefine.lua".to_string(),
-            "GUIDefine = {}".to_string(),
-        ),
-        (
-            "GUILayout/UIOperator.lua".to_string(),
-            "UIOperator = {}".to_string(),
-        ),
-        (
-            "GUILayout/GUIFunction.lua".to_string(),
-            "GUIFunction = {}".to_string(),
-        ),
-        (
             "GUILayout/GUIInit.lua".to_string(),
-            r#"SL:RegisterLUAEvent(LUA_EVENT_MAIN_INIT, "GUIInit", function()
-GUI:Layout_Create(parent, "RuntimeStarted", 0, 0, 1136, 640, false)
-end)"#
+            r#"GUI:Layout_Create(parent, "RuntimeStarted", 0, 0, 1136, 640, false)"#.to_string(),
+        ),
+        (
+            "GUIExport/main/main_property.lua".to_string(),
+            r#"return GUI:Layout_Create(parent, "ControlledHud", 0, 0, 1136, 150, false)"#
                 .to_string(),
         ),
     ]);
@@ -188,9 +179,14 @@ end)"#
     );
     assert!(response.ok, "{:?}", response.error);
     let Some(RuntimeResult::Scene(result)) = response.result else {
-        panic!("真实启动链应返回场景");
+        panic!("受控组合应返回场景");
     };
     assert!(result
+        .scene
+        .nodes
+        .values()
+        .any(|node| node.name == "ControlledHud"));
+    assert!(!result
         .scene
         .nodes
         .values()
@@ -199,12 +195,11 @@ end)"#
         .scene
         .provenance
         .iter()
-        .any(|item| item.key == "startupChain"));
+        .any(|item| item.key == "controlledComposition"));
     assert!(!result
-        .scene
-        .provenance
+        .diagnostics
         .iter()
-        .any(|item| item.key == "staticCompositionFallback"));
+        .any(|item| item.code.contains("STARTUP") || item.code.contains("MAIN_INIT")));
 }
 
 #[test]
@@ -633,7 +628,7 @@ return GUI:Text_Create(parent, "Item", 0, 0, 16, config.rows[1].name)
 
 #[test]
 fn minimal_guilayout_loads_export_and_builds_delegate() {
-    let layout_path = "GUILayout/sample/SampleMain.lua".to_string();
+    let layout_path = "GUIExport/login_role/login_role_create.lua".to_string();
     let layout = r#"
 SampleMain = {}
 function SampleMain.main()
@@ -654,9 +649,9 @@ end
 return ui
 "#;
     let start = StartRequest {
-        scene_id: "project:sample-main".to_string(),
+        scene_id: "character-create".to_string(),
         layout_path: layout_path.clone(),
-        preset_id: None,
+        preset_id: Some("character-create".to_string()),
         module_id: None,
         map_id: None,
         mock_profile_id: None,
@@ -800,7 +795,7 @@ fn event_reload_and_stop_advance_session_safely() {
     };
     assert_eq!(event_result.sequence, 2);
 
-    let layout_path = "GUILayout/reloaded.lua".to_string();
+    let layout_path = "GUIExport/login_role/login_role_create.lua".to_string();
     let reload = execute_request(
         &mut server,
         request(

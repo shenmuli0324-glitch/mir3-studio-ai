@@ -19,8 +19,10 @@ const environment = {
   APPLE_SIGNING_IDENTITY: process.env.APPLE_SIGNING_IDENTITY || '-',
 }
 
-if (!process.argv.includes('--verify-only'))
+if (!process.argv.includes('--verify-only')) {
+  stopRunningBundleApp(appPath)
   runPnpm(['tauri', 'build', '--bundles', 'app,dmg'], environment)
+}
 run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath])
 run('hdiutil', ['verify', dmgPath])
 
@@ -75,4 +77,32 @@ function hasNotarizationCredentials(environment) {
   const appleId = environment.APPLE_ID && environment.APPLE_PASSWORD && environment.APPLE_TEAM_ID
   const apiKey = environment.APPLE_API_KEY && environment.APPLE_API_ISSUER && environment.APPLE_API_KEY_PATH
   return Boolean(appleId || apiKey)
+}
+
+function stopRunningBundleApp(bundleAppPath) {
+  const executablePath = join(bundleAppPath, 'Contents', 'MacOS', 'mir3-studio-ai')
+  const result = spawnSync('pgrep', ['-f', '-x', executablePath], { encoding: 'utf8' })
+  if (result.status === 1)
+    return
+  if (result.status !== 0)
+    throw new Error(`Unable to inspect an existing bundle app process: ${result.stderr ?? ''}`)
+  const processIds = result.stdout
+    .split(/\s+/)
+    .map(value => Number(value))
+    .filter(value => Number.isInteger(value) && value > 0)
+  for (const processId of processIds)
+    process.kill(processId, 'SIGTERM')
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (processIds.every(processId => !isProcessRunning(processId)))
+      return
+    spawnSync('sleep', ['0.25'])
+  }
+  throw new Error(`Please close the previous bundle app before packaging: ${executablePath}`)
+}
+
+function isProcessRunning(processId) {
+  const result = spawnSync('ps', ['-p', String(processId), '-o', 'state='], { encoding: 'utf8' })
+  if (result.status !== 0)
+    return false
+  return !result.stdout.trim().startsWith('Z')
 }

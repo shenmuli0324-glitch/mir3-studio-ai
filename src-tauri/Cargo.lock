@@ -2605,7 +2605,7 @@ dependencies = [
 
 [[package]]
 name = "mir3-studio-ai"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "arboard",
  "async-trait",
@@ -2634,7 +2634,6 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
- "texture2ddecoder",
  "time",
  "tokio",
  "tracing",
@@ -3180,12 +3179,6 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
 ]
-
-[[package]]
-name = "paste"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pbkdf2"
@@ -4867,15 +4860,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fed54709c5b3a53d09bb1c113ea4f5ceafd1e772ddcb0030a82e1d56c087b08"
 dependencies = [
  "new_debug_unreachable",
-]
-
-[[package]]
-name = "texture2ddecoder"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "427ae8ec7f2f0fdd3146b77cfa44bea880caf066f7e55398a8467afe2645c832"
-dependencies = [
- "paste",
 ]
 
 [[package]]

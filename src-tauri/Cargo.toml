@@ -1,6 +1,6 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.7.0"
+version = "0.7.1"
 description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"
@@ -40,7 +40,6 @@ tauri-plugin-store = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-notification = "2"
 image = { version = "0.25", default-features = false, features = [ "png" ] }
-texture2ddecoder = "0.1.2"
 arboard = { version = "3", features = [ "wayland-data-control" ] }
 base64 = "0.22"
 serde = { version = "1", features = [ "derive" ] }

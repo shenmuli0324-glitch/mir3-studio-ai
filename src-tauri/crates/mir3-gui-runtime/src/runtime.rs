@@ -17,14 +17,6 @@ const CHARACTER_CREATE: &str = "character-create";
 const GAME_MOBILE: &str = "game-mobile";
 const GAME_PC: &str = "game-pc";
 
-const GAME_STARTUP_CHAIN: &[&str] = &[
-    "GUILayout/UIConst.lua",
-    "GUILayout/GUIDefine.lua",
-    "GUILayout/UIOperator.lua",
-    "GUILayout/GUIFunction.lua",
-    "GUILayout/GUIInit.lua",
-];
-
 const MOBILE_EXPORTS: &[&str] = &[
     "GUIExport/main/main_property.lua",
     "GUIExport/main/main_avartar.lua",
@@ -103,7 +95,7 @@ impl RuntimeServer {
                     protocol_version: PROTOCOL_VERSION,
                     scenes: mocks::catalog(),
                     capabilities: RuntimeCapabilities {
-                        virtual_modules: true,
+                        virtual_modules: false,
                         data_profile_snapshot: true,
                         event_dispatch: true,
                         filesystem: false,
@@ -140,6 +132,14 @@ impl RuntimeServer {
         let session_id = format!("runtime-{}", self.next_session);
         self.next_session += 1;
         let preset_id = resolve_preset_id(&request);
+        if !is_preset(&preset_id) {
+            return failure(
+                response_version,
+                request_id,
+                "RUNTIME_PRESET_NOT_SUPPORTED",
+                format!("仅支持四个固定组合场景，收到：{preset_id}"),
+            );
+        }
         let window_stack = request
             .overlay_ids
             .iter()
@@ -157,9 +157,6 @@ impl RuntimeServer {
         }
         if let Some(value) = &request.mock_profile_id {
             mock_state.insert("mockProfileId".to_string(), json!(value));
-        }
-        if let Some(value) = &request.module_id {
-            mock_state.insert("moduleId".to_string(), json!(value));
         }
         if let Some(value) = request.data_profile.values.get("previewDataMode") {
             mock_state.insert("dataMode".to_string(), value.clone());
@@ -343,75 +340,52 @@ fn build_runtime(
     windows: &[RuntimeWindowState],
 ) -> Result<(RuntimeVm, BTreeMap<String, HashSet<String>>), String> {
     let data_profile = runtime_data_profile(request);
-    let mut vm = RuntimeVm::new(
+    let vm = RuntimeVm::new(
         preset_id,
         request.viewport.clone(),
         &request.modules,
         &data_profile,
         request.limits.unwrap_or_default().sandboxed(),
     )?;
+    let planned = preset_source_paths(preset_id);
     let mut rendered = 0usize;
-    if is_preset(preset_id) {
-        if matches!(preset_id, GAME_MOBILE | GAME_PC) {
-            let (active, diagnostics) = attempt_game_startup(&vm, request);
-            if active {
-                rendered = 1;
-                vm.push_provenance(DataProvenance {
-                    kind: DataProvenanceKind::RuntimeDerived,
-                    key: "startupChain".to_string(),
-                    description:
-                        "场景由 UIConst/GUIDefine/UIOperator/GUIFunction/GUIInit 和 MAIN_INIT 生成"
-                            .to_string(),
-                })?;
-            } else {
-                // 启动链可能留下半成品节点和回调，回退前必须创建干净 VM。
-                vm = RuntimeVm::new(
-                    preset_id,
-                    request.viewport.clone(),
-                    &request.modules,
-                    &data_profile,
-                    request.limits.unwrap_or_default().sandboxed(),
-                )?;
-                for (code, message) in diagnostics {
-                    vm.push_diagnostic(&code, message)?;
-                }
-                vm.push_provenance(DataProvenance {
-                    kind: DataProvenanceKind::RuntimeDerived,
-                    key: "staticCompositionFallback".to_string(),
-                    description: "真实 GUI 启动链未完整生成画面，已使用安全 Export 组合回退"
-                        .to_string(),
-                })?;
-            }
+    let mut skipped = 0usize;
+    for path in planned {
+        if !request.modules.contains_key(*path) {
+            skipped += 1;
+            continue;
         }
-        if rendered == 0 {
-            for path in preset_source_paths(preset_id) {
-                if !request.modules.contains_key(*path) {
-                    continue;
-                }
-                match vm.execute_entry(path, None) {
-                    Ok(()) => rendered += 1,
-                    Err(error) => vm.push_diagnostic(
-                        "RUNTIME_PRESET_MODULE_SKIPPED",
-                        format!("组合场景模块 {path} 未能执行：{error}"),
-                    )?,
-                }
-            }
+        match vm.execute_entry(path, None) {
+            Ok(()) => rendered += 1,
+            Err(error) if is_hard_runtime_error(&error) => return Err(error),
+            Err(_) => skipped += 1,
         }
-        if rendered == 0 {
-            let source = mocks::source(preset_id).ok_or_else(|| {
-                format!("RUNTIME_PRESET_SOURCE_MISSING: 预设 {preset_id} 没有可执行模块")
-            })?;
-            // 使用独立虚拟入口，避免 GUIInit 遮蔽安全预设源码。
-            let fallback_path = format!("GUILayout/__runtime/{preset_id}.lua");
-            vm.execute_entry(&fallback_path, Some(source))?;
-        }
-    } else {
-        let fallback = if request.modules.contains_key(&request.layout_path) {
-            None
+    }
+    let used_safe_source = rendered == 0;
+    if used_safe_source {
+        let source = mocks::source(preset_id).ok_or_else(|| {
+            format!("RUNTIME_PRESET_SOURCE_MISSING: 预设 {preset_id} 没有安全组合源码")
+        })?;
+        let fallback_path = format!("GUILayout/__runtime/{preset_id}.lua");
+        vm.execute_entry(&fallback_path, Some(source))?;
+    }
+    vm.push_provenance(DataProvenance {
+        kind: DataProvenanceKind::RuntimeDerived,
+        key: "controlledComposition".to_string(),
+        description: if used_safe_source {
+            "场景使用受控安全源码组合，不执行 GUIInit 或 MAIN_INIT".to_string()
         } else {
-            mocks::source(&request.scene_id)
-        };
-        vm.execute_entry(&request.layout_path, fallback)?;
+            format!("场景由 {rendered} 个受控 GUIExport 直接组合，不执行 GUIInit 或 MAIN_INIT")
+        },
+    })?;
+    if skipped > 0 && rendered > 0 {
+        vm.push_diagnostic(
+            "RUNTIME_COMPOSITION_PARTIAL",
+            format!(
+                "受控组合共计划 {} 个模块，已加载 {rendered} 个，其余已安全跳过",
+                planned.len()
+            ),
+        )?;
     }
     let mut window_nodes = BTreeMap::new();
     for window in windows {
@@ -428,68 +402,6 @@ fn runtime_data_profile(request: &StartRequest) -> DataProfileSnapshot {
         json!(matches!(request.device, crate::model::DeviceKind::Pc)),
     );
     profile
-}
-
-fn attempt_game_startup(vm: &RuntimeVm, request: &StartRequest) -> (bool, Vec<(String, String)>) {
-    let before = vm.node_ids().unwrap_or_default();
-    let mut diagnostics = Vec::new();
-    let mut loaded = 0usize;
-    let mut gui_init_loaded = false;
-    for path in GAME_STARTUP_CHAIN {
-        if !request.modules.contains_key(*path) {
-            diagnostics.push((
-                "RUNTIME_STARTUP_MODULE_MISSING".to_string(),
-                format!("真实启动链缺少模块 {path}"),
-            ));
-            continue;
-        }
-        match vm.execute_entry(path, None) {
-            Ok(()) => {
-                loaded += 1;
-                gui_init_loaded |= *path == "GUILayout/GUIInit.lua";
-            }
-            Err(error) => diagnostics.push((
-                "RUNTIME_STARTUP_MODULE_FAILED".to_string(),
-                format!("真实启动链模块 {path} 执行失败：{error}"),
-            )),
-        }
-    }
-    let callback_count = if gui_init_loaded {
-        match vm.dispatch_registered_event("LUA_EVENT_MAIN_INIT", &json!({})) {
-            Ok(count) => count,
-            Err(error) => {
-                diagnostics.push((
-                    "RUNTIME_MAIN_INIT_FAILED".to_string(),
-                    format!("LUA_EVENT_MAIN_INIT 执行失败：{error}"),
-                ));
-                0
-            }
-        }
-    } else {
-        0
-    };
-    let generated = vm
-        .node_ids()
-        .map(|after| after.difference(&before).count())
-        .unwrap_or_default();
-    if callback_count == 0 {
-        diagnostics.push((
-            "RUNTIME_MAIN_INIT_MISSING".to_string(),
-            "GUIInit 未注册可执行的 LUA_EVENT_MAIN_INIT".to_string(),
-        ));
-    } else if generated == 0 {
-        diagnostics.push((
-            "RUNTIME_STARTUP_SCENE_EMPTY".to_string(),
-            "真实启动链执行后没有生成可视节点".to_string(),
-        ));
-    }
-    (
-        loaded == GAME_STARTUP_CHAIN.len()
-            && callback_count > 0
-            && generated > 0
-            && diagnostics.is_empty(),
-        diagnostics,
-    )
 }
 
 fn execute_window(
@@ -672,16 +584,11 @@ fn resolve_event_action(event: &EventRequest, scene: &RuntimeScene) -> Option<St
 }
 
 fn resolve_preset_id(request: &StartRequest) -> String {
-    let value = request
+    request
         .preset_id
         .as_deref()
-        .unwrap_or(request.scene_id.as_str());
-    match value {
-        "hud-mobile" => GAME_MOBILE.to_string(),
-        "hud-pc" => GAME_PC.to_string(),
-        "login" => CHARACTER_SELECT.to_string(),
-        _ => value.to_string(),
-    }
+        .unwrap_or(request.scene_id.as_str())
+        .to_string()
 }
 
 fn is_preset(value: &str) -> bool {
@@ -699,6 +606,17 @@ fn preset_source_paths(preset_id: &str) -> &'static [&'static str] {
         GAME_PC => PC_EXPORTS,
         _ => &[],
     }
+}
+
+fn is_hard_runtime_error(error: &str) -> bool {
+    [
+        "RUNTIME_INSTRUCTION_LIMIT",
+        "RUNTIME_NODE_LIMIT",
+        "RUNTIME_MEMORY_LIMIT",
+        "RUNTIME_COMMAND_LIMIT",
+    ]
+    .iter()
+    .any(|code| error.contains(code))
 }
 
 fn window_fallback_source(kind: &str) -> Option<&'static str> {

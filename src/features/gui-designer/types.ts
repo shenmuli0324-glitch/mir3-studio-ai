@@ -1,6 +1,6 @@
 export type GuiDevice = 'mobile' | 'pc'
 export type GuiMode = 'visual' | 'code' | 'split'
-export type GuiLeftPanel = 'scenes' | 'files' | 'modules' | 'layers' | 'components'
+export type GuiLeftPanel = 'scenes' | 'files' | 'layers' | 'components'
 export type GuiRuntimeInteractionMode = 'design' | 'interact'
 export type GuiRuntimeSceneProfileId = 'character-create' | 'character-select' | 'game-mobile' | 'game-pc'
 export type GuiRuntimeWindowKind = 'bag' | 'team' | 'store'
@@ -173,7 +173,6 @@ export interface Mir3UiDocument {
 export interface GuiRuntimeStage {
   kind: 'login' | 'world' | 'snapshot' | 'empty'
   backgroundAsset?: string | null
-  mapId?: string | null
   cameraX?: number
   cameraY?: number
   scale?: number
@@ -302,23 +301,11 @@ export interface GuiRuntimeSceneCatalogEntry {
   layoutPath: string
   platform: 'mobile' | 'pc' | 'shared'
   compatibility: GuiCompatibility
-  defaultMapId?: string | null
   overlayIds?: string[]
-}
-
-export interface GuiRuntimeWorldProfile {
-  id: string
-  name?: string
-  mapId?: string | null
-  backgroundAsset?: string | null
-  platform?: 'mobile' | 'pc' | 'shared'
-  mockProfileId?: string | null
 }
 
 export interface GuiRuntimeSceneCatalog {
   presets: GuiRuntimeSceneCatalogEntry[]
-  modules: GuiRuntimeSceneCatalogEntry[]
-  worldProfiles: GuiRuntimeWorldProfile[]
   scenes: GuiRuntimeSceneCatalogEntry[]
 }
 

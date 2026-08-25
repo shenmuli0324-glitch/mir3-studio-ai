@@ -29,7 +29,6 @@ const MAX_RUNTIME_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
 const MAX_RUNTIME_MODULES: usize = 512;
 const MAX_RUNTIME_SESSIONS: usize = 4;
 const MAX_RUNTIME_MODULE_BYTES: u64 = 8 * 1024 * 1024;
-const MAX_RUNTIME_CATALOG_BYTES: usize = 16 * 1024 * 1024;
 const MAX_RUNTIME_DIRECTORY_DEPTH: usize = 32;
 const MAX_RUNTIME_PREFERENCES_BYTES: usize = 1024 * 1024;
 const MAX_SNAPSHOT_BYTES: usize = 16 * 1024 * 1024;
@@ -168,26 +167,13 @@ pub struct RuntimePresetEntry {
     pub layout_path: String,
     pub platform: String,
     pub compatibility: String,
-    pub default_map_id: Option<String>,
     pub overlay_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeWorldProfile {
-    pub id: String,
-    pub name: String,
-    pub device: String,
-    pub map_id: String,
-    pub mock_profile_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCatalog {
     pub presets: Vec<RuntimePresetEntry>,
-    pub modules: Vec<RuntimeSceneEntry>,
-    pub world_profiles: Vec<RuntimeWorldProfile>,
     /// 兼容 V0.3 前端，内容仅包含四个组合场景。
     pub scenes: Vec<RuntimeSceneEntry>,
 }
@@ -199,10 +185,6 @@ pub struct RuntimeSceneStartRequest {
     pub scene_id: String,
     #[serde(default)]
     pub preset_id: Option<String>,
-    #[serde(default)]
-    pub module_id: Option<String>,
-    #[serde(default)]
-    pub map_id: Option<String>,
     #[serde(default)]
     pub mock_profile_id: Option<String>,
     pub device: String,
@@ -804,19 +786,7 @@ pub fn catalog(
     project_service: &ProjectService,
     project_id: &str,
 ) -> Result<RuntimeCatalog, String> {
-    let project = ensure_active_project(project_service, project_id)?;
-    let dev_root = canonical_dev_root(&project)?;
-    let layout_root = dev_root.join("GUILayout");
-    let mut files = Vec::new();
-    collect_lua_files(&layout_root, &mut files)?;
-    let mut total_bytes = 0usize;
-    let mut modules = Vec::new();
-    for path in files {
-        if let Some(entry) = scene_entry(&layout_root, &path, &mut total_bytes)? {
-            modules.push(entry);
-        }
-    }
-    modules.sort_by(|left, right| left.layout_path.cmp(&right.layout_path));
+    ensure_active_project(project_service, project_id)?;
     let presets = runtime_presets();
     let scenes = presets
         .iter()
@@ -829,12 +799,7 @@ pub fn catalog(
             compatibility: preset.compatibility.clone(),
         })
         .collect();
-    Ok(RuntimeCatalog {
-        presets,
-        modules,
-        world_profiles: runtime_world_profiles(),
-        scenes,
-    })
+    Ok(RuntimeCatalog { presets, scenes })
 }
 
 fn runtime_presets() -> Vec<RuntimePresetEntry> {
@@ -846,7 +811,6 @@ fn runtime_presets() -> Vec<RuntimePresetEntry> {
             layout_path: "GUILayout/login/LoginRolePanel.lua".to_string(),
             platform: "shared".to_string(),
             compatibility: "approximate".to_string(),
-            default_map_id: None,
             overlay_ids: Vec::new(),
         },
         RuntimePresetEntry {
@@ -856,7 +820,6 @@ fn runtime_presets() -> Vec<RuntimePresetEntry> {
             layout_path: "GUILayout/login/LoginRolePanel.lua".to_string(),
             platform: "shared".to_string(),
             compatibility: "approximate".to_string(),
-            default_map_id: None,
             overlay_ids: Vec::new(),
         },
         RuntimePresetEntry {
@@ -866,7 +829,6 @@ fn runtime_presets() -> Vec<RuntimePresetEntry> {
             layout_path: "GUILayout/GUIInit.lua".to_string(),
             platform: "mobile".to_string(),
             compatibility: "approximate".to_string(),
-            default_map_id: Some("01".to_string()),
             overlay_ids: vec!["bag".to_string(), "team".to_string(), "store".to_string()],
         },
         RuntimePresetEntry {
@@ -876,36 +838,9 @@ fn runtime_presets() -> Vec<RuntimePresetEntry> {
             layout_path: "GUILayout/GUIInit.lua".to_string(),
             platform: "pc".to_string(),
             compatibility: "approximate".to_string(),
-            default_map_id: Some("1".to_string()),
             overlay_ids: vec!["bag".to_string(), "team".to_string(), "store".to_string()],
         },
     ]
-}
-
-fn runtime_world_profiles() -> Vec<RuntimeWorldProfile> {
-    [
-        (
-            "mobile-01",
-            "移动端 · 边境城市",
-            "mobile",
-            "01",
-            "mobile-hud",
-        ),
-        ("pc-1", "PC · 道馆", "pc", "1", "pc-hud"),
-        ("world-d021", "世界 · d021", "shared", "d021", "world"),
-        ("world-d032", "世界 · d032", "shared", "d032", "world"),
-    ]
-    .into_iter()
-    .map(
-        |(id, name, device, map_id, mock_profile_id)| RuntimeWorldProfile {
-            id: id.to_string(),
-            name: name.to_string(),
-            device: device.to_string(),
-            map_id: map_id.to_string(),
-            mock_profile_id: mock_profile_id.to_string(),
-        },
-    )
-    .collect()
 }
 
 fn requested_preset_id(request: &RuntimeSceneStartRequest) -> &str {
@@ -942,34 +877,23 @@ pub fn start_scene(
         .presets
         .iter()
         .find(|entry| entry.id == preset_id)
-        .cloned();
-    let entry = if let Some(preset) = &preset {
-        runtime_entry_for_preset(preset)
-    } else {
-        catalog
-            .modules
-            .iter()
-            .find(|entry| entry.id == preset_id)
-            .cloned()
-            .ok_or_else(|| {
-                "GUI_RUNTIME_SCENE_NOT_FOUND: preset or module is not in runtime catalog"
-                    .to_string()
-            })?
-    };
+        .cloned()
+        .ok_or_else(|| {
+            "GUI_RUNTIME_SCENE_NOT_FOUND: only the four composed presets can be started".to_string()
+        })?;
+    let entry = runtime_entry_for_preset(&preset);
     let modules = collect_runtime_modules(&project, &request.working_sources)?;
     let source_bindings = runtime_source_binding_index(&modules);
     let data_profile = build_data_profile(project_service, runtime_service, &project, &entry)?;
     let payload = json!({
         "sceneId": entry.id,
-        "presetId": preset.as_ref().map(|value| value.id.as_str()),
+        "presetId": preset.id,
         "layoutPath": entry.layout_path,
         "device": request.device,
         "viewport": request.viewport,
-        "moduleId": request.module_id,
-        "mapId": request.map_id.as_ref().or(preset.as_ref().and_then(|value| value.default_map_id.as_ref())),
         "mockProfileId": request.mock_profile_id,
         "overlayIds": [],
-        "availableOverlayIds": preset.as_ref().map(|value| value.overlay_ids.as_slice()).unwrap_or_default(),
+        "availableOverlayIds": preset.overlay_ids,
         "modules": modules,
         "dataProfile": data_profile,
     });
@@ -997,7 +921,8 @@ pub fn start_scene(
         .ok_or_else(|| "GUI_RUNTIME_RESPONSE_INVALID: start scene is missing".to_string())?;
     enrich_runtime_scene(&mut scene, &request, &result);
     enrich_runtime_source_bindings(&mut scene, &source_bindings);
-    let diagnostics = diagnostics_from_value(result.get("diagnostics"));
+    let diagnostics =
+        summarize_runtime_diagnostics(diagnostics_from_value(result.get("diagnostics")));
     let worker_session_id = result
         .get("sessionId")
         .and_then(Value::as_str)
@@ -1421,20 +1346,12 @@ pub fn reload_scene(
         .presets
         .iter()
         .find(|entry| entry.id == preset_id)
-        .cloned();
-    let entry = if let Some(preset) = &preset {
-        runtime_entry_for_preset(preset)
-    } else {
-        catalog
-            .modules
-            .iter()
-            .find(|entry| entry.id == preset_id)
-            .cloned()
-            .ok_or_else(|| {
-                "GUI_RUNTIME_SCENE_NOT_FOUND: preset or module is not in runtime catalog"
-                    .to_string()
-            })?
-    };
+        .cloned()
+        .ok_or_else(|| {
+            "GUI_RUNTIME_SCENE_NOT_FOUND: only the four composed presets can be reloaded"
+                .to_string()
+        })?;
+    let entry = runtime_entry_for_preset(&preset);
     let modules = collect_runtime_modules(&project, &request.working_sources)?;
     let source_bindings = runtime_source_binding_index(&modules);
     let data_profile = build_data_profile(project_service, runtime_service, &project, &entry)?;
@@ -1448,12 +1365,10 @@ pub fn reload_scene(
                 "sessionId": session.worker_session_id,
                 "layoutPath": entry.layout_path,
                 "sceneId": entry.id,
-                "presetId": preset.as_ref().map(|value| value.id.as_str()),
-                "moduleId": request.module_id,
-                "mapId": request.map_id.as_ref().or(preset.as_ref().and_then(|value| value.default_map_id.as_ref())),
+                "presetId": preset.id,
                 "mockProfileId": request.mock_profile_id,
                 "overlayIds": [],
-                "availableOverlayIds": preset.as_ref().map(|value| value.overlay_ids.as_slice()).unwrap_or_default(),
+                "availableOverlayIds": preset.overlay_ids,
                 "modules": modules,
                 "dataProfile": data_profile,
             }),
@@ -1514,13 +1429,13 @@ fn enrich_runtime_scene(
             "compatibility": "approximate",
         }),
         "game-pc" => json!({
-            "kind": "world",
-            "mapId": request.map_id.as_deref().unwrap_or("1"),
+            "kind": "hud",
+            "background": "neutral",
             "compatibility": "approximate",
         }),
         _ => json!({
-            "kind": "world",
-            "mapId": request.map_id.as_deref().unwrap_or("01"),
+            "kind": "hud",
+            "background": "neutral",
             "compatibility": "approximate",
         }),
     };
@@ -1564,7 +1479,7 @@ fn enrich_runtime_scene(
             "stage": stage,
             "layers": [
                 { "id": "stage", "rootNodeIds": [], "zOrder": 0 },
-                { "id": "world", "rootNodeIds": [], "zOrder": 100 },
+                { "id": "world", "rootNodeIds": [], "zOrder": 100, "rendering": "disabled" },
                 { "id": "hud", "rootNodeIds": roots, "zOrder": 200 },
                 { "id": "windows", "rootNodeIds": windows.iter().flat_map(|window| window["rootNodeIds"].as_array().cloned().unwrap_or_default()).collect::<Vec<_>>(), "zOrder": 300 }
             ],
@@ -2159,61 +2074,6 @@ fn collect_lua_files_inner(
     Ok(())
 }
 
-fn scene_entry(
-    layout_root: &Path,
-    path: &Path,
-    total_bytes: &mut usize,
-) -> Result<Option<RuntimeSceneEntry>, String> {
-    let source = read_bounded_file(
-        path,
-        MAX_RUNTIME_MODULE_BYTES as usize,
-        "GUI_RUNTIME_CATALOG_READ_FAILED",
-        "GUI_RUNTIME_MODULE_SIZE_LIMIT",
-    )?;
-    add_to_budget(
-        total_bytes,
-        source.len(),
-        MAX_RUNTIME_CATALOG_BYTES,
-        "GUI_RUNTIME_CATALOG_SIZE_LIMIT: GUILayout catalog is too large",
-    )?;
-    let source = String::from_utf8_lossy(&source);
-    let runnable = source.lines().any(|line| {
-        let line = line.trim_start();
-        line.starts_with("function ") && line.contains(".main(")
-    });
-    if !runnable {
-        return Ok(None);
-    }
-    let relative = path
-        .strip_prefix(layout_root)
-        .map_err(|_| "GUI_RUNTIME_CATALOG_OUTSIDE: scene escaped GUILayout".to_string())?
-        .to_string_lossy()
-        .replace('\\', "/");
-    let layout_path = format!("GUILayout/{relative}");
-    let id = relative.trim_end_matches(".lua").to_string();
-    let name = path
-        .file_stem()
-        .ok_or_else(|| "GUI_RUNTIME_CATALOG_NAME_INVALID: scene file has no name".to_string())?
-        .to_string_lossy()
-        .into_owned();
-    let category = relative.split('/').next().unwrap_or("root").to_string();
-    let platform = if name.ends_with("_win32") {
-        "pc"
-    } else if path.with_file_name(format!("{name}_win32.lua")).is_file() {
-        "shared"
-    } else {
-        "mobile"
-    };
-    Ok(Some(RuntimeSceneEntry {
-        id,
-        name,
-        category,
-        layout_path,
-        platform: platform.to_string(),
-        compatibility: "approximate".to_string(),
-    }))
-}
-
 fn tables_for_scene(layout_path: &str) -> Vec<&'static str> {
     let lower = layout_path.to_ascii_lowercase();
     if lower.contains("auction") {
@@ -2331,6 +2191,25 @@ fn diagnostics_from_value(value: Option<&Value>) -> Vec<RuntimeDiagnostic> {
         .collect()
 }
 
+fn summarize_runtime_diagnostics(diagnostics: Vec<RuntimeDiagnostic>) -> Vec<RuntimeDiagnostic> {
+    let mut summaries = Vec::<RuntimeDiagnostic>::new();
+    let mut counts = BTreeMap::<String, usize>::new();
+    for diagnostic in diagnostics {
+        let count = counts.entry(diagnostic.code.clone()).or_default();
+        *count += 1;
+        if *count == 1 {
+            summaries.push(diagnostic);
+        }
+    }
+    for diagnostic in &mut summaries {
+        let count = counts.get(&diagnostic.code).copied().unwrap_or(1);
+        if count > 1 {
+            diagnostic.message = format!("{}（另有 {} 条同类诊断）", diagnostic.message, count - 1);
+        }
+    }
+    summaries
+}
+
 fn validate_runtime_scene_result(
     result: &Value,
     operation: &str,
@@ -2360,7 +2239,7 @@ fn validate_runtime_scene_result(
             format!("GUI_RUNTIME_RESPONSE_INVALID: {operation} diagnostics are invalid: {error}")
         })?,
     };
-    Ok((sequence, scene, diagnostics))
+    Ok((sequence, scene, summarize_runtime_diagnostics(diagnostics)))
 }
 
 fn runtime_id(prefix: &str) -> String {
@@ -2556,6 +2435,24 @@ mod tests {
     }
 
     #[test]
+    fn repeated_runtime_diagnostics_are_collapsed_by_code() {
+        let summaries = summarize_runtime_diagnostics(vec![
+            RuntimeDiagnostic {
+                code: "RUNTIME_API_APPROXIMATE".to_string(),
+                severity: "warning".to_string(),
+                message: "第一条".to_string(),
+            },
+            RuntimeDiagnostic {
+                code: "RUNTIME_API_APPROXIMATE".to_string(),
+                severity: "warning".to_string(),
+                message: "第二条".to_string(),
+            },
+        ]);
+        assert_eq!(summaries.len(), 1);
+        assert!(summaries[0].message.contains("另有 1 条同类诊断"));
+    }
+
+    #[test]
     fn six_scene_mock_profiles_are_offline_and_contain_no_credentials() {
         for profile in ["login", "hud-mobile", "hud-pc", "bag", "auction", "store"] {
             let encoded = serde_json::to_string(&scene_mock_values(profile)).unwrap();
@@ -2574,8 +2471,6 @@ mod tests {
         assert_eq!(presets.len(), 4);
         assert_eq!(presets[0].id, "character-create");
         assert_eq!(presets[1].id, "character-select");
-        assert_eq!(presets[2].default_map_id.as_deref(), Some("01"));
-        assert_eq!(presets[3].default_map_id.as_deref(), Some("1"));
         assert!(presets[2].overlay_ids.contains(&"bag".to_string()));
         assert!(presets[3].overlay_ids.contains(&"store".to_string()));
     }
