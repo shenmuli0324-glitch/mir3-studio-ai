@@ -396,6 +396,7 @@
   "studio.gui.canvas.empty": "Open a GUIExport file from the left",
   "studio.gui.canvas.empty_desc": "Static Lua is parsed into MIR3 UI DOM and previewed here as SVG.",
   "studio.gui.canvas.lightweight": "Lightweight preview · {{count}} nodes",
+  "studio.gui.canvas.template_normalized": "Local template centered · source coordinates unchanged",
   "studio.gui.canvas.too_large": "Canvas rendering paused for this large document",
   "studio.gui.canvas.too_large_desc": "This document contains {{count}} nodes. Code and diagnostics remain available; reduce or split the GUI before previewing it.",
   "studio.gui.canvas.render_error": "Canvas rendering stopped safely",

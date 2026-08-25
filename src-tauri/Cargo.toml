@@ -1,6 +1,6 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.8.0"
+version = "0.8.1"
 description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"

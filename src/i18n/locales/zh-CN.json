@@ -396,6 +396,7 @@
   "studio.gui.canvas.empty": "从左侧打开一个GUIExport文件",
   "studio.gui.canvas.empty_desc": "静态Lua将被解析为MIR3 UI DOM，并在这里以SVG预览。",
   "studio.gui.canvas.lightweight": "轻量预览 · {{count}}个节点",
+  "studio.gui.canvas.template_normalized": "局部模板已居中预览 · 源码坐标未改动",
   "studio.gui.canvas.too_large": "文档节点过多，已暂停画布渲染",
   "studio.gui.canvas.too_large_desc": "当前文档包含{{count}}个节点。Code与诊断仍可使用，请缩小页面或拆分GUI后再预览。",
   "studio.gui.canvas.render_error": "画布渲染已安全停止",

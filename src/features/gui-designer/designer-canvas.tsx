@@ -8,7 +8,7 @@ import { If } from 'react-if-lite'
 import { useScope } from '@/hooks/use-scope'
 import { setGuiAssetDecodingPaused } from './api'
 import { useCanvasAssets } from './canvas-assets'
-import { canvasRenderMode, matrixTransformValue, nodeLocalMatrix, renderedNodeSize, translatedNodeMatrix } from './canvas-render-model'
+import { canvasPreviewGroups, canvasRenderMode, matrixTransformValue, nodeLocalMatrix, renderedNodeSize, translatedNodeMatrix } from './canvas-render-model'
 import { isGuiComponentKind, renderAssetValue } from './component-catalog'
 import { GuiDesignerScope } from './gui-designer-scope'
 
@@ -60,6 +60,8 @@ export function DesignerCanvas() {
   const assets = useCanvasAssets(scope.activeProject?.id, nodes, renderMode === 'full', scope.selectedNodeId)
   const rootNodeIds = document?.roots ?? []
   const viewport = scope.viewport
+  const previewGroups = document == null ? [] : canvasPreviewGroups(document, rootNodeIds, viewport, node => nodeSize(node, assets))
+  const normalizedPreview = previewGroups.some(group => group.normalized)
 
   useEffect(() => {
     return () => {
@@ -201,7 +203,7 @@ export function DesignerCanvas() {
               <CanvasErrorBoundary key={`${scope.currentFile?.path ?? 'preview'}:${document?.sourceSha256 ?? 'working'}`} fallback={canvasFallback}>
                 <CanvasDocument
                   document={document!}
-                  rootNodeIds={rootNodeIds}
+                  previewGroups={previewGroups}
                   assets={assets}
                   lightweight={renderMode === 'lightweight'}
                   selectedNodeId={scope.selectedNodeId}
@@ -214,6 +216,9 @@ export function DesignerCanvas() {
                 />
               </CanvasErrorBoundary>
             </div>
+          </If>
+          <If cond={normalizedPreview}>
+            <div className="pointer-events-none absolute right-2 top-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-white/70">{t('studio.gui.canvas.template_normalized')}</div>
           </If>
           <If cond={renderMode === 'lightweight'}>
             <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[9px] text-white/70">{t('studio.gui.canvas.lightweight', { count: nodeCount })}</div>
@@ -231,9 +236,9 @@ export function DesignerCanvas() {
   )
 }
 
-function CanvasDocument({ document, rootNodeIds, assets, lightweight, selectedNodeId, viewport, zoom, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+function CanvasDocument({ document, previewGroups, assets, lightweight, selectedNodeId, viewport, zoom, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   document: Mir3UiDocument
-  rootNodeIds: string[]
+  previewGroups: ReturnType<typeof canvasPreviewGroups>
   assets: CanvasAssetTable
   lightweight: boolean
   selectedNodeId: string | null
@@ -254,17 +259,21 @@ function CanvasDocument({ document, rootNodeIds, assets, lightweight, selectedNo
       onPointerCancel={onPointerCancel}
     >
       <g transform={`translate(0 ${viewport.height}) scale(1 -1)`}>
-        {rootNodeIds.map(nodeId => (
-          <CanvasNode
-            key={nodeId}
-            nodeId={nodeId}
-            document={document}
-            assets={assets}
-            lightweight={lightweight}
-            selectedNodeId={selectedNodeId}
-            zoom={zoom}
-            ancestry={new Set()}
-          />
+        {previewGroups.map((group, groupIndex) => (
+          <g transform={matrixTransformValue(group.transform)} key={`${groupIndex}:${group.rootNodeIds.join(':')}`}>
+            {group.rootNodeIds.map(nodeId => (
+              <CanvasNode
+                key={nodeId}
+                nodeId={nodeId}
+                document={document}
+                assets={assets}
+                lightweight={lightweight}
+                selectedNodeId={selectedNodeId}
+                zoom={zoom}
+                ancestry={new Set()}
+              />
+            ))}
+          </g>
         ))}
       </g>
     </svg>

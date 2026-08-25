@@ -1,4 +1,4 @@
-import type { Mir3UiNode } from './types'
+import type { Mir3UiDocument, Mir3UiNode } from './types'
 import { componentDefinition, isContainerKind } from './component-catalog'
 
 export type CanvasRenderMode = 'full' | 'lightweight' | 'blocked'
@@ -15,6 +15,19 @@ export interface Matrix2D {
   d: number
   e: number
   f: number
+}
+
+export interface CanvasPreviewGroup {
+  rootNodeIds: string[]
+  transform: Matrix2D
+  normalized: boolean
+}
+
+interface CanvasBounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
 }
 
 export const LIGHTWEIGHT_NODE_THRESHOLD = 2000
@@ -98,6 +111,29 @@ export function translatedNodeMatrix(matrix: Matrix2D, deltaX: number, deltaY: n
   return { ...matrix, e: matrix.e + deltaX, f: matrix.f + deltaY }
 }
 
+export function canvasPreviewGroups(
+  document: Mir3UiDocument,
+  rootNodeIds: string[],
+  viewport: { width: number, height: number },
+  resolveSize: (node: Mir3UiNode) => CanvasNodeSize = node => renderedNodeSize(node),
+): CanvasPreviewGroup[] {
+  const viewportRoots: string[] = []
+  const templateRoots: string[] = []
+  for (const rootNodeId of rootNodeIds) {
+    const root = document.nodes[rootNodeId]
+    const size = root ? resolveSize(root) : { width: 0, height: 0 }
+    if (root && isContainerKind(root.kind) && size.width >= viewport.width * 0.9 && size.height >= viewport.height * 0.9)
+      viewportRoots.push(rootNodeId)
+    else
+      templateRoots.push(rootNodeId)
+  }
+
+  const groups = viewportRoots.map(rootNodeId => previewGroup(document, [rootNodeId], viewport, resolveSize))
+  if (templateRoots.length > 0)
+    groups.push(previewGroup(document, templateRoots, viewport, resolveSize))
+  return groups
+}
+
 function translationMatrix(x: number, y: number): Matrix2D {
   return { a: 1, b: 0, c: 0, d: 1, e: x, f: y }
 }
@@ -108,7 +144,7 @@ function rotationMatrix(angle: number): Matrix2D {
   return { a: cosine, b: sine, c: -sine, d: cosine, e: 0, f: 0 }
 }
 
-function multiplyMatrices(left: Matrix2D, right: Matrix2D): Matrix2D {
+export function multiplyMatrices(left: Matrix2D, right: Matrix2D): Matrix2D {
   return {
     a: left.a * right.a + left.c * right.b,
     b: left.b * right.a + left.d * right.b,
@@ -117,6 +153,108 @@ function multiplyMatrices(left: Matrix2D, right: Matrix2D): Matrix2D {
     e: left.a * right.e + left.c * right.f + left.e,
     f: left.b * right.e + left.d * right.f + left.f,
   }
+}
+
+function previewGroup(
+  document: Mir3UiDocument,
+  rootNodeIds: string[],
+  viewport: { width: number, height: number },
+  resolveSize: (node: Mir3UiNode) => CanvasNodeSize,
+): CanvasPreviewGroup {
+  const bounds = subtreeBounds(document, rootNodeIds, resolveSize)
+  if (!bounds)
+    return { rootNodeIds, transform: identityMatrix(), normalized: false }
+  const width = Math.max(1, bounds.maxX - bounds.minX)
+  const height = Math.max(1, bounds.maxY - bounds.minY)
+  const fillsViewport = width >= viewport.width * 0.9 && height >= viewport.height * 0.9
+  const fitsViewport = bounds.minX >= -0.5 && bounds.minY >= -0.5 && bounds.maxX <= viewport.width + 0.5 && bounds.maxY <= viewport.height + 0.5
+  if (fillsViewport && fitsViewport)
+    return { rootNodeIds, transform: identityMatrix(), normalized: false }
+
+  const padding = Math.min(24, viewport.width * 0.04, viewport.height * 0.04)
+  const scale = Math.min(1, (viewport.width - padding * 2) / width, (viewport.height - padding * 2) / height)
+  const targetX = (viewport.width - width * scale) / 2
+  const targetY = (viewport.height - height * scale) / 2
+  const transform = {
+    a: scale,
+    b: 0,
+    c: 0,
+    d: scale,
+    e: targetX - bounds.minX * scale,
+    f: targetY - bounds.minY * scale,
+  }
+  return { rootNodeIds, transform, normalized: !matrixIsIdentity(transform) }
+}
+
+function subtreeBounds(
+  document: Mir3UiDocument,
+  rootNodeIds: string[],
+  resolveSize: (node: Mir3UiNode) => CanvasNodeSize,
+): CanvasBounds | null {
+  let result: CanvasBounds | null = null
+  for (const rootNodeId of rootNodeIds)
+    result = visitNodeBounds(document, rootNodeId, identityMatrix(), resolveSize, new Set(), result)
+  return result
+}
+
+function visitNodeBounds(
+  document: Mir3UiDocument,
+  nodeId: string,
+  parentMatrix: Matrix2D,
+  resolveSize: (node: Mir3UiNode) => CanvasNodeSize,
+  ancestry: Set<string>,
+  bounds: CanvasBounds | null,
+): CanvasBounds | null {
+  const node = document.nodes[nodeId]
+  if (!node || node.visible?.value === false || ancestry.has(nodeId))
+    return bounds
+  const size = resolveSize(node)
+  const matrix = multiplyMatrices(parentMatrix, nodeLocalMatrix(node, size))
+  let nextBounds = size.width > 0 && size.height > 0 ? mergeBounds(bounds, transformedBounds(matrix, size)) : bounds
+  const nextAncestry = new Set(ancestry)
+  nextAncestry.add(nodeId)
+  for (const childId of node.children)
+    nextBounds = visitNodeBounds(document, childId, matrix, resolveSize, nextAncestry, nextBounds)
+  return nextBounds
+}
+
+function transformedBounds(matrix: Matrix2D, size: CanvasNodeSize): CanvasBounds {
+  const points = [
+    transformMatrixPoint(matrix, { x: 0, y: 0 }),
+    transformMatrixPoint(matrix, { x: size.width, y: 0 }),
+    transformMatrixPoint(matrix, { x: 0, y: size.height }),
+    transformMatrixPoint(matrix, { x: size.width, y: size.height }),
+  ]
+  return {
+    minX: Math.min(...points.map(point => point.x)),
+    minY: Math.min(...points.map(point => point.y)),
+    maxX: Math.max(...points.map(point => point.x)),
+    maxY: Math.max(...points.map(point => point.y)),
+  }
+}
+
+function mergeBounds(left: CanvasBounds | null, right: CanvasBounds): CanvasBounds {
+  if (!left)
+    return right
+  return {
+    minX: Math.min(left.minX, right.minX),
+    minY: Math.min(left.minY, right.minY),
+    maxX: Math.max(left.maxX, right.maxX),
+    maxY: Math.max(left.maxY, right.maxY),
+  }
+}
+
+function identityMatrix(): Matrix2D {
+  return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }
+}
+
+function matrixIsIdentity(matrix: Matrix2D): boolean {
+  return Math.abs(matrix.a - 1) < 0.000001
+    && Math.abs(matrix.b) < 0.000001
+    && Math.abs(matrix.c) < 0.000001
+    && Math.abs(matrix.d - 1) < 0.000001
+    && Math.abs(matrix.e) < 0.5
+    && Math.abs(matrix.f) < 0.5
 }
 
 function radians(degrees: number): number {
