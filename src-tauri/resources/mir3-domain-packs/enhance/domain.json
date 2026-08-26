@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "enhance",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -120,6 +120,63 @@
     "mappings": [
       "file-projection",
       "enhance.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "enhanceTier",
+        "aliases": [
+          "enhanceTier",
+          "EnhanceTier",
+          "enhance_tier",
+          "enhance-tier",
+          "enhance tier"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "equipmentClass",
+        "aliases": [
+          "equipmentClass",
+          "EquipmentClass",
+          "equipment_class",
+          "equipment-class",
+          "equipment class"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "successRateBasisPoints",
+        "aliases": [
+          "successRateBasisPoints",
+          "SuccessRateBasisPoints",
+          "success_rate_basis_points",
+          "success-rate-basis-points",
+          "success rate basis points"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "materialItemId",
+        "aliases": [
+          "materialItemId",
+          "MaterialItemId",
+          "material_item_id",
+          "material-item-id",
+          "material item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "failureMode",
+        "aliases": [
+          "failureMode",
+          "FailureMode",
+          "failure_mode",
+          "failure-mode",
+          "failure mode"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -648,7 +705,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -762,7 +819,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -856,7 +913,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -957,7 +1014,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1042,7 +1099,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

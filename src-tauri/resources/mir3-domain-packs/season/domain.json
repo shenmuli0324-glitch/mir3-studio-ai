@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "season",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -120,6 +120,63 @@
     "mappings": [
       "file-projection",
       "season.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "seasonId",
+        "aliases": [
+          "seasonId",
+          "SeasonId",
+          "season_id",
+          "season-id",
+          "season id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "startEpochSeconds",
+        "aliases": [
+          "startEpochSeconds",
+          "StartEpochSeconds",
+          "start_epoch_seconds",
+          "start-epoch-seconds",
+          "start epoch seconds"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "endEpochSeconds",
+        "aliases": [
+          "endEpochSeconds",
+          "EndEpochSeconds",
+          "end_epoch_seconds",
+          "end-epoch-seconds",
+          "end epoch seconds"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "rankingBoardId",
+        "aliases": [
+          "rankingBoardId",
+          "RankingBoardId",
+          "ranking_board_id",
+          "ranking-board-id",
+          "ranking board id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "seasonShopId",
+        "aliases": [
+          "seasonShopId",
+          "SeasonShopId",
+          "season_shop_id",
+          "season-shop-id",
+          "season shop id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -798,7 +855,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -895,7 +952,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -976,7 +1033,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1047,7 +1104,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1149,7 +1206,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1252,7 +1309,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1340,7 +1397,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "guild",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -123,6 +123,52 @@
     "mappings": [
       "file-projection",
       "guild.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "guildLevel",
+        "aliases": [
+          "guildLevel",
+          "GuildLevel",
+          "guild_level",
+          "guild-level",
+          "guild level"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "requiredContribution",
+        "aliases": [
+          "requiredContribution",
+          "RequiredContribution",
+          "required_contribution",
+          "required-contribution",
+          "required contribution"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "maximumMembers",
+        "aliases": [
+          "maximumMembers",
+          "MaximumMembers",
+          "maximum_members",
+          "maximum-members",
+          "maximum members"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "rankingBoardId",
+        "aliases": [
+          "rankingBoardId",
+          "RankingBoardId",
+          "ranking_board_id",
+          "ranking-board-id",
+          "ranking board id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -726,7 +772,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -819,7 +865,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -923,7 +969,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1014,7 +1060,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1111,7 +1157,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1197,7 +1243,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

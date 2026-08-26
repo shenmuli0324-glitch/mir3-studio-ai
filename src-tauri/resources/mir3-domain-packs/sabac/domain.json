@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "sabac",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -129,6 +129,63 @@
     "mappings": [
       "file-projection",
       "sabac.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "phaseId",
+        "aliases": [
+          "phaseId",
+          "PhaseId",
+          "phase_id",
+          "phase-id",
+          "phase id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "battleMapId",
+        "aliases": [
+          "battleMapId",
+          "BattleMapId",
+          "battle_map_id",
+          "battle-map-id",
+          "battle map id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "startMinute",
+        "aliases": [
+          "startMinute",
+          "StartMinute",
+          "start_minute",
+          "start-minute",
+          "start minute"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "endMinute",
+        "aliases": [
+          "endMinute",
+          "EndMinute",
+          "end_minute",
+          "end-minute",
+          "end minute"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "guildRewardItemId",
+        "aliases": [
+          "guildRewardItemId",
+          "GuildRewardItemId",
+          "guild_reward_item_id",
+          "guild-reward-item-id",
+          "guild reward item id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -930,7 +987,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1030,7 +1087,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1130,7 +1187,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1202,7 +1259,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1305,7 +1362,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1403,7 +1460,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1507,7 +1564,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1596,7 +1653,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

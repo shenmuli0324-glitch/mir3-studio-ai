@@ -8,7 +8,7 @@
       "targetMonsterId": "monster:fixture-1",
       "rewardItemId": "item:fixture-1",
       "minimumLevel": 256,
-      "nextQuestId": "quest-nextQuestId-1"
+      "nextQuestId": "quest-questId-1"
     },
     {
       "questId": "quest-questId-1",
@@ -16,7 +16,7 @@
       "targetMonsterId": "monster:fixture-2",
       "rewardItemId": "item:fixture-2",
       "minimumLevel": 3,
-      "nextQuestId": "quest-nextQuestId-2"
+      "nextQuestId": "quest-questId-1"
     }
   ],
   "referenceCatalog": {},

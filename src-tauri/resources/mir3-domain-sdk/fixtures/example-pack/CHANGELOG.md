@@ -1,5 +1,5 @@
 # Changelog
 
-## 1.2.0 - 2026-08-26
+## 1.3.0 - 2026-08-27
 
-- Added the complete Kernel API v1 manifest, resource schema, validation corpus, and safe operation dry-runs.
+- Added executable schema-backed field mappings to the runtime-installable example.

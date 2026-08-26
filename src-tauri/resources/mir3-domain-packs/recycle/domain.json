@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "recycle",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -120,6 +120,74 @@
     "mappings": [
       "file-projection",
       "recycle.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "ruleId",
+        "aliases": [
+          "ruleId",
+          "RuleId",
+          "rule_id",
+          "rule-id",
+          "rule id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "itemType",
+        "aliases": [
+          "itemType",
+          "ItemType",
+          "item_type",
+          "item-type",
+          "item type"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "minimumQuality",
+        "aliases": [
+          "minimumQuality",
+          "MinimumQuality",
+          "minimum_quality",
+          "minimum-quality",
+          "minimum quality"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "maximumQuality",
+        "aliases": [
+          "maximumQuality",
+          "MaximumQuality",
+          "maximum_quality",
+          "maximum-quality",
+          "maximum quality"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "currencyItemId",
+        "aliases": [
+          "currencyItemId",
+          "CurrencyItemId",
+          "currency_item_id",
+          "currency-item-id",
+          "currency item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "returnValue",
+        "aliases": [
+          "returnValue",
+          "ReturnValue",
+          "return_value",
+          "return-value",
+          "return value"
+        ],
+        "valueType": "integer"
+      }
     ],
     "dependencyEdges": [
       {
@@ -724,7 +792,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -833,7 +901,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -902,7 +970,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1011,7 +1079,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1114,7 +1182,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1199,7 +1267,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

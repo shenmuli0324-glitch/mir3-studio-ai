@@ -22,8 +22,11 @@ const MARK_START: &str = "# >>> MIR3 Studio AI system plugin >>>";
 const MARK_END: &str = "# <<< MIR3 Studio AI system plugin <<<";
 pub(super) const DOMAIN_KERNEL_VERSION: &str = "1.0.0";
 const DOMAIN_PACK_STATE_SCHEMA: u32 = 1;
+const DOMAIN_PACK_TRANSITION_SCHEMA: u32 = 2;
+const DOMAIN_PACK_TRANSITION_FILE: &str = ".state.transition";
 static DOMAIN_PACK_LIFECYCLE_LOCKS: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<()>>>>> =
     OnceLock::new();
+static ACTIVE_DOMAIN_PACK_TRANSITIONS: OnceLock<Mutex<BTreeSet<String>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +55,55 @@ pub struct DomainPackStateView {
     #[serde(flatten)]
     pub state: DomainPackState,
     pub changelog: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DomainPackTransitionJournal {
+    schema_version: u32,
+    system_id: String,
+    operation: String,
+    previous_state: DomainPackState,
+    #[serde(default = "default_transition_phase")]
+    phase: String,
+    #[serde(default)]
+    governance_snapshot: Option<Value>,
+}
+
+struct DomainPackTransition {
+    system_root: PathBuf,
+    key: String,
+    journal: DomainPackTransitionJournal,
+    completed: bool,
+}
+
+/// 治理迁移必须先把可恢复快照写入领域包日志，再允许修改 capability / memory。
+pub struct DomainPackTransitionContext<'a> {
+    transition: &'a mut DomainPackTransition,
+}
+
+impl DomainPackTransitionContext<'_> {
+    pub fn persist_governance_snapshot<T: Serialize>(
+        &mut self,
+        snapshot: &T,
+    ) -> Result<(), String> {
+        self.transition.journal.governance_snapshot = Some(
+            serde_json::to_value(snapshot)
+                .map_err(|error| format!("DOMAIN_PACK_GOVERNANCE_SNAPSHOT_INVALID: {error}"))?,
+        );
+        self.transition.journal.phase = "governance-snapshotted".to_string();
+        rewrite_domain_pack_transition(&self.transition.system_root, &self.transition.journal)
+    }
+
+    pub fn mark_governance_migrated(&mut self) -> Result<(), String> {
+        if self.transition.journal.governance_snapshot.is_none() {
+            return Err(
+                "DOMAIN_PACK_GOVERNANCE_SNAPSHOT_REQUIRED: persist before migration".to_string(),
+            );
+        }
+        self.transition.journal.phase = "governance-migrated".to_string();
+        rewrite_domain_pack_transition(&self.transition.system_root, &self.transition.journal)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,12 +145,21 @@ pub fn ensure(app: &AppHandle) -> Result<(), String> {
         .join("mir3-996-development");
     replace_directory(&skill_source, &skill_destination)?;
 
+    let project_service = app.state::<service::project::ProjectService>();
+    let domain_pack_root = config::get_dsh_data_path(app).join("domain-packs");
+    recover_domain_pack_transitions(&domain_pack_root, |value| {
+        let snapshot: mir3_domain::GovernanceSnapshot = serde_json::from_value(value.clone())
+            .map_err(|error| format!("DOMAIN_PACK_GOVERNANCE_SNAPSHOT_INVALID: {error}"))?;
+        project_service
+            .store()
+            .restore_domain_governance_snapshot(&snapshot)
+    })?;
+
     // 领域包损坏不能阻断 Harness 启动；Kernel 会在包不可用时进入只读诊断。
     if let Err(error) = ensure_bundled_domain_packs(app) {
         log::error!("MIR3 domain packs unavailable: {error}");
     }
 
-    let project_service = app.state::<service::project::ProjectService>();
     let active_project = project_service.store().active_project()?;
     let mcp_binary = service::project::mcp_binary_path(app);
     let patch = render_patch(app, active_project.as_ref(), mcp_binary.as_deref());
@@ -296,6 +357,7 @@ fn activate_domain_pack_candidate_unlocked(
 
 /// 候选只有在运行时 canary 成功后才推进 LKG；canary 或 LKG 提交失败时，
 /// 必须立即恢复 previous/LKG，避免 current 指向尚未验收的领域契约。
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn activate_domain_pack_with_canary<F>(
     destination_root: &Path,
     system_id: &str,
@@ -306,31 +368,100 @@ pub fn activate_domain_pack_with_canary<F>(
 where
     F: FnOnce(&DomainPackState) -> Result<(), String>,
 {
+    activate_domain_pack_with_governance_canary(
+        destination_root,
+        system_id,
+        expected_version,
+        expected_hash,
+        |state, _| canary(state),
+        |_| Ok(()),
+    )
+}
+
+/// 桌面治理迁移与包指针共用一份持久日志；日志删除前任一失败都恢复两侧旧状态。
+pub fn activate_domain_pack_with_governance_canary<F, R>(
+    destination_root: &Path,
+    system_id: &str,
+    expected_version: &str,
+    expected_hash: &str,
+    canary: F,
+    restore_governance: R,
+) -> Result<DomainPackState, String>
+where
+    F: FnOnce(&DomainPackState, &mut DomainPackTransitionContext<'_>) -> Result<(), String>,
+    R: Fn(&Value) -> Result<(), String>,
+{
     validate_system_id(system_id)?;
     with_domain_pack_lifecycle_lock(destination_root, system_id, || {
-        let activated = activate_domain_pack_candidate_unlocked(
+        let system_root = destination_root.join(system_id);
+        let previous_state = read_domain_pack_state(&system_root, system_id)?;
+        let mut transition =
+            begin_domain_pack_transition(&system_root, system_id, "activate", &previous_state)?;
+        let activated = match activate_domain_pack_candidate_unlocked(
             destination_root,
             system_id,
             expected_version,
             expected_hash,
-        )?;
-        if let Err(error) = canary(&activated) {
-            let rollback = rollback_domain_pack_unlocked(destination_root, system_id);
+        ) {
+            Ok(activated) => activated,
+            Err(error) => {
+                let rollback = transition.restore();
+                return Err(format_transition_failure(error, rollback));
+            }
+        };
+        transition.journal.phase = "pack-switched".to_string();
+        if let Err(error) = rewrite_domain_pack_transition(&system_root, &transition.journal) {
+            let rollback = transition.restore_with_governance(&restore_governance);
+            return Err(format_transition_failure(error, rollback));
+        }
+        let canary_result = {
+            let mut context = DomainPackTransitionContext {
+                transition: &mut transition,
+            };
+            canary(&activated, &mut context)
+        };
+        if let Err(error) = canary_result {
+            let rollback = transition.restore_with_governance(&restore_governance);
             return Err(format!(
                 "DOMAIN_PACK_RUNTIME_CANARY_FAILED: {error}; rollback={}",
                 rollback
-                    .map(|_| "ok".to_string())
+                    .map(|()| "ok".to_string())
                     .unwrap_or_else(|rollback_error| rollback_error)
             ));
         }
+        transition.journal.phase = "canary-passed".to_string();
+        if let Err(error) = rewrite_domain_pack_transition(&system_root, &transition.journal) {
+            let rollback = transition.restore_with_governance(&restore_governance);
+            return Err(format_transition_failure(error, rollback));
+        }
         match mark_domain_pack_lkg_unlocked(destination_root, system_id) {
-            Ok(stable) => Ok(stable),
+            Ok(stable) => {
+                transition.journal.phase = "lkg-committed".to_string();
+                if let Err(error) =
+                    rewrite_domain_pack_transition(&system_root, &transition.journal)
+                {
+                    let rollback = transition.restore_with_governance(&restore_governance);
+                    return Err(format_transition_failure(error, rollback));
+                }
+                match transition.commit() {
+                    Ok(()) => Ok(stable),
+                    Err(error) => {
+                        let rollback = transition.restore_with_governance(&restore_governance);
+                        Err(format!(
+                            "DOMAIN_PACK_TRANSITION_COMMIT_FAILED: {error}; rollback={}",
+                            rollback
+                                .map(|()| "ok".to_string())
+                                .unwrap_or_else(|rollback_error| rollback_error)
+                        ))
+                    }
+                }
+            }
             Err(error) => {
-                let rollback = rollback_domain_pack_unlocked(destination_root, system_id);
+                let rollback = transition.restore_with_governance(&restore_governance);
                 Err(format!(
                     "DOMAIN_PACK_LKG_COMMIT_FAILED: {error}; rollback={}",
                     rollback
-                        .map(|_| "ok".to_string())
+                        .map(|()| "ok".to_string())
                         .unwrap_or_else(|rollback_error| rollback_error)
                 ))
             }
@@ -366,6 +497,7 @@ fn mark_domain_pack_lkg_unlocked(
 }
 
 /// 候选失败时优先恢复 previous，否则恢复 LKG；失败版本仍保留供诊断。
+#[cfg(test)]
 pub fn rollback_domain_pack(
     destination_root: &Path,
     system_id: &str,
@@ -373,6 +505,104 @@ pub fn rollback_domain_pack(
     validate_system_id(system_id)?;
     with_domain_pack_lifecycle_lock(destination_root, system_id, || {
         rollback_domain_pack_unlocked(destination_root, system_id)
+    })
+}
+
+/// 回滚指针只有在运行时与治理迁移 canary 成功后才提交；失败精确恢复切换前状态。
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn rollback_domain_pack_with_canary<F>(
+    destination_root: &Path,
+    system_id: &str,
+    canary: F,
+) -> Result<DomainPackState, String>
+where
+    F: FnOnce(&DomainPackState) -> Result<(), String>,
+{
+    rollback_domain_pack_with_governance_canary(
+        destination_root,
+        system_id,
+        |state, _| canary(state),
+        |_| Ok(()),
+    )
+}
+
+pub fn rollback_domain_pack_with_governance_canary<F, R>(
+    destination_root: &Path,
+    system_id: &str,
+    canary: F,
+    restore_governance: R,
+) -> Result<DomainPackState, String>
+where
+    F: FnOnce(&DomainPackState, &mut DomainPackTransitionContext<'_>) -> Result<(), String>,
+    R: Fn(&Value) -> Result<(), String>,
+{
+    validate_system_id(system_id)?;
+    with_domain_pack_lifecycle_lock(destination_root, system_id, || {
+        let system_root = destination_root.join(system_id);
+        let previous_state = read_domain_pack_state(&system_root, system_id)?;
+        let mut transition =
+            begin_domain_pack_transition(&system_root, system_id, "rollback", &previous_state)?;
+        let rolled_back = match rollback_domain_pack_unlocked(destination_root, system_id) {
+            Ok(rolled_back) => rolled_back,
+            Err(error) => {
+                let rollback = transition.restore();
+                return Err(format_transition_failure(error, rollback));
+            }
+        };
+        transition.journal.phase = "pack-switched".to_string();
+        if let Err(error) = rewrite_domain_pack_transition(&system_root, &transition.journal) {
+            let rollback = transition.restore_with_governance(&restore_governance);
+            return Err(format_transition_failure(error, rollback));
+        }
+        let canary_result = {
+            let mut context = DomainPackTransitionContext {
+                transition: &mut transition,
+            };
+            canary(&rolled_back, &mut context)
+        };
+        if let Err(error) = canary_result {
+            let rollback = transition.restore_with_governance(&restore_governance);
+            return Err(format!(
+                "DOMAIN_PACK_ROLLBACK_CANARY_FAILED: {error}; rollback={}",
+                rollback
+                    .map(|()| "ok".to_string())
+                    .unwrap_or_else(|rollback_error| rollback_error)
+            ));
+        }
+        transition.journal.phase = "canary-passed".to_string();
+        if let Err(error) = rewrite_domain_pack_transition(&system_root, &transition.journal) {
+            let rollback = transition.restore_with_governance(&restore_governance);
+            return Err(format_transition_failure(error, rollback));
+        }
+        let stable = match mark_domain_pack_lkg_unlocked(destination_root, system_id) {
+            Ok(stable) => stable,
+            Err(error) => {
+                let rollback = transition.restore_with_governance(&restore_governance);
+                return Err(format!(
+                    "DOMAIN_PACK_LKG_COMMIT_FAILED: {error}; rollback={}",
+                    rollback
+                        .map(|()| "ok".to_string())
+                        .unwrap_or_else(|rollback_error| rollback_error)
+                ));
+            }
+        };
+        transition.journal.phase = "lkg-committed".to_string();
+        if let Err(error) = rewrite_domain_pack_transition(&system_root, &transition.journal) {
+            let rollback = transition.restore_with_governance(&restore_governance);
+            return Err(format_transition_failure(error, rollback));
+        }
+        match transition.commit() {
+            Ok(()) => Ok(stable),
+            Err(error) => {
+                let rollback = transition.restore_with_governance(&restore_governance);
+                Err(format!(
+                    "DOMAIN_PACK_TRANSITION_COMMIT_FAILED: {error}; rollback={}",
+                    rollback
+                        .map(|()| "ok".to_string())
+                        .unwrap_or_else(|rollback_error| rollback_error)
+                ))
+            }
+        }
     })
 }
 
@@ -670,7 +900,312 @@ fn validate_release_pointer(system_id: &str, release: &DomainPackRelease) -> Res
     Ok(())
 }
 
+impl DomainPackTransition {
+    fn restore(&mut self) -> Result<(), String> {
+        self.restore_with_governance(|_| Ok(()))
+    }
+
+    fn restore_with_governance(
+        &mut self,
+        restore_governance: impl FnOnce(&Value) -> Result<(), String>,
+    ) -> Result<(), String> {
+        if let Some(snapshot) = &self.journal.governance_snapshot {
+            restore_governance(snapshot)
+                .map_err(|error| format!("DOMAIN_PACK_GOVERNANCE_RESTORE_FAILED: {error}"))?;
+        }
+        persist_domain_pack_state(&self.system_root, &self.journal.previous_state)
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_RESTORE_FAILED: {error}"))?;
+        remove_path_if_exists(&self.system_root.join(DOMAIN_PACK_TRANSITION_FILE))
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_CLEANUP_FAILED: {error}"))?;
+        sync_domain_pack_directory(&self.system_root)?;
+        self.completed = true;
+        unregister_active_domain_pack_transition(&self.key);
+        Ok(())
+    }
+
+    fn commit(&mut self) -> Result<(), String> {
+        remove_path_if_exists(&self.system_root.join(DOMAIN_PACK_TRANSITION_FILE))
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_CLEANUP_FAILED: {error}"))?;
+        sync_domain_pack_directory(&self.system_root)?;
+        self.completed = true;
+        unregister_active_domain_pack_transition(&self.key);
+        Ok(())
+    }
+}
+
+fn default_transition_phase() -> String {
+    "prepared".to_string()
+}
+
+impl Drop for DomainPackTransition {
+    fn drop(&mut self) {
+        if !self.completed {
+            unregister_active_domain_pack_transition(&self.key);
+        }
+    }
+}
+
+fn begin_domain_pack_transition(
+    system_root: &Path,
+    system_id: &str,
+    operation: &str,
+    previous_state: &DomainPackState,
+) -> Result<DomainPackTransition, String> {
+    let key = domain_pack_transition_key(system_root);
+    register_active_domain_pack_transition(&key)?;
+    let journal = DomainPackTransitionJournal {
+        schema_version: DOMAIN_PACK_TRANSITION_SCHEMA,
+        system_id: system_id.to_string(),
+        operation: operation.to_string(),
+        previous_state: previous_state.clone(),
+        phase: default_transition_phase(),
+        governance_snapshot: None,
+    };
+    if let Err(error) = persist_domain_pack_transition(system_root, &journal) {
+        unregister_active_domain_pack_transition(&key);
+        return Err(error);
+    }
+    Ok(DomainPackTransition {
+        system_root: system_root.to_path_buf(),
+        key,
+        journal,
+        completed: false,
+    })
+}
+
+fn persist_domain_pack_transition(
+    system_root: &Path,
+    journal: &DomainPackTransitionJournal,
+) -> Result<(), String> {
+    fs::create_dir_all(system_root)
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_ROOT_CREATE_FAILED: {error}"))?;
+    let path = system_root.join(DOMAIN_PACK_TRANSITION_FILE);
+    if path.exists() {
+        return Err("DOMAIN_PACK_TRANSITION_ALREADY_PENDING: recovery is required".to_string());
+    }
+    let pending = system_root.join(format!(".state-transition-{}.pending", std::process::id()));
+    remove_path_if_exists(&pending)?;
+    let content = format!(
+        "{}\n",
+        serde_json::to_string_pretty(journal)
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_RENDER_FAILED: {error}"))?
+    );
+    let mut pending_file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&pending)
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_WRITE_FAILED: {error}"))?;
+    pending_file
+        .write_all(content.as_bytes())
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_WRITE_FAILED: {error}"))?;
+    pending_file
+        .sync_all()
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_SYNC_FAILED: {error}"))?;
+    drop(pending_file);
+    fs::rename(&pending, &path).map_err(|error| {
+        let _ = remove_path_if_exists(&pending);
+        format!("DOMAIN_PACK_TRANSITION_COMMIT_FAILED: {error}")
+    })?;
+    sync_domain_pack_directory(system_root)
+}
+
+fn rewrite_domain_pack_transition(
+    system_root: &Path,
+    journal: &DomainPackTransitionJournal,
+) -> Result<(), String> {
+    let path = system_root.join(DOMAIN_PACK_TRANSITION_FILE);
+    if !path.is_file() {
+        return Err("DOMAIN_PACK_TRANSITION_MISSING: recovery is required".to_string());
+    }
+    let pending = system_root.join(format!(
+        ".state-transition-{}-rewrite.pending",
+        std::process::id()
+    ));
+    remove_path_if_exists(&pending)?;
+    let content = format!(
+        "{}\n",
+        serde_json::to_string_pretty(journal)
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_RENDER_FAILED: {error}"))?
+    );
+    let mut pending_file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&pending)
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_WRITE_FAILED: {error}"))?;
+    pending_file
+        .write_all(content.as_bytes())
+        .and_then(|()| pending_file.sync_all())
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_SYNC_FAILED: {error}"))?;
+    drop(pending_file);
+    let backup = system_root.join(".state.transition.previous");
+    remove_path_if_exists(&backup)?;
+    fs::rename(&path, &backup)
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_COMMIT_FAILED: {error}"))?;
+    if let Err(error) = fs::rename(&pending, &path) {
+        let _ = fs::rename(&backup, &path);
+        let _ = remove_path_if_exists(&pending);
+        return Err(format!("DOMAIN_PACK_TRANSITION_COMMIT_FAILED: {error}"));
+    }
+    remove_path_if_exists(&backup)?;
+    sync_domain_pack_directory(system_root)
+}
+
+fn read_domain_pack_transition(
+    system_root: &Path,
+    system_id: &str,
+) -> Result<Option<DomainPackTransitionJournal>, String> {
+    let path = system_root.join(DOMAIN_PACK_TRANSITION_FILE);
+    let backup = system_root.join(".state.transition.previous");
+    if !path.exists() && backup.is_file() {
+        fs::rename(&backup, &path)
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_RECOVERY_FAILED: {error}"))?;
+    } else if path.is_file() && backup.is_file() {
+        remove_path_if_exists(&backup)?;
+    }
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let journal: DomainPackTransitionJournal = serde_json::from_str(
+        &fs::read_to_string(&path)
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_READ_FAILED: {error}"))?,
+    )
+    .map_err(|error| format!("DOMAIN_PACK_TRANSITION_INVALID: {error}"))?;
+    if !matches!(journal.schema_version, 1 | DOMAIN_PACK_TRANSITION_SCHEMA)
+        || journal.system_id != system_id
+        || !matches!(journal.operation.as_str(), "activate" | "rollback")
+        || journal.previous_state.schema_version != DOMAIN_PACK_STATE_SCHEMA
+        || journal.previous_state.system_id != system_id
+        || !matches!(
+            journal.phase.as_str(),
+            "prepared"
+                | "pack-switched"
+                | "governance-snapshotted"
+                | "governance-migrated"
+                | "canary-passed"
+                | "lkg-committed"
+        )
+    {
+        return Err(format!("DOMAIN_PACK_TRANSITION_INCOMPATIBLE: {system_id}"));
+    }
+    Ok(Some(journal))
+}
+
+fn recover_interrupted_domain_pack_transition(
+    system_root: &Path,
+    system_id: &str,
+    restore_governance: impl FnOnce(&Value) -> Result<(), String>,
+) -> Result<(), String> {
+    if is_active_domain_pack_transition(&domain_pack_transition_key(system_root))? {
+        return Ok(());
+    }
+    let Some(journal) = read_domain_pack_transition(system_root, system_id)? else {
+        return Ok(());
+    };
+    if let Some(snapshot) = &journal.governance_snapshot {
+        restore_governance(snapshot)
+            .map_err(|error| format!("DOMAIN_PACK_GOVERNANCE_RECOVERY_FAILED: {error}"))?;
+    }
+    persist_domain_pack_state(system_root, &journal.previous_state)
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_RECOVERY_FAILED: {error}"))?;
+    remove_path_if_exists(&system_root.join(DOMAIN_PACK_TRANSITION_FILE))
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_CLEANUP_FAILED: {error}"))?;
+    sync_domain_pack_directory(system_root)
+}
+
+/// 启动时先恢复所有未提交的领域包和治理快照；恢复函数必须是幂等的。
+pub fn recover_domain_pack_transitions(
+    destination_root: &Path,
+    restore_governance: impl Fn(&Value) -> Result<(), String>,
+) -> Result<(), String> {
+    if !destination_root.is_dir() {
+        return Ok(());
+    }
+    let mut systems = fs::read_dir(destination_root)
+        .map_err(|error| format!("DOMAIN_PACK_ROOT_READ_FAILED: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("DOMAIN_PACK_ROOT_READ_FAILED: {error}"))?;
+    systems.sort_by_key(fs::DirEntry::file_name);
+    for entry in systems {
+        if !entry
+            .file_type()
+            .map_err(|error| format!("DOMAIN_PACK_ROOT_METADATA_FAILED: {error}"))?
+            .is_dir()
+        {
+            continue;
+        }
+        let system_id = entry.file_name().to_string_lossy().into_owned();
+        if validate_system_id(&system_id).is_err() {
+            continue;
+        }
+        with_domain_pack_lifecycle_lock(destination_root, &system_id, || {
+            recover_interrupted_domain_pack_transition(&entry.path(), &system_id, |snapshot| {
+                restore_governance(snapshot)
+            })
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_domain_pack_directory(system_root: &Path) -> Result<(), String> {
+    File::open(system_root)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("DOMAIN_PACK_TRANSITION_DIRECTORY_SYNC_FAILED: {error}"))
+}
+
+#[cfg(windows)]
+fn sync_domain_pack_directory(_system_root: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+fn domain_pack_transition_key(system_root: &Path) -> String {
+    system_root.to_string_lossy().into_owned()
+}
+
+fn register_active_domain_pack_transition(key: &str) -> Result<(), String> {
+    let mut active = ACTIVE_DOMAIN_PACK_TRANSITIONS
+        .get_or_init(|| Mutex::new(BTreeSet::new()))
+        .lock()
+        .map_err(|_| "DOMAIN_PACK_TRANSITION_LOCK_POISONED: registry".to_string())?;
+    if !active.insert(key.to_string()) {
+        return Err("DOMAIN_PACK_TRANSITION_ALREADY_ACTIVE: lifecycle conflict".to_string());
+    }
+    Ok(())
+}
+
+fn unregister_active_domain_pack_transition(key: &str) {
+    if let Ok(mut active) = ACTIVE_DOMAIN_PACK_TRANSITIONS
+        .get_or_init(|| Mutex::new(BTreeSet::new()))
+        .lock()
+    {
+        active.remove(key);
+    }
+}
+
+fn is_active_domain_pack_transition(key: &str) -> Result<bool, String> {
+    ACTIVE_DOMAIN_PACK_TRANSITIONS
+        .get_or_init(|| Mutex::new(BTreeSet::new()))
+        .lock()
+        .map(|active| active.contains(key))
+        .map_err(|_| "DOMAIN_PACK_TRANSITION_LOCK_POISONED: registry".to_string())
+}
+
+fn format_transition_failure(error: String, rollback: Result<(), String>) -> String {
+    format!(
+        "{error}; rollback={}",
+        rollback
+            .map(|()| "ok".to_string())
+            .unwrap_or_else(|rollback_error| rollback_error)
+    )
+}
+
 fn read_domain_pack_state(system_root: &Path, system_id: &str) -> Result<DomainPackState, String> {
+    if !is_active_domain_pack_transition(&domain_pack_transition_key(system_root))? {
+        if let Some(journal) = read_domain_pack_transition(system_root, system_id)? {
+            // 未提交事务只向普通调用者暴露旧指针；治理恢复由持有 DomainStore 的启动层执行。
+            return Ok(journal.previous_state);
+        }
+    }
     let path = system_root.join("state.json");
     let backup = system_root.join(".state.previous");
     // 上次切换若在 Windows 的两次 rename 之间中断，优先恢复已 fsync 的旧状态。
@@ -1268,6 +1803,207 @@ mod tests {
     }
 
     #[test]
+    fn first_activation_canary_failure_restores_candidate_without_current() {
+        let root = test_directory("domain-pack-first-canary-failure");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let staged = stage_domain_pack_candidate(&root, &source).unwrap();
+        let candidate = staged.candidate.as_ref().unwrap();
+        let error = activate_domain_pack_with_canary(
+            &root,
+            "level",
+            &candidate.version,
+            &candidate.hash,
+            |_| Err("runtime assert rejected first activation".to_string()),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("DOMAIN_PACK_RUNTIME_CANARY_FAILED:"));
+        assert!(error.ends_with("rollback=ok"));
+        let restored = read_domain_pack_state(&root.join("level"), "level").unwrap();
+        assert_eq!(restored, staged);
+        assert!(restored.current.is_none());
+        assert!(restored.candidate.is_some());
+        assert!(!root
+            .join("level")
+            .join(DOMAIN_PACK_TRANSITION_FILE)
+            .exists());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn interrupted_governed_activation_exposes_committed_state_and_recovers_snapshot() {
+        let base = test_directory("domain-pack-activation-crash");
+        let installed = base.join("installed");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let (_, next_version) = test_pack_versions(&source);
+        stage_domain_pack_candidate(&installed, &source).unwrap();
+        activate_staged_candidate(&installed, "level").unwrap();
+        mark_domain_pack_lkg(&installed, "level").unwrap();
+        let candidate_source = base.join("candidate");
+        copy_directory(&source, &candidate_source).unwrap();
+        set_test_pack_version(&candidate_source, &next_version);
+        let before = stage_domain_pack_candidate(&installed, &candidate_source).unwrap();
+        let candidate = before.candidate.as_ref().unwrap();
+        let system_root = installed.join("level");
+        let mut transition =
+            begin_domain_pack_transition(&system_root, "level", "activate", &before).unwrap();
+        let switched = activate_domain_pack_candidate_unlocked(
+            &installed,
+            "level",
+            &candidate.version,
+            &candidate.hash,
+        )
+        .unwrap();
+        assert_eq!(switched.current.as_ref().unwrap().version, next_version);
+        transition.journal.phase = "pack-switched".to_string();
+        rewrite_domain_pack_transition(&system_root, &transition.journal).unwrap();
+        {
+            let mut context = DomainPackTransitionContext {
+                transition: &mut transition,
+            };
+            context
+                .persist_governance_snapshot(&serde_json::json!({
+                    "systemId":"level",
+                    "capability":"old",
+                    "memory":"old"
+                }))
+                .unwrap();
+            context.mark_governance_migrated().unwrap();
+        }
+        assert!(system_root.join(DOMAIN_PACK_TRANSITION_FILE).is_file());
+
+        // 模拟治理迁移后进程退出：普通读取只见旧状态，日志留给持久恢复。
+        drop(transition);
+        let visible = read_domain_pack_state(&system_root, "level").unwrap();
+        assert_eq!(visible, before);
+        assert!(system_root.join(DOMAIN_PACK_TRANSITION_FILE).is_file());
+        let runtime = mir3_domain::DomainStore::new_with_domain_pack_root(
+            base.join("runtime-data"),
+            installed.clone(),
+        )
+        .unwrap();
+        let committed = runtime
+            .list_domain_systems()
+            .unwrap()
+            .into_iter()
+            .find(|manifest| manifest.system_id == "level")
+            .unwrap();
+        assert_eq!(committed.version, before.current.as_ref().unwrap().version);
+        assert_eq!(
+            runtime
+                .domain_manifest_at_version("level", &next_version)
+                .unwrap()
+                .version,
+            next_version
+        );
+        let physical: DomainPackState =
+            serde_json::from_str(&fs::read_to_string(system_root.join("state.json")).unwrap())
+                .unwrap();
+        assert_eq!(physical.current.as_ref().unwrap().version, next_version);
+
+        let error = recover_domain_pack_transitions(&installed, |_| {
+            Err("fixture governance database unavailable".to_string())
+        })
+        .unwrap_err();
+        assert!(error.starts_with("DOMAIN_PACK_GOVERNANCE_RECOVERY_FAILED:"));
+        assert!(system_root.join(DOMAIN_PACK_TRANSITION_FILE).is_file());
+        assert_eq!(
+            read_domain_pack_state(&system_root, "level").unwrap(),
+            before
+        );
+
+        let restored_governance = std::cell::Cell::new(false);
+        recover_domain_pack_transitions(&installed, |snapshot| {
+            assert_eq!(snapshot["capability"], "old");
+            assert_eq!(snapshot["memory"], "old");
+            restored_governance.set(true);
+            Ok(())
+        })
+        .unwrap();
+        assert!(restored_governance.get());
+        let recovered = read_domain_pack_state(&system_root, "level").unwrap();
+        assert_eq!(recovered, before);
+        assert!(!system_root.join(DOMAIN_PACK_TRANSITION_FILE).exists());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn rollback_canary_failure_restores_newer_current_and_success_commits_target() {
+        let base = test_directory("domain-pack-rollback-canary");
+        let installed = base.join("installed");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let (original_version, next_version) = test_pack_versions(&source);
+        stage_domain_pack_candidate(&installed, &source).unwrap();
+        activate_staged_candidate(&installed, "level").unwrap();
+        mark_domain_pack_lkg(&installed, "level").unwrap();
+        let candidate_source = base.join("candidate");
+        copy_directory(&source, &candidate_source).unwrap();
+        set_test_pack_version(&candidate_source, &next_version);
+        let staged = stage_domain_pack_candidate(&installed, &candidate_source).unwrap();
+        let candidate = staged.candidate.as_ref().unwrap();
+        let stable = activate_domain_pack_with_canary(
+            &installed,
+            "level",
+            &candidate.version,
+            &candidate.hash,
+            |_| Ok(()),
+        )
+        .unwrap();
+
+        let system_root = installed.join("level");
+        let interrupted =
+            begin_domain_pack_transition(&system_root, "level", "rollback", &stable).unwrap();
+        let temporary = rollback_domain_pack_unlocked(&installed, "level").unwrap();
+        assert_eq!(
+            temporary.current.as_ref().unwrap().version,
+            original_version
+        );
+        drop(interrupted);
+        assert_eq!(
+            read_domain_pack_state(&system_root, "level").unwrap(),
+            stable
+        );
+        assert!(system_root.join(DOMAIN_PACK_TRANSITION_FILE).is_file());
+        recover_domain_pack_transitions(&installed, |_| Ok(())).unwrap();
+
+        let error = rollback_domain_pack_with_canary(&installed, "level", |_| {
+            Err("runtime assert rejected rollback".to_string())
+        })
+        .unwrap_err();
+        assert!(error.starts_with("DOMAIN_PACK_ROLLBACK_CANARY_FAILED:"));
+        assert!(error.ends_with("rollback=ok"));
+        assert_eq!(
+            read_domain_pack_state(&installed.join("level"), "level").unwrap(),
+            stable
+        );
+
+        let rolled_back = rollback_domain_pack_with_canary(&installed, "level", |state| {
+            assert_eq!(state.current.as_ref().unwrap().version, original_version);
+            assert_eq!(state.previous.as_ref().unwrap().version, next_version);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(
+            rolled_back.current.as_ref().unwrap().version,
+            original_version
+        );
+        assert_eq!(rolled_back.lkg, rolled_back.current);
+        assert!(!installed
+            .join("level")
+            .join(DOMAIN_PACK_TRANSITION_FILE)
+            .exists());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn domain_pack_activation_rejects_tampered_release() {
         let root = test_directory("domain-pack-tamper");
         let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1333,7 +2069,10 @@ mod tests {
         .unwrap();
 
         let error = stage_domain_pack_candidate(&installed, &candidate).unwrap_err();
-        assert!(error.starts_with("DOMAIN_PACK_FIXTURE_VALID_REJECTED:"));
+        assert!(
+            error.starts_with("DOMAIN_PACK_FIXTURE_RUNTIME_VALID_REJECTED:"),
+            "unexpected canary error: {error}"
+        );
         let state = read_domain_pack_state(&installed.join("level"), "level").unwrap();
         assert_eq!(
             state.current.as_ref().unwrap().version,

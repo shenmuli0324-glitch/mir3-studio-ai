@@ -2795,13 +2795,14 @@ version = "0.1.0"
 dependencies = [
  "easyexcel-xls",
  "mir3-domain",
+ "semver",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "mir3-studio-ai"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arboard",
  "async-trait",

@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "resource_production",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -123,6 +123,74 @@
     "mappings": [
       "file-projection",
       "resource_production.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "pointId",
+        "aliases": [
+          "pointId",
+          "PointId",
+          "point_id",
+          "point-id",
+          "point id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "mapId",
+        "aliases": [
+          "mapId",
+          "MapId",
+          "map_id",
+          "map-id",
+          "map id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "outputItemId",
+        "aliases": [
+          "outputItemId",
+          "OutputItemId",
+          "output_item_id",
+          "output-item-id",
+          "output item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "intervalSeconds",
+        "aliases": [
+          "intervalSeconds",
+          "IntervalSeconds",
+          "interval_seconds",
+          "interval-seconds",
+          "interval seconds"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "yieldCount",
+        "aliases": [
+          "yieldCount",
+          "YieldCount",
+          "yield_count",
+          "yield-count",
+          "yield count"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "guardMonsterId",
+        "aliases": [
+          "guardMonsterId",
+          "GuardMonsterId",
+          "guard_monster_id",
+          "guard-monster-id",
+          "guard monster id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -771,7 +839,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -874,7 +942,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -975,7 +1043,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1082,7 +1150,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1189,7 +1257,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1277,7 +1345,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

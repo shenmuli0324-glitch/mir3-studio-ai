@@ -14,7 +14,7 @@
       "pointId": "resource_production-pointId-1",
       "mapId": "map:fixture-2",
       "outputItemId": "item:fixture-2",
-      "intervalSeconds": 3,
+      "intervalSeconds": 0,
       "yieldCount": 3,
       "guardMonsterId": "monster:fixture-2"
     }

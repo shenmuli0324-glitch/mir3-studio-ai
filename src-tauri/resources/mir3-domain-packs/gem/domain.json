@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "gem",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -129,6 +129,63 @@
     "mappings": [
       "file-projection",
       "gem.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "gemId",
+        "aliases": [
+          "gemId",
+          "GemId",
+          "gem_id",
+          "gem-id",
+          "gem id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "gemTier",
+        "aliases": [
+          "gemTier",
+          "GemTier",
+          "gem_tier",
+          "gem-tier",
+          "gem tier"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "socketType",
+        "aliases": [
+          "socketType",
+          "SocketType",
+          "socket_type",
+          "socket-type",
+          "socket type"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "itemId",
+        "aliases": [
+          "itemId",
+          "ItemId",
+          "item_id",
+          "item-id",
+          "item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "grantedBuffId",
+        "aliases": [
+          "grantedBuffId",
+          "GrantedBuffId",
+          "granted_buff_id",
+          "granted-buff-id",
+          "granted buff id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -775,7 +832,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -888,7 +945,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -990,7 +1047,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1090,7 +1147,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1196,7 +1253,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1283,7 +1340,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

@@ -3,6 +3,7 @@
 //! 该模块只解释公共 Schema、唯一键、范围、引用和运行时断言契约，不包含任何
 //! 领域 ID 分支，因此 33 个包和后续兼容包共享同一条激活前验证路径。
 
+use crate::runtime_validators::{validate_runtime_rule, RuntimeProjectedRecord};
 use crate::{validate_domain_pack_manifest, DomainManifest, DomainValidatorContract};
 use regex::Regex;
 use serde::de::DeserializeOwned;
@@ -357,6 +358,17 @@ fn execute_runtime_assertions(
     diagnostics: &mut BTreeSet<String>,
 ) -> Result<(), String> {
     let runtime = validator(manifest, "runtime-diagnostics")?;
+    let records = fixture
+        .records
+        .iter()
+        .enumerate()
+        .map(|(index, record)| RuntimeProjectedRecord {
+            path: format!("fixture/{}/{index}.json", manifest.system_id),
+            role: "project".to_string(),
+            value: Value::Object(record.clone()),
+        })
+        .collect::<Vec<_>>();
+    let outcome = validate_runtime_rule(&runtime.rule, &records);
     for assertion in &fixture.runtime_assertions {
         if assertion.rule != runtime.rule {
             return Err(format!(
@@ -364,9 +376,27 @@ fn execute_runtime_assertions(
                 manifest.system_id, runtime.rule, assertion.rule
             ));
         }
-        if !assertion.expected {
-            diagnostics.insert(format!("{}.runtime", manifest.system_id));
+        if assertion.expected != outcome.valid {
+            return Err(format!(
+                "DOMAIN_PACK_FIXTURE_RUNTIME_ASSERTION_MISMATCH: {}:{} expected {}, got {} ({})",
+                manifest.system_id,
+                runtime.rule,
+                assertion.expected,
+                outcome.valid,
+                outcome.diagnostics.join(" | ")
+            ));
         }
+    }
+    if !outcome.valid {
+        diagnostics.insert(format!("{}.runtime", manifest.system_id));
+    }
+    if fixture.fixture == "valid" && !outcome.valid {
+        return Err(format!(
+            "DOMAIN_PACK_FIXTURE_RUNTIME_VALID_REJECTED: {}:{}: {}",
+            manifest.system_id,
+            runtime.rule,
+            outcome.diagnostics.join(" | ")
+        ));
     }
     if fixture.fixture == "invalid"
         && !fixture

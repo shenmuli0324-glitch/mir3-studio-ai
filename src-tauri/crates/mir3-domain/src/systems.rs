@@ -2,18 +2,171 @@
 //!
 //! 领域包只描述安全的资源与操作，不拥有 Harness 生命周期，也不能直接写项目。
 
-use crate::DomainStore;
+use crate::{
+    validate_client_engine_records, validate_required_engine_evidence, validate_runtime_rule,
+    DomainStore, RuntimeEngineEvidence, RuntimeProjectedRecord, RuntimeValidatorOutcome,
+};
 use rusqlite::{params, OptionalExtension};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
 
 const REGISTRY_JSON: &str = include_str!("../../../resources/mir3-domain-packs/registry.json");
+const MAX_RESOURCE_SCHEMA_BYTES: u64 = 2 * 1024 * 1024;
+const BUNDLED_RESOURCE_SCHEMAS: &[(&str, &str)] = &[
+    (
+        "map",
+        include_str!("../../../resources/mir3-domain-packs/map/schemas/resource.schema.json"),
+    ),
+    (
+        "npc",
+        include_str!("../../../resources/mir3-domain-packs/npc/schemas/resource.schema.json"),
+    ),
+    (
+        "monster",
+        include_str!("../../../resources/mir3-domain-packs/monster/schemas/resource.schema.json"),
+    ),
+    (
+        "equipment",
+        include_str!("../../../resources/mir3-domain-packs/equipment/schemas/resource.schema.json"),
+    ),
+    (
+        "item",
+        include_str!("../../../resources/mir3-domain-packs/item/schemas/resource.schema.json"),
+    ),
+    (
+        "level",
+        include_str!("../../../resources/mir3-domain-packs/level/schemas/resource.schema.json"),
+    ),
+    (
+        "rebirth",
+        include_str!("../../../resources/mir3-domain-packs/rebirth/schemas/resource.schema.json"),
+    ),
+    (
+        "title",
+        include_str!("../../../resources/mir3-domain-packs/title/schemas/resource.schema.json"),
+    ),
+    (
+        "buff",
+        include_str!("../../../resources/mir3-domain-packs/buff/schemas/resource.schema.json"),
+    ),
+    (
+        "skill",
+        include_str!("../../../resources/mir3-domain-packs/skill/schemas/resource.schema.json"),
+    ),
+    (
+        "enhance",
+        include_str!("../../../resources/mir3-domain-packs/enhance/schemas/resource.schema.json"),
+    ),
+    (
+        "crafting",
+        include_str!("../../../resources/mir3-domain-packs/crafting/schemas/resource.schema.json"),
+    ),
+    (
+        "gem",
+        include_str!("../../../resources/mir3-domain-packs/gem/schemas/resource.schema.json"),
+    ),
+    (
+        "refine",
+        include_str!("../../../resources/mir3-domain-packs/refine/schemas/resource.schema.json"),
+    ),
+    (
+        "quest",
+        include_str!("../../../resources/mir3-domain-packs/quest/schemas/resource.schema.json"),
+    ),
+    (
+        "checkin",
+        include_str!("../../../resources/mir3-domain-packs/checkin/schemas/resource.schema.json"),
+    ),
+    (
+        "online_reward",
+        include_str!(
+            "../../../resources/mir3-domain-packs/online_reward/schemas/resource.schema.json"
+        ),
+    ),
+    (
+        "limited_event",
+        include_str!(
+            "../../../resources/mir3-domain-packs/limited_event/schemas/resource.schema.json"
+        ),
+    ),
+    (
+        "launch_event",
+        include_str!(
+            "../../../resources/mir3-domain-packs/launch_event/schemas/resource.schema.json"
+        ),
+    ),
+    (
+        "first_charge",
+        include_str!(
+            "../../../resources/mir3-domain-packs/first_charge/schemas/resource.schema.json"
+        ),
+    ),
+    (
+        "cumulative_charge",
+        include_str!(
+            "../../../resources/mir3-domain-packs/cumulative_charge/schemas/resource.schema.json"
+        ),
+    ),
+    (
+        "vip",
+        include_str!("../../../resources/mir3-domain-packs/vip/schemas/resource.schema.json"),
+    ),
+    (
+        "shop",
+        include_str!("../../../resources/mir3-domain-packs/shop/schemas/resource.schema.json"),
+    ),
+    (
+        "recycle",
+        include_str!("../../../resources/mir3-domain-packs/recycle/schemas/resource.schema.json"),
+    ),
+    (
+        "guild",
+        include_str!("../../../resources/mir3-domain-packs/guild/schemas/resource.schema.json"),
+    ),
+    (
+        "sabac",
+        include_str!("../../../resources/mir3-domain-packs/sabac/schemas/resource.schema.json"),
+    ),
+    (
+        "ranking",
+        include_str!("../../../resources/mir3-domain-packs/ranking/schemas/resource.schema.json"),
+    ),
+    (
+        "resource_production",
+        include_str!(
+            "../../../resources/mir3-domain-packs/resource_production/schemas/resource.schema.json"
+        ),
+    ),
+    (
+        "manor",
+        include_str!("../../../resources/mir3-domain-packs/manor/schemas/resource.schema.json"),
+    ),
+    (
+        "hero_soul",
+        include_str!("../../../resources/mir3-domain-packs/hero_soul/schemas/resource.schema.json"),
+    ),
+    (
+        "talent",
+        include_str!("../../../resources/mir3-domain-packs/talent/schemas/resource.schema.json"),
+    ),
+    (
+        "season",
+        include_str!("../../../resources/mir3-domain-packs/season/schemas/resource.schema.json"),
+    ),
+    (
+        "cross_server",
+        include_str!(
+            "../../../resources/mir3-domain-packs/cross_server/schemas/resource.schema.json"
+        ),
+    ),
+];
 static REGISTRY: OnceLock<DomainRegistry> = OnceLock::new();
 const DOMAIN_PACK_STATE_SCHEMA: u32 = 1;
 const DOMAIN_KERNEL_VERSION: &str = "1.0.0";
@@ -26,7 +179,7 @@ struct RuntimeDomainPackRelease {
     directory: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeDomainPackState {
     schema_version: u32,
@@ -36,6 +189,14 @@ struct RuntimeDomainPackState {
     current: Option<RuntimeDomainPackRelease>,
     previous: Option<RuntimeDomainPackRelease>,
     lkg: Option<RuntimeDomainPackRelease>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeDomainPackTransition {
+    schema_version: u32,
+    system_id: String,
+    previous_state: RuntimeDomainPackState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,9 +339,21 @@ pub struct DomainResourcesContract {
     #[serde(default)]
     pub mappings: Vec<String>,
     #[serde(default)]
+    pub field_mappings: Vec<DomainFieldMapping>,
+    #[serde(default)]
     pub dependency_edges: Vec<DomainDependencyEdge>,
     #[serde(default)]
     pub unique_key: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainFieldMapping {
+    pub field: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    #[serde(default)]
+    pub value_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -479,15 +652,7 @@ impl DomainStore {
             return Ok(manifest);
         }
         let system_root = packs_root.join(system_id);
-        let state_path = system_root.join("state.json");
-        let state: RuntimeDomainPackState = serde_json::from_str(
-            &fs::read_to_string(&state_path)
-                .map_err(|error| format!("DOMAIN_PACK_STATE_READ_FAILED: {system_id}: {error}"))?,
-        )
-        .map_err(|error| format!("DOMAIN_PACK_STATE_INVALID: {system_id}: {error}"))?;
-        if state.schema_version != DOMAIN_PACK_STATE_SCHEMA || state.system_id != system_id {
-            return Err(format!("DOMAIN_PACK_STATE_INCOMPATIBLE: {system_id}"));
-        }
+        let state = read_committed_runtime_pack_state(&system_root, system_id)?;
         // 显式固定版本代表已经运行中的任务/Draft；禁用只阻止新任务取得 current，
         // 不在提交途中热切换旧任务的契约。
         if !state.enabled && version.is_none() {
@@ -549,6 +714,217 @@ impl DomainStore {
             packs,
         })
     }
+
+    /// Schema 必须与当前任务固定的领域包版本来自同一份已验哈希发布目录。
+    fn load_runtime_resource_schema(&self, manifest: &DomainManifest) -> Result<Value, String> {
+        let packs_root = self.domain_pack_root();
+        if !packs_root.is_dir() {
+            let content = BUNDLED_RESOURCE_SCHEMAS
+                .iter()
+                .find_map(|(system_id, content)| {
+                    (*system_id == manifest.system_id).then_some(*content)
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "DOMAIN_SCHEMA_BUNDLED_MISSING: {}@{}",
+                        manifest.system_id, manifest.version
+                    )
+                })?;
+            return serde_json::from_str(content)
+                .map_err(|error| format!("DOMAIN_SCHEMA_JSON_INVALID: {error}"));
+        }
+
+        let system_root = packs_root.join(&manifest.system_id);
+        let state = read_committed_runtime_pack_state(&system_root, &manifest.system_id)?;
+
+        let mut failures = Vec::new();
+        for release in [&state.current, &state.lkg, &state.previous]
+            .into_iter()
+            .flatten()
+            .filter(|release| release.version == manifest.version)
+        {
+            match load_runtime_release_schema(&system_root, manifest, release) {
+                Ok(schema) => return Ok(schema),
+                Err(error) => failures.push(error),
+            }
+        }
+
+        let releases_root = system_root.join("releases");
+        let entries = fs::read_dir(&releases_root).map_err(|error| {
+            format!(
+                "DOMAIN_PACK_RELEASES_READ_FAILED: {}: {error}",
+                releases_root.display()
+            )
+        })?;
+        let mut schemas = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.map_err(|error| format!("DOMAIN_PACK_RELEASES_READ_FAILED: {error}"))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|error| format!("DOMAIN_PACK_HASH_METADATA_FAILED: {error}"))?;
+            if file_type.is_symlink() {
+                failures.push(format!(
+                    "DOMAIN_PACK_SYMLINK_FORBIDDEN: {}",
+                    entry.path().display()
+                ));
+                continue;
+            }
+            if !file_type.is_dir() {
+                continue;
+            }
+            let candidate: DomainManifest =
+                match fs::read_to_string(entry.path().join("domain.json"))
+                    .map_err(|error| format!("DOMAIN_PACK_MANIFEST_READ_FAILED: {error}"))
+                    .and_then(|content| {
+                        serde_json::from_str(&content)
+                            .map_err(|error| format!("DOMAIN_PACK_MANIFEST_INVALID: {error}"))
+                    }) {
+                    Ok(candidate) => candidate,
+                    Err(error) => {
+                        failures.push(error);
+                        continue;
+                    }
+                };
+            if candidate.system_id != manifest.system_id || candidate.version != manifest.version {
+                continue;
+            }
+            let actual_hash = match hash_runtime_release(&entry.path()) {
+                Ok(hash) => hash,
+                Err(error) => {
+                    failures.push(error);
+                    continue;
+                }
+            };
+            let release = RuntimeDomainPackRelease {
+                version: manifest.version.clone(),
+                hash: actual_hash,
+                directory: entry.file_name().to_string_lossy().into_owned(),
+            };
+            match load_runtime_release_schema(&system_root, manifest, &release) {
+                Ok(schema) => schemas.push(schema),
+                Err(error) => failures.push(error),
+            }
+        }
+        match schemas.len() {
+            1 => Ok(schemas.remove(0)),
+            0 => Err(format!(
+                "DOMAIN_SCHEMA_VERSION_UNAVAILABLE: {}@{}: {}",
+                manifest.system_id,
+                manifest.version,
+                failures.join(" | ")
+            )),
+            _ => Err(format!(
+                "DOMAIN_SCHEMA_VERSION_AMBIGUOUS: {}@{} has multiple verified releases",
+                manifest.system_id, manifest.version
+            )),
+        }
+    }
+}
+
+/// 事务日志存在即说明新指针尚未提交；所有普通 runtime 只能读取日志中的旧状态。
+fn read_committed_runtime_pack_state(
+    system_root: &Path,
+    system_id: &str,
+) -> Result<RuntimeDomainPackState, String> {
+    let transition_path = system_root.join(".state.transition");
+    let transition_backup = system_root.join(".state.transition.previous");
+    let transition_source = if transition_path.is_file() {
+        Some(transition_path)
+    } else if transition_backup.is_file() {
+        Some(transition_backup)
+    } else {
+        None
+    };
+    if let Some(path) = transition_source {
+        let transition: RuntimeDomainPackTransition =
+            serde_json::from_str(&fs::read_to_string(&path).map_err(|error| {
+                format!("DOMAIN_PACK_TRANSITION_READ_FAILED: {system_id}: {error}")
+            })?)
+            .map_err(|error| format!("DOMAIN_PACK_TRANSITION_INVALID: {system_id}: {error}"))?;
+        if !matches!(transition.schema_version, 1 | 2)
+            || transition.system_id != system_id
+            || transition.previous_state.schema_version != DOMAIN_PACK_STATE_SCHEMA
+            || transition.previous_state.system_id != system_id
+        {
+            return Err(format!("DOMAIN_PACK_TRANSITION_INCOMPATIBLE: {system_id}"));
+        }
+        return Ok(transition.previous_state);
+    }
+    let state: RuntimeDomainPackState = serde_json::from_str(
+        &fs::read_to_string(system_root.join("state.json"))
+            .map_err(|error| format!("DOMAIN_PACK_STATE_READ_FAILED: {system_id}: {error}"))?,
+    )
+    .map_err(|error| format!("DOMAIN_PACK_STATE_INVALID: {system_id}: {error}"))?;
+    if state.schema_version != DOMAIN_PACK_STATE_SCHEMA || state.system_id != system_id {
+        return Err(format!("DOMAIN_PACK_STATE_INCOMPATIBLE: {system_id}"));
+    }
+    Ok(state)
+}
+
+fn load_runtime_release_schema(
+    system_root: &Path,
+    manifest: &DomainManifest,
+    release: &RuntimeDomainPackRelease,
+) -> Result<Value, String> {
+    let loaded = load_runtime_release(system_root, &manifest.system_id, release)?;
+    let loaded_contract = serde_json::to_value(&loaded)
+        .map_err(|error| format!("DOMAIN_SCHEMA_MANIFEST_ENCODE_FAILED: {error}"))?;
+    let expected_contract = serde_json::to_value(manifest)
+        .map_err(|error| format!("DOMAIN_SCHEMA_MANIFEST_ENCODE_FAILED: {error}"))?;
+    if loaded_contract != expected_contract {
+        return Err(format!(
+            "DOMAIN_SCHEMA_MANIFEST_MISMATCH: {}@{}",
+            manifest.system_id, manifest.version
+        ));
+    }
+    let release_root = system_root.join("releases").join(&release.directory);
+    let path = resolve_runtime_contract_path(&release_root, &manifest.resources.schema)?;
+    let metadata =
+        fs::metadata(&path).map_err(|error| format!("DOMAIN_SCHEMA_METADATA_FAILED: {error}"))?;
+    if metadata.len() > MAX_RESOURCE_SCHEMA_BYTES {
+        return Err(format!(
+            "DOMAIN_SCHEMA_TOO_LARGE: {} exceeds {} bytes",
+            path.display(),
+            MAX_RESOURCE_SCHEMA_BYTES
+        ));
+    }
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("DOMAIN_SCHEMA_READ_FAILED: {}: {error}", path.display()))?;
+    if hash_runtime_release(&release_root)? != release.hash {
+        return Err(format!(
+            "DOMAIN_PACK_RELEASE_HASH_MISMATCH: {}",
+            manifest.system_id
+        ));
+    }
+    serde_json::from_str(&content)
+        .map_err(|error| format!("DOMAIN_SCHEMA_JSON_INVALID: {}: {error}", path.display()))
+}
+
+fn resolve_runtime_contract_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let relative_path = Path::new(relative);
+    if relative.is_empty()
+        || relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(format!("DOMAIN_SCHEMA_PATH_INVALID: {relative}"));
+    }
+    let canonical_root =
+        fs::canonicalize(root).map_err(|error| format!("DOMAIN_SCHEMA_ROOT_INVALID: {error}"))?;
+    let target = canonical_root.join(relative_path);
+    let metadata = fs::symlink_metadata(&target)
+        .map_err(|error| format!("DOMAIN_SCHEMA_METADATA_FAILED: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!("DOMAIN_SCHEMA_FILE_INVALID: {}", target.display()));
+    }
+    let canonical = fs::canonicalize(&target)
+        .map_err(|error| format!("DOMAIN_SCHEMA_PATH_INVALID: {error}"))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err(format!("DOMAIN_SCHEMA_PATH_ESCAPE: {}", target.display()));
+    }
+    Ok(canonical)
 }
 
 fn default_runtime_pack_enabled() -> bool {
@@ -738,6 +1114,15 @@ fn collect_runtime_release_files(
 impl DomainStore {
     pub fn list_domain_systems(&self) -> Result<Vec<DomainManifest>, String> {
         Ok(self.runtime_domain_registry()?.packs)
+    }
+
+    /// 升级 canary 可显式读取待验版本；普通列表仍只暴露已提交版本。
+    pub fn domain_manifest_at_version(
+        &self,
+        system_id: &str,
+        version: &str,
+    ) -> Result<DomainManifest, String> {
+        self.runtime_manifest_at_version(system_id, Some(version))
     }
 
     pub fn describe_domain_system(
@@ -1033,6 +1418,13 @@ impl DomainStore {
             .cloned()
             .collect::<Vec<_>>();
         let files = self.validation_files_for_manifest(project_id, manifest, overlay)?;
+        let resource_schema = self.load_runtime_resource_schema(manifest);
+        let projected_records = resource_schema
+            .as_ref()
+            .map(|schema| {
+                project_runtime_schema_records(&files, schema, &manifest.resources.field_mappings)
+            })
+            .unwrap_or_default();
         let mut validators = Vec::with_capacity(manifest.validators.len());
         for validator in &manifest.validators {
             validators.push(self.execute_domain_validator(
@@ -1041,9 +1433,37 @@ impl DomainStore {
                 &files,
                 validator,
                 &missing_dependencies,
+                &resource_schema,
+                &projected_records,
             ));
         }
         let engine_compatibility = self.assert_project_engine_compatible(project_id, manifest);
+        let schema_validation = validators
+            .iter()
+            .find(|validator| validator.kind == "schema");
+        let project = self.get_project(project_id)?;
+        let evidence = RuntimeEngineEvidence {
+            project_directory_layout: verified_project_directory_layout(
+                &project.root,
+                &project.client_root,
+                &project.engine_root,
+            ),
+            owned_projection: !files.is_empty(),
+            resource_schema_valid: schema_validation.is_some_and(|validator| validator.valid),
+            resource_schema_checked: schema_validation.map_or(0, |validator| validator.checked),
+        };
+        let engine_evidence = if manifest.engine_compatibility.required_evidence.is_empty() {
+            RuntimeValidatorOutcome {
+                valid: true,
+                checked: 0,
+                diagnostics: Vec::new(),
+            }
+        } else {
+            validate_required_engine_evidence(
+                &manifest.engine_compatibility.required_evidence,
+                &evidence,
+            )
+        };
         let mut diagnostics = Vec::new();
         if let Err(error) = &engine_compatibility {
             diagnostics.push(error.clone());
@@ -1057,6 +1477,7 @@ impl DomainStore {
         if !missing_dependencies.is_empty() {
             diagnostics.push("DOMAIN_DEPENDENCY_MISSING".to_string());
         }
+        diagnostics.extend(engine_evidence.diagnostics.iter().cloned());
         diagnostics.extend(
             validators
                 .iter()
@@ -1069,6 +1490,7 @@ impl DomainStore {
         Ok(DomainValidationReport {
             system_id: manifest.system_id.clone(),
             valid: engine_compatibility.is_ok()
+                && engine_evidence.valid
                 && missing_dependencies.is_empty()
                 && validators.iter().all(|value| value.valid),
             owned_files: files.len(),
@@ -1080,6 +1502,8 @@ impl DomainStore {
         })
     }
 
+    // 校验器执行上下文必须显式携带固定 Manifest、Schema 与投影，避免隐式读取错版本。
+    #[allow(clippy::too_many_arguments)]
     fn execute_domain_validator(
         &self,
         project_id: &str,
@@ -1087,6 +1511,8 @@ impl DomainStore {
         files: &[DomainValidationFile],
         validator: &DomainValidatorContract,
         missing_dependencies: &[String],
+        resource_schema: &Result<Value, String>,
+        projected_records: &[RuntimeProjectedRecord],
     ) -> DomainValidatorResult {
         let mut valid = true;
         let mut checked = 0;
@@ -1111,7 +1537,6 @@ impl DomainStore {
                 }
             }
             "schema" => {
-                checked = files.len();
                 if validator.schema != manifest.resources.schema
                     || !manifest
                         .resources
@@ -1122,6 +1547,14 @@ impl DomainStore {
                     valid = false;
                     diagnostics.push("DOMAIN_SCHEMA_CONTRACT_MISMATCH".to_string());
                 }
+                let schema = match resource_schema {
+                    Ok(schema) => Some(schema),
+                    Err(error) => {
+                        valid = false;
+                        diagnostics.push(error.clone());
+                        None
+                    }
+                };
                 for file in files {
                     if file.record.resource_id
                         != stable_resource_id(manifest, &file.record.path, file.content.as_deref())
@@ -1133,6 +1566,44 @@ impl DomainStore {
                         valid = false;
                         diagnostics
                             .push(format!("DOMAIN_SCHEMA_FILE_INVALID:{}", file.record.path));
+                    }
+                    let Some(schema) = schema else {
+                        continue;
+                    };
+                    let Some(content) = file.content.as_deref() else {
+                        if file.record.access != "readonly" {
+                            valid = false;
+                            diagnostics.push(format!(
+                                "DOMAIN_SCHEMA_PROJECTION_MISSING:{}",
+                                file.record.path
+                            ));
+                        }
+                        continue;
+                    };
+                    let records =
+                        project_schema_records(content, schema, &manifest.resources.field_mappings);
+                    if records.is_empty() {
+                        if file.record.access != "readonly" {
+                            valid = false;
+                            diagnostics
+                                .push(format!("DOMAIN_SCHEMA_RECORD_MISSING:{}", file.record.path));
+                        }
+                        continue;
+                    }
+                    for (index, record) in records.iter().enumerate() {
+                        checked += 1;
+                        let typed_record = schema_guided_record(schema, record);
+                        if let Err(errors) = validate_projected_schema_record(schema, &typed_record)
+                        {
+                            valid = false;
+                            diagnostics.extend(errors.into_iter().map(|error| {
+                                format!(
+                                    "DOMAIN_SCHEMA_RECORD_INVALID:{}:{}:{error}",
+                                    file.record.path,
+                                    index + 1
+                                )
+                            }));
+                        }
                     }
                 }
             }
@@ -1151,18 +1622,28 @@ impl DomainStore {
                 }
                 if let Some(fields) = validator.fields.as_array() {
                     for field in fields.iter().filter_map(serde_json::Value::as_str) {
-                        let mut values = BTreeSet::new();
-                        for file in files {
-                            if let Some(content) = &file.content {
-                                for value in extract_field_values(&content, field) {
-                                    checked += 1;
-                                    if !values.insert(value.clone()) {
-                                        valid = false;
-                                        diagnostics.push(format!(
-                                            "DOMAIN_UNIQUENESS_FIELD_CONFLICT:{field}:{value}"
-                                        ));
-                                    }
-                                }
+                        let mut values_by_role = BTreeMap::<&str, BTreeSet<String>>::new();
+                        for record in projected_records {
+                            let Some(value) = record.value.get(field) else {
+                                continue;
+                            };
+                            let value = match value {
+                                Value::String(value) => value.clone(),
+                                Value::Number(value) => value.to_string(),
+                                Value::Bool(value) => value.to_string(),
+                                _ => continue,
+                            };
+                            checked += 1;
+                            if !values_by_role
+                                .entry(record.role.as_str())
+                                .or_default()
+                                .insert(value.clone())
+                            {
+                                valid = false;
+                                diagnostics.push(format!(
+                                    "DOMAIN_UNIQUENESS_FIELD_CONFLICT:{}:{field}:{value}",
+                                    record.role
+                                ));
                             }
                         }
                     }
@@ -1200,7 +1681,7 @@ impl DomainStore {
                             .unwrap_or(f64::INFINITY);
                         for file in files {
                             if let Some(content) = &file.content {
-                                for value in extract_field_values(&content, field) {
+                                for value in extract_field_values(content, field) {
                                     checked += 1;
                                     match value.parse::<f64>() {
                                         Ok(number) if number >= minimum && number <= maximum => {}
@@ -1239,17 +1720,26 @@ impl DomainStore {
                             reference.system_id
                         ));
                     }
-                    let referenced_values = files
+                    let referenced_values = projected_records
                         .iter()
-                        .filter_map(|file| file.content.clone())
-                        .flat_map(|content| extract_field_values(&content, &reference.field))
+                        .filter_map(|record| record.value.get(&reference.field))
+                        .filter_map(scalar_value_string)
                         .collect::<BTreeSet<_>>();
                     if referenced_values.is_empty() {
                         continue;
                     }
-                    let dependency_values = self
-                        .validation_dependency_values(project_id, &reference.system_id)
-                        .unwrap_or_default();
+                    let dependency_values =
+                        match self.validation_dependency_values(project_id, &reference.system_id) {
+                            Ok(values) => values,
+                            Err(error) => {
+                                valid = false;
+                                diagnostics.push(format!(
+                                    "DOMAIN_REFERENCE_DEPENDENCY_UNAVAILABLE:{}:{error}",
+                                    reference.system_id
+                                ));
+                                continue;
+                            }
+                        };
                     for value in referenced_values {
                         checked += 1;
                         if reference.required && !dependency_values.contains(&value) {
@@ -1269,60 +1759,17 @@ impl DomainStore {
                 }
             }
             "client-engine-consistency" => {
-                checked = files.len();
-                let client = files.iter().any(|file| file.record.role == "client");
-                let engine = files.iter().any(|file| file.record.role == "engine");
-                if client != engine {
-                    diagnostics.push("DOMAIN_CLIENT_ENGINE_SIDE_INCOMPLETE".to_string());
-                }
-                if validator.match_by.is_empty() || validator.compare_fields.is_empty() {
-                    valid = false;
-                    diagnostics.push("DOMAIN_CLIENT_ENGINE_RULE_INVALID".to_string());
-                }
-                if client && engine && !validator.match_by.is_empty() {
-                    let values_for_role = |role: &str| {
-                        files
-                            .iter()
-                            .filter(|file| file.record.role == role)
-                            .filter_map(|file| file.content.clone())
-                            .flat_map(|content| extract_field_values(&content, &validator.match_by))
-                            .collect::<BTreeSet<_>>()
-                    };
-                    let client_values = values_for_role("client");
-                    let engine_values = values_for_role("engine");
-                    checked += client_values.len() + engine_values.len();
-                    if validator.missing_projection == "error"
-                        && !client_values.is_empty()
-                        && !engine_values.is_empty()
-                        && client_values != engine_values
-                    {
-                        valid = false;
-                        diagnostics.push("DOMAIN_CLIENT_ENGINE_KEY_MISMATCH".to_string());
-                    }
-                    for field in &validator.compare_fields {
-                        let values_for_field = |role: &str| {
-                            files
-                                .iter()
-                                .filter(|file| file.record.role == role)
-                                .filter_map(|file| file.content.clone())
-                                .flat_map(|content| extract_field_values(&content, field))
-                                .collect::<BTreeSet<_>>()
-                        };
-                        let client_fields = values_for_field("client");
-                        let engine_fields = values_for_field("engine");
-                        if !client_fields.is_empty()
-                            && !engine_fields.is_empty()
-                            && client_fields != engine_fields
-                        {
-                            valid = false;
-                            diagnostics
-                                .push(format!("DOMAIN_CLIENT_ENGINE_FIELD_MISMATCH:{field}"));
-                        }
-                    }
-                }
+                let outcome = validate_client_engine_records(
+                    &validator.match_by,
+                    &validator.compare_fields,
+                    &validator.missing_projection,
+                    projected_records,
+                );
+                valid = outcome.valid;
+                checked = outcome.checked;
+                diagnostics = outcome.diagnostics;
             }
             "runtime-diagnostics" => {
-                checked = files.iter().filter(|file| file.content.is_some()).count();
                 if files.is_empty() {
                     diagnostics.push("DOMAIN_RUNTIME_NO_MATCHED_FILES".to_string());
                 }
@@ -1340,10 +1787,10 @@ impl DomainStore {
                     valid = false;
                     diagnostics.push("DOMAIN_RUNTIME_CONTENT_UNAVAILABLE".to_string());
                 }
-                if let Err(error) = validate_runtime_overlay_rule(&validator.rule, files) {
-                    valid = false;
-                    diagnostics.push(error);
-                }
+                let outcome = validate_runtime_rule(&validator.rule, projected_records);
+                checked = outcome.checked;
+                valid &= outcome.valid;
+                diagnostics.extend(outcome.diagnostics);
             }
             _ => {
                 valid = false;
@@ -1512,6 +1959,7 @@ impl DomainStore {
         system_id: &str,
     ) -> Result<BTreeSet<String>, String> {
         let manifest = self.runtime_manifest(system_id)?;
+        let schema = self.load_runtime_resource_schema(&manifest)?;
         let files = self.validation_files_for_manifest(project_id, &manifest, None)?;
         Ok(manifest
             .resources
@@ -1521,7 +1969,10 @@ impl DomainStore {
                 files
                     .iter()
                     .filter_map(|file| file.content.as_deref())
-                    .flat_map(|content| extract_field_values(content, field))
+                    .flat_map(|content| {
+                        project_schema_records(content, &schema, &manifest.resources.field_mappings)
+                    })
+                    .filter_map(move |record| record.get(field).and_then(scalar_value_string))
             })
             .collect())
     }
@@ -1584,7 +2035,7 @@ impl DomainStore {
         system_id: &str,
         resource_id: &str,
     ) -> Result<DomainResourceRecord, String> {
-        if let Some(resource) = self
+        if let Some(mut resource) = self
             .query_domain_resources(
                 project_id,
                 system_id,
@@ -1598,6 +2049,17 @@ impl DomainStore {
             .into_iter()
             .find(|resource| resource.id == resource_id)
         {
+            if resource.files.len() == 1
+                && resource.files[0]
+                    .extension
+                    .as_deref()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("map"))
+            {
+                let (projection, diagnostics) =
+                    self.project_domain_resource(project_id, &resource.files[0]);
+                resource.projection = projection;
+                resource.diagnostics.extend(diagnostics);
+            }
             return Ok(resource);
         }
         let manifest = self.runtime_manifest(system_id)?;
@@ -2123,6 +2585,54 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
                 pack.system_id
             ));
         }
+        let mut mapped_fields = BTreeSet::new();
+        let mut mapped_aliases = BTreeMap::new();
+        for mapping in &pack.resources.field_mappings {
+            if mapping.field.is_empty()
+                || !mapped_fields.insert(mapping.field.as_str())
+                || mapping.aliases.is_empty()
+                || !mapping.aliases.iter().any(|alias| alias == &mapping.field)
+                || !matches!(
+                    mapping.value_type.as_str(),
+                    "string" | "integer" | "number" | "boolean"
+                )
+            {
+                return Err(format!(
+                    "DOMAIN_FIELD_MAPPING_INVALID: {}:{}",
+                    pack.system_id, mapping.field
+                ));
+            }
+            for alias in &mapping.aliases {
+                let alias = normalize_projected_field(alias);
+                if alias.is_empty()
+                    || mapped_aliases
+                        .insert(alias, mapping.field.as_str())
+                        .is_some_and(|existing| existing != mapping.field)
+                {
+                    return Err(format!(
+                        "DOMAIN_FIELD_MAPPING_AMBIGUOUS: {}:{}",
+                        pack.system_id, mapping.field
+                    ));
+                }
+            }
+        }
+        if mapped_fields.is_empty()
+            || pack
+                .resources
+                .unique_key
+                .iter()
+                .any(|field| !mapped_fields.contains(field.as_str()))
+            || pack
+                .resources
+                .dependency_edges
+                .iter()
+                .any(|edge| !mapped_fields.contains(edge.field.as_str()))
+        {
+            return Err(format!(
+                "DOMAIN_FIELD_MAPPING_INCOMPLETE: {}",
+                pack.system_id
+            ));
+        }
         if pack.operations.is_empty()
             || pack.capabilities.is_empty()
             || pack.validators.is_empty()
@@ -2364,7 +2874,7 @@ fn selector_contains(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return false;
     }
-    if needle.contains('/') || needle.chars().any(|value| !value.is_ascii()) {
+    if needle.contains('/') || !needle.is_ascii() {
         return haystack.contains(needle);
     }
     haystack.match_indices(needle).any(|(start, matched)| {
@@ -2403,6 +2913,396 @@ fn read_validation_project_file(root: &Path, path: &str) -> Result<Vec<u8>, Stri
     }
     fs::read(root.join(relative))
         .map_err(|error| format!("DOMAIN_VALIDATION_FILE_READ_FAILED: {path}: {error}"))
+}
+
+fn verified_project_directory_layout(root: &str, client_root: &str, engine_root: &str) -> bool {
+    let Some((root, client_root, engine_root)) = fs::canonicalize(root)
+        .ok()
+        .zip(fs::canonicalize(client_root).ok())
+        .zip(fs::canonicalize(engine_root).ok())
+        .map(|((root, client_root), engine_root)| (root, client_root, engine_root))
+    else {
+        return false;
+    };
+    root.is_dir()
+        && client_root.is_dir()
+        && engine_root.is_dir()
+        && crate::path_is_within(&root, &client_root)
+        && crate::path_is_within(&root, &engine_root)
+}
+
+/// 将安全读取后的文本/XLS 投影拆成记录；重复字段代表下一行，避免把整张表覆盖成一条记录。
+fn project_schema_records(
+    content: &str,
+    schema: &Value,
+    field_mappings: &[DomainFieldMapping],
+) -> Vec<Map<String, Value>> {
+    let trimmed = content.trim_start_matches('\u{feff}').trim();
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        return match value {
+            Value::Object(record) => vec![canonicalize_mapped_record(record, field_mappings)],
+            Value::Array(records) => records
+                .into_iter()
+                .filter_map(|record| record.as_object().cloned())
+                .map(|record| canonicalize_mapped_record(record, field_mappings))
+                .collect(),
+            _ => Vec::new(),
+        };
+    }
+
+    let lines = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#') && !line.starts_with(';'))
+        .collect::<Vec<_>>();
+    let delimiter = lines.first().and_then(|line| {
+        if line.contains('\t') {
+            Some('\t')
+        } else if line.contains(',') {
+            Some(',')
+        } else {
+            None
+        }
+    });
+    if let Some(delimiter) = delimiter {
+        let headers = lines[0]
+            .split(delimiter)
+            .map(|header| header.trim().trim_matches(['"', '\'']).to_string())
+            .collect::<Vec<_>>();
+        return lines
+            .iter()
+            .skip(1)
+            .filter_map(|line| {
+                let values = line.split(delimiter).collect::<Vec<_>>();
+                let record = headers
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, header)| !header.is_empty())
+                    .map(|(index, header)| {
+                        (
+                            header.clone(),
+                            Value::String(
+                                values
+                                    .get(index)
+                                    .copied()
+                                    .unwrap_or_default()
+                                    .trim()
+                                    .trim_matches(['"', '\''])
+                                    .to_string(),
+                            ),
+                        )
+                    })
+                    .collect::<Map<_, _>>();
+                (!record.is_empty()).then(|| canonicalize_mapped_record(record, field_mappings))
+            })
+            .collect();
+    }
+
+    let schema_fields = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .map(|properties| {
+            properties
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let mut records = Vec::new();
+    let mut current = Map::new();
+    for line in content.lines().map(str::trim) {
+        if line.is_empty() {
+            if !current.is_empty() {
+                records.push(std::mem::take(&mut current));
+            }
+            continue;
+        }
+        for segment in line.split(['\t', ',', ';']) {
+            let Some((key, value)) = segment.split_once('=').or_else(|| segment.split_once(':'))
+            else {
+                continue;
+            };
+            let key = key
+                .trim()
+                .trim_matches(['"', '\'', '{', '}', '[', ']'])
+                .to_string();
+            if key == "sheet" {
+                if !current.is_empty() {
+                    records.push(std::mem::take(&mut current));
+                }
+                continue;
+            }
+            if !schema_fields.contains(key.as_str()) {
+                current.insert(
+                    key,
+                    Value::String(
+                        value
+                            .trim()
+                            .trim_matches(['"', '\'', '{', '}', '[', ']'])
+                            .to_string(),
+                    ),
+                );
+                continue;
+            }
+            if current.contains_key(&key) {
+                records.push(std::mem::take(&mut current));
+            }
+            current.insert(
+                key,
+                Value::String(
+                    value
+                        .trim()
+                        .trim_matches(['"', '\'', '{', '}', '[', ']'])
+                        .to_string(),
+                ),
+            );
+        }
+    }
+    if !current.is_empty() {
+        records.push(current);
+    }
+    records
+        .into_iter()
+        .map(|record| canonicalize_mapped_record(record, field_mappings))
+        .collect()
+}
+
+fn canonicalize_mapped_record(
+    record: Map<String, Value>,
+    field_mappings: &[DomainFieldMapping],
+) -> Map<String, Value> {
+    let aliases = field_mappings
+        .iter()
+        .flat_map(|mapping| {
+            mapping
+                .aliases
+                .iter()
+                .map(move |alias| (normalize_projected_field(alias), mapping.field.as_str()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut canonical = Map::new();
+    for (field, value) in record {
+        let mapped = aliases
+            .get(&normalize_projected_field(&field))
+            .copied()
+            .unwrap_or(field.as_str())
+            .to_string();
+        if canonical.contains_key(&mapped) {
+            canonical.insert(field, value);
+        } else {
+            canonical.insert(mapped, value);
+        }
+    }
+    canonical
+}
+
+fn normalize_projected_field(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// 校验项目投影记录而非清单字符串；Schema 自身无效时同样拒绝通过。
+fn validate_projected_schema_record(
+    schema: &Value,
+    record: &Map<String, Value>,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+    if schema.get("type").and_then(Value::as_str) != Some("object") {
+        errors.push("CONTRACT_TYPE_OBJECT_REQUIRED".to_string());
+    }
+    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+        errors.push("CONTRACT_PROPERTIES_REQUIRED".to_string());
+        return Err(errors);
+    };
+    let Some(required) = schema.get("required").and_then(Value::as_array) else {
+        errors.push("CONTRACT_REQUIRED_ARRAY_MISSING".to_string());
+        return Err(errors);
+    };
+    for field in required {
+        match field.as_str() {
+            Some(field) if !record.contains_key(field) => {
+                errors.push(format!("REQUIRED_MISSING:{field}"));
+            }
+            Some(_) => {}
+            None => errors.push("CONTRACT_REQUIRED_FIELD_INVALID".to_string()),
+        }
+    }
+    if schema.get("additionalProperties").and_then(Value::as_bool) == Some(false) {
+        for field in record
+            .keys()
+            .filter(|field| !properties.contains_key(*field))
+        {
+            errors.push(format!("ADDITIONAL_PROPERTY:{field}"));
+        }
+    }
+    for (field, value) in record {
+        let Some(rule) = properties.get(field) else {
+            continue;
+        };
+        let Some(expected_type) = rule.get("type").and_then(Value::as_str) else {
+            errors.push(format!("CONTRACT_FIELD_TYPE_MISSING:{field}"));
+            continue;
+        };
+        if !projected_value_matches_type(value, expected_type) {
+            errors.push(format!("TYPE:{field}:{expected_type}"));
+            continue;
+        }
+        if let Some(allowed) = rule.get("enum").and_then(Value::as_array) {
+            if !allowed
+                .iter()
+                .any(|candidate| projected_value_equals(value, candidate, expected_type))
+            {
+                errors.push(format!("ENUM:{field}"));
+            }
+        }
+        if let Some(pattern) = rule.get("pattern").and_then(Value::as_str) {
+            match regex::Regex::new(pattern) {
+                Ok(pattern) => {
+                    if value.as_str().is_none_or(|value| !pattern.is_match(value)) {
+                        errors.push(format!("PATTERN:{field}"));
+                    }
+                }
+                Err(_) => errors.push(format!("CONTRACT_PATTERN_INVALID:{field}")),
+            }
+        }
+        if let Some(text) = value.as_str() {
+            if rule
+                .get("minLength")
+                .and_then(Value::as_u64)
+                .is_some_and(|minimum| text.chars().count() < minimum as usize)
+            {
+                errors.push(format!("MIN_LENGTH:{field}"));
+            }
+            if rule
+                .get("maxLength")
+                .and_then(Value::as_u64)
+                .is_some_and(|maximum| text.chars().count() > maximum as usize)
+            {
+                errors.push(format!("MAX_LENGTH:{field}"));
+            }
+        }
+        if let Some(number) = projected_number(value) {
+            if rule
+                .get("minimum")
+                .and_then(Value::as_f64)
+                .is_some_and(|minimum| number < minimum)
+            {
+                errors.push(format!("MINIMUM:{field}"));
+            }
+            if rule
+                .get("maximum")
+                .and_then(Value::as_f64)
+                .is_some_and(|maximum| number > maximum)
+            {
+                errors.push(format!("MAXIMUM:{field}"));
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+/// 只按 Schema 声明进行无损类型提升；无法严格解析的值保留原样并由 type 校验拒绝。
+fn schema_guided_record(schema: &Value, record: &Map<String, Value>) -> Map<String, Value> {
+    let properties = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    record
+        .iter()
+        .map(|(field, value)| {
+            let expected_type = properties
+                .get(field)
+                .and_then(|rule| rule.get("type"))
+                .and_then(Value::as_str);
+            let typed = match (expected_type, value.as_str()) {
+                (Some("integer"), Some(value)) => value
+                    .parse::<i64>()
+                    .ok()
+                    .map(Value::from)
+                    .unwrap_or_else(|| Value::String(value.to_string())),
+                (Some("number"), Some(value)) => value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|value| value.is_finite())
+                    .and_then(serde_json::Number::from_f64)
+                    .map(Value::Number)
+                    .unwrap_or_else(|| Value::String(value.to_string())),
+                (Some("boolean"), Some(value)) => projected_boolean(&Value::String(value.into()))
+                    .map(Value::Bool)
+                    .unwrap_or_else(|| Value::String(value.to_string())),
+                _ => value.clone(),
+            };
+            (field.clone(), typed)
+        })
+        .collect()
+}
+
+fn project_runtime_schema_records(
+    files: &[DomainValidationFile],
+    schema: &Value,
+    field_mappings: &[DomainFieldMapping],
+) -> Vec<RuntimeProjectedRecord> {
+    files
+        .iter()
+        .filter_map(|file| file.content.as_deref().map(|content| (file, content)))
+        .flat_map(|(file, content)| {
+            project_schema_records(content, schema, field_mappings)
+                .into_iter()
+                .map(|record| RuntimeProjectedRecord {
+                    path: file.record.path.clone(),
+                    role: file.record.role.clone(),
+                    value: Value::Object(schema_guided_record(schema, &record)),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn projected_value_matches_type(value: &Value, expected_type: &str) -> bool {
+    match expected_type {
+        "string" => value.is_string(),
+        "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+        "number" => value.is_number() && projected_number(value).is_some(),
+        "boolean" => value.is_boolean(),
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        _ => false,
+    }
+}
+
+fn projected_value_equals(value: &Value, candidate: &Value, expected_type: &str) -> bool {
+    match expected_type {
+        "integer" | "number" => projected_number(value)
+            .zip(projected_number(candidate))
+            .is_some_and(|(left, right)| left == right),
+        "boolean" => projected_boolean(value)
+            .zip(projected_boolean(candidate))
+            .is_some_and(|(left, right)| left == right),
+        _ => value == candidate,
+    }
+}
+
+fn projected_number(value: &Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str()?.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+}
+
+fn projected_boolean(value: &Value) -> Option<bool> {
+    value.as_bool().or_else(|| match value.as_str()? {
+        "true" | "1" => Some(true),
+        "false" | "0" => Some(false),
+        _ => None,
+    })
 }
 
 fn validation_file_payload(
@@ -2523,71 +3423,6 @@ fn validate_lua_delimiters(path: &str, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_runtime_overlay_rule(rule: &str, files: &[DomainValidationFile]) -> Result<(), String> {
-    let contents = files
-        .iter()
-        .filter_map(|file| file.content.as_deref())
-        .collect::<Vec<_>>();
-    let ordered_pairs = [
-        ("startEpochSeconds", "endEpochSeconds"),
-        ("startMinute", "endMinute"),
-        ("minimumValue", "maximumValue"),
-        ("minimumQuality", "maximumQuality"),
-    ];
-    if rule.contains("start-before-end")
-        || rule.contains("window")
-        || rule.contains("range-ordered")
-        || rule.contains("minimum-not-greater")
-    {
-        for content in &contents {
-            for (minimum_field, maximum_field) in ordered_pairs {
-                let minimum = extract_field_values(content, minimum_field)
-                    .into_iter()
-                    .next()
-                    .and_then(|value| value.parse::<f64>().ok());
-                let maximum = extract_field_values(content, maximum_field)
-                    .into_iter()
-                    .next()
-                    .and_then(|value| value.parse::<f64>().ok());
-                if minimum
-                    .zip(maximum)
-                    .is_some_and(|(left, right)| left > right)
-                {
-                    return Err(format!("DOMAIN_RUNTIME_RULE_FAILED:{rule}"));
-                }
-            }
-        }
-    }
-    let monotonic = match rule {
-        "level.experience-monotonic" => Some(("requiredExperience", false)),
-        "online-reward.duration-monotonic" => Some(("durationSeconds", false)),
-        "cumulative-charge.thresholds-strictly-increase" => Some(("chargeThreshold", true)),
-        "vip.points-monotonic" => Some(("requiredPoints", false)),
-        _ => None,
-    };
-    if let Some((field, strict)) = monotonic {
-        let values = contents
-            .iter()
-            .flat_map(|content| extract_field_values(content, field))
-            .map(|value| {
-                value
-                    .parse::<f64>()
-                    .map_err(|_| format!("DOMAIN_RUNTIME_FIELD_INVALID:{rule}:{field}:{value}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if values.windows(2).any(|pair| {
-            if strict {
-                pair[0] >= pair[1]
-            } else {
-                pair[0] > pair[1]
-            }
-        }) {
-            return Err(format!("DOMAIN_RUNTIME_RULE_FAILED:{rule}"));
-        }
-    }
-    Ok(())
-}
-
 fn extract_field_values(content: &str, field: &str) -> Vec<String> {
     let mut values = Vec::new();
     let json_marker = format!("\"{field}\"");
@@ -2621,6 +3456,15 @@ fn extract_field_values(content: &str, field: &str) -> Vec<String> {
         }
     }
     values
+}
+
+fn scalar_value_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => Some(value.clone()),
+        Value::Number(value) => Some(value.to_string()),
+        Value::Bool(value) => Some(value.to_string()),
+        _ => None,
+    }
 }
 
 fn access_for(manifest: &DomainManifest, extension: Option<&str>) -> &'static str {
@@ -2707,7 +3551,7 @@ mod tests {
         let registry = bundled_domain_registry().unwrap();
         assert_eq!(registry.packs.len(), 33);
         assert!(registry.packs.iter().all(|pack| {
-            pack.version == "1.2.0"
+            pack.version == "1.3.0"
                 && pack.supported_engine_range == ">=1.0.0"
                 && pack.engine_compatibility.strategy == "evidence-gated-auto-generalization-v1"
                 && !pack.engine_compatibility.version_aliases.is_empty()
@@ -2717,6 +3561,28 @@ mod tests {
             .packs
             .iter()
             .any(|pack| pack.system_id == "cross_server"));
+    }
+
+    #[test]
+    fn bundled_runtime_schema_loader_covers_all_domain_packs() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-bundled-schemas-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let registry = bundled_domain_registry().unwrap();
+        assert_eq!(BUNDLED_RESOURCE_SCHEMAS.len(), registry.packs.len());
+        for manifest in &registry.packs {
+            let schema = store.load_runtime_resource_schema(manifest).unwrap();
+            let expected_id = format!("mir3://domain/{}/resource.schema.json", manifest.system_id);
+            assert_eq!(schema.get("type").and_then(Value::as_str), Some("object"));
+            assert_eq!(
+                schema.get("$id").and_then(Value::as_str),
+                Some(expected_id.as_str())
+            );
+        }
+        std::fs::remove_dir_all(base).ok();
     }
 
     #[test]
@@ -2745,6 +3611,156 @@ mod tests {
         assert!(normalize_engine_version("V8M2", &compatibility)
             .unwrap_err()
             .starts_with("DOMAIN_ENGINE_VERSION_UNVERIFIED:"));
+    }
+
+    #[test]
+    fn projected_schema_enforces_required_type_enum_pattern_and_bounds() {
+        let schema = serde_json::json!({
+            "type":"object",
+            "additionalProperties":false,
+            "properties":{
+                "id":{"type":"string","pattern":"^[A-Z]+$"},
+                "mode":{"type":"string","enum":["safe","full"]},
+                "count":{"type":"integer","minimum":1,"maximum":10},
+                "ratio":{"type":"number","minimum":0.0,"maximum":1.0},
+                "enabled":{"type":"boolean"}
+            },
+            "required":["id","mode","count","ratio","enabled"]
+        });
+        let valid = serde_json::json!({
+            "id":"ABC",
+            "mode":"safe",
+            "count":"4",
+            "ratio":"0.5",
+            "enabled":"true"
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let valid = schema_guided_record(&schema, &valid);
+        assert!(valid["count"].is_i64());
+        assert!(valid["ratio"].is_number());
+        assert!(valid["enabled"].is_boolean());
+        assert!(validate_projected_schema_record(&schema, &valid).is_ok());
+
+        let invalid = serde_json::json!({
+            "id":"bad-1",
+            "mode":"unknown",
+            "count":"not-an-integer",
+            "ratio":"2.5",
+            "extra":"denied"
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let invalid = schema_guided_record(&schema, &invalid);
+        let errors = validate_projected_schema_record(&schema, &invalid).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error == "REQUIRED_MISSING:enabled"));
+        assert!(errors.iter().any(|error| error == "PATTERN:id"));
+        assert!(errors.iter().any(|error| error == "ENUM:mode"));
+        assert!(errors.iter().any(|error| error == "TYPE:count:integer"));
+        assert!(errors.iter().any(|error| error == "MAXIMUM:ratio"));
+        assert!(errors
+            .iter()
+            .any(|error| error == "ADDITIONAL_PROPERTY:extra"));
+    }
+
+    #[test]
+    fn schema_validator_loads_pinned_pack_schema_and_fails_closed() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-runtime-schema-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let data_root = base.join("data");
+        let packs_root = base.join("domain-packs");
+        let system_root = packs_root.join("level");
+        let releases_root = system_root.join("releases");
+        let staging = base.join("level-staging");
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../resources/mir3-domain-packs/level");
+        copy_test_directory(&bundled, &staging);
+        let bundled_manifest: DomainManifest =
+            serde_json::from_str(&std::fs::read_to_string(staging.join("domain.json")).unwrap())
+                .unwrap();
+        let version = bundled_manifest.version;
+        let schema_path = staging.join("schemas/resource.schema.json");
+        let mut schema: Value =
+            serde_json::from_str(&std::fs::read_to_string(&schema_path).unwrap()).unwrap();
+        schema["properties"]["releaseOnly"] =
+            serde_json::json!({"type":"string","pattern":"^verified$"});
+        schema["required"]
+            .as_array_mut()
+            .unwrap()
+            .push(Value::String("releaseOnly".to_string()));
+        std::fs::write(&schema_path, serde_json::to_vec_pretty(&schema).unwrap()).unwrap();
+        let hash = hash_runtime_release(&staging).unwrap();
+        let release = RuntimeDomainPackRelease {
+            version: version.clone(),
+            directory: format!("level-{}", &hash[..12]),
+            hash,
+        };
+        std::fs::create_dir_all(&releases_root).unwrap();
+        std::fs::rename(&staging, releases_root.join(&release.directory)).unwrap();
+        write_test_runtime_state(
+            &system_root,
+            "level",
+            true,
+            Some(&release),
+            None,
+            Some(&release),
+        );
+
+        let store = DomainStore::new_trusted_fixture_with_domain_pack_root(&data_root, &packs_root)
+            .unwrap();
+        let manifest = store
+            .runtime_manifest_at_version("level", Some(&version))
+            .unwrap();
+        let loaded_schema = store.load_runtime_resource_schema(&manifest).unwrap();
+        assert!(loaded_schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::String("releaseOnly".to_string())));
+        let content = "level=1\nrequiredExperience=100\nstatPoints=1\nrecommendedMonsterId=M1\n";
+        let path = "客户端/dev/Level/Level.txt";
+        let file = DomainValidationFile {
+            record: DomainFileRecord {
+                resource_id: stable_resource_id(&manifest, path, Some(content)),
+                path: path.to_string(),
+                role: "client".to_string(),
+                category: "config".to_string(),
+                extension: Some("txt".to_string()),
+                size: content.len() as u64,
+                modified_at: 0,
+                ownership: "owned".to_string(),
+                access: "editable".to_string(),
+                systems: vec!["level".to_string()],
+            },
+            content: Some(content.to_string()),
+            syntax_error: None,
+        };
+        let validator = manifest
+            .validators
+            .iter()
+            .find(|validator| validator.kind == "schema")
+            .unwrap();
+        let result = store.execute_domain_validator(
+            "unused-project",
+            &manifest,
+            &[file],
+            validator,
+            &[],
+            &Ok(loaded_schema),
+            &[],
+        );
+        assert!(!result.valid);
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.ends_with("REQUIRED_MISSING:releaseOnly")));
+        std::fs::remove_dir_all(base).ok();
     }
 
     #[test]
@@ -2777,7 +3793,7 @@ mod tests {
         assert_eq!(files[0].access, "readonly");
         let unknown = store.open_draft(&project.id, "unknown engine").unwrap();
         store
-            .bind_draft_domain(&project.id, &unknown.id, "level", "1.2.0", None)
+            .bind_draft_domain(&project.id, &unknown.id, "level", "1.3.0", None)
             .unwrap();
         assert!(store
             .patch_draft(
@@ -2798,7 +3814,7 @@ mod tests {
         let project = store.validate_project(&project.id).unwrap();
         let draft = store.open_draft(&project.id, "recognized engine").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -2968,9 +3984,11 @@ mod tests {
         let root = base.join("木立");
         let level_path = "客户端/dev/Level/Level.txt";
         std::fs::create_dir_all(root.join("客户端/dev/Level")).unwrap();
+        std::fs::create_dir_all(root.join("引擎/Mir200/Level")).unwrap();
         std::fs::create_dir_all(root.join("引擎/Mir200/Monster")).unwrap();
-        let original = b"level=1\nrequiredExperience=100\nrecommendedMonsterId=M1\n";
+        let original = b"level=1\nrequiredExperience=100\nstatPoints=1\nrecommendedMonsterId=M1\n";
         std::fs::write(root.join(level_path), original).unwrap();
+        std::fs::write(root.join("引擎/Mir200/Level/Level.txt"), original).unwrap();
         std::fs::write(
             root.join("引擎/Mir200/Monster/Monster.txt"),
             b"monsterId=M1\ncombatLevel=1\nhealthPoints=10\n",
@@ -2980,18 +3998,14 @@ mod tests {
         let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
-        assert!(
-            store
-                .validate_domain_system(&project.id, "level")
-                .unwrap()
-                .valid
-        );
+        let baseline_report = store.validate_domain_system(&project.id, "level").unwrap();
+        assert!(baseline_report.valid, "{baseline_report:#?}");
 
         let draft = store
             .open_draft(&project.id, "invalid level overlay")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -3001,7 +4015,7 @@ mod tests {
                 &[crate::DraftChangeInput {
                     path: level_path.to_string(),
                     content: Some(
-                        "level=1\nrequiredExperience=3000000001\nrecommendedMonsterId=MISSING\n"
+                        "level=1\nrequiredExperience=3000000001\nstatPoints=1\nrecommended_monster_id=MISSING\n"
                             .to_string(),
                     ),
                     deleted: false,
@@ -3070,7 +4084,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "level",
-                "1.2.0",
+                "1.3.0",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -3080,7 +4094,7 @@ mod tests {
                 &project.id,
                 &companion.id,
                 "shop",
-                "1.2.0",
+                "1.3.0",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -3137,7 +4151,7 @@ mod tests {
         copy_test_directory(&bundled, &v1_staging);
         let v1_hash = hash_runtime_release(&v1_staging).unwrap();
         let v1 = RuntimeDomainPackRelease {
-            version: "1.2.0".to_string(),
+            version: "1.3.0".to_string(),
             directory: format!("level-{}", &v1_hash[..12]),
             hash: v1_hash,
         };
@@ -3145,10 +4159,10 @@ mod tests {
 
         let v101_staging = base.join("level-v101");
         copy_test_directory(&bundled, &v101_staging);
-        mutate_test_pack_contract(&v101_staging, "1.2.1", "v101");
+        mutate_test_pack_contract(&v101_staging, "1.3.1", "v101");
         let v101_hash = hash_runtime_release(&v101_staging).unwrap();
         let v101 = RuntimeDomainPackRelease {
-            version: "1.2.1".to_string(),
+            version: "1.3.1".to_string(),
             directory: format!("level-{}", &v101_hash[..12]),
             hash: v101_hash,
         };
@@ -3156,10 +4170,10 @@ mod tests {
 
         let v102_staging = base.join("level-v102");
         copy_test_directory(&bundled, &v102_staging);
-        mutate_test_pack_contract(&v102_staging, "1.2.2", "v102");
+        mutate_test_pack_contract(&v102_staging, "1.3.2", "v102");
         let v102_hash = hash_runtime_release(&v102_staging).unwrap();
         let v102 = RuntimeDomainPackRelease {
-            version: "1.2.2".to_string(),
+            version: "1.3.2".to_string(),
             directory: format!("level-{}", &v102_hash[..12]),
             hash: v102_hash,
         };
@@ -3172,9 +4186,9 @@ mod tests {
         let project = store.import_project(&project_root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
 
-        let draft = store.open_draft(&project.id, "pinned v1.2.0").unwrap();
+        let draft = store.open_draft(&project.id, "pinned v1.3.0").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
             .unwrap();
         let old_lease = store
             .issue_task_scope(
@@ -3183,7 +4197,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"level":"1.2.0"}),
+                serde_json::json!({"level":"1.3.0"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
@@ -3199,14 +4213,14 @@ mod tests {
                     body: serde_json::json!({"maximumLevel": 80}),
                     status: "active".to_string(),
                     source_task_id: "old-task".to_string(),
-                    plugin_version: "1.2.0".to_string(),
+                    plugin_version: "1.3.0".to_string(),
                     created_at: crate::now_millis(),
                     updated_at: crate::now_millis(),
                 },
             )
             .unwrap();
 
-        // 两次升级后 v1.2.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
+        // 两次升级后 v1.3.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
         write_test_runtime_state(
             &system_root,
             "level",
@@ -3221,7 +4235,7 @@ mod tests {
             .into_iter()
             .find(|manifest| manifest.system_id == "level")
             .unwrap();
-        assert_eq!(active.version, "1.2.2");
+        assert_eq!(active.version, "1.3.2");
         assert_eq!(
             store
                 .list_domain_memories(&project.id, "level", true)
@@ -3234,7 +4248,7 @@ mod tests {
             .iter()
             .any(|operation| operation.id == "scale-experience-v102"));
         let pinned_manifest = store.draft_domain_manifest(&project.id, &draft.id).unwrap();
-        assert_eq!(pinned_manifest.version, "1.2.0");
+        assert_eq!(pinned_manifest.version, "1.3.0");
         assert!(pinned_manifest
             .operations
             .iter()
@@ -3260,7 +4274,7 @@ mod tests {
             )
             .is_ok());
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.2", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.2", None)
             .unwrap();
         assert!(store
             .authorize_task_scope(
@@ -3273,7 +4287,7 @@ mod tests {
             .unwrap_err()
             .starts_with("TASK_SCOPE_DRAFT_VERSION_MISMATCH:"));
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
             .unwrap();
 
         let new_lease = store
@@ -3283,11 +4297,11 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 &[],
-                serde_json::json!({"level":"1.2.2"}),
+                serde_json::json!({"level":"1.3.2"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
-        assert_eq!(new_lease.plugin_versions["level"], "1.2.2");
+        assert_eq!(new_lease.plugin_versions["level"], "1.3.2");
 
         // 保留另一个可用领域，用来证明禁用包从新任务清单消失而非拖垮注册表。
         let shop_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -3296,7 +4310,7 @@ mod tests {
         copy_test_directory(&shop_bundled, &shop_staging);
         let shop_hash = hash_runtime_release(&shop_staging).unwrap();
         let shop_release = RuntimeDomainPackRelease {
-            version: "1.2.0".to_string(),
+            version: "1.3.0".to_string(),
             directory: format!("shop-{}", &shop_hash[..12]),
             hash: shop_hash,
         };
@@ -3356,7 +4370,7 @@ mod tests {
         )
         .unwrap();
         assert!(store
-            .runtime_manifest_at_version("level", Some("1.2.0"))
+            .runtime_manifest_at_version("level", Some("1.3.0"))
             .unwrap_err()
             .starts_with("DOMAIN_PACK_VERSION_UNAVAILABLE:"));
         assert!(store
@@ -3406,6 +4420,7 @@ mod tests {
         let manifests = store.list_domain_systems().unwrap();
         assert_eq!(manifests.len(), 33);
         let mut signatures = std::collections::BTreeSet::new();
+        let mut covered_systems = std::collections::BTreeSet::new();
         for root in roots {
             let before = readonly_tree_signature(&root);
             let project = store.import_project(&root).unwrap();
@@ -3426,10 +4441,18 @@ mod tests {
                     .unwrap();
                 if !files.is_empty() {
                     detected += 1;
-                    store
+                    let validation = store
                         .validate_domain_system(&project.id, &manifest.system_id)
                         .unwrap();
+                    assert!(
+                        validation.valid,
+                        "{}:{} validation failed: {:?}",
+                        root.display(),
+                        manifest.system_id,
+                        validation.diagnostics
+                    );
                     validated += 1;
+                    covered_systems.insert(manifest.system_id.clone());
                 }
             }
             assert!(detected > 0, "{} has no detected domains", root.display());
@@ -3439,6 +4462,21 @@ mod tests {
             );
             assert_eq!(readonly_tree_signature(&root), before);
             signatures.insert((stats.scanned_files, detected));
+        }
+        let expected_systems = manifests
+            .iter()
+            .map(|manifest| manifest.system_id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        let missing_systems = expected_systems
+            .difference(&covered_systems)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(
+            missing_systems.is_empty(),
+            "real corpus did not detect every domain: {missing_systems:?}"
+        );
+        for system_id in &covered_systems {
+            println!("MIR3_CORPUS_READONLY:{system_id}");
         }
         assert!(
             signatures.len() >= 3,
@@ -3466,12 +4504,17 @@ mod tests {
         ));
         let store = DomainStore::new(base.join("data")).unwrap();
         let manifests = store.list_domain_systems().unwrap();
-        let mut exercised = 0_usize;
+        assert_eq!(manifests.len(), 33);
+        let mut projects = Vec::new();
         for root in roots {
             let project = store.import_project(&root).unwrap();
             store.scan_project(&project.id, || false).unwrap();
+            projects.push((root, project));
+        }
+        let mut exercised_systems = std::collections::BTreeSet::new();
+        for manifest in &manifests {
             let mut selected = None;
-            for manifest in &manifests {
+            for (root, project) in &projects {
                 let baseline = store
                     .validate_domain_system(&project.id, &manifest.system_id)
                     .unwrap();
@@ -3505,25 +4548,32 @@ mod tests {
                     let Ok(text) = String::from_utf8(original.clone()) else {
                         continue;
                     };
-                    selected = Some((manifest.clone(), file.path, target, original, text));
+                    selected = Some((
+                        root.clone(),
+                        project.id.clone(),
+                        file.path,
+                        target,
+                        original,
+                        text,
+                    ));
                     break;
                 }
                 if selected.is_some() {
                     break;
                 }
             }
-            let Some((manifest, relative, target, original, text)) = selected else {
+            let Some((root, project_id, relative, target, original, text)) = selected else {
                 panic!(
-                    "{} has no verified writable UTF-8 Lua/TXT domain fixture",
-                    root.display()
+                    "real corpus has no verified writable UTF-8 Lua/TXT fixture for {}",
+                    manifest.system_id
                 );
             };
             let draft = store
-                .open_draft(&project.id, "真实项目副本 Draft 应用与恢复验收")
+                .open_draft(&project_id, "真实项目副本 Draft 应用与恢复验收")
                 .unwrap();
             store
                 .bind_draft_domain(
-                    &project.id,
+                    &project_id,
                     &draft.id,
                     &manifest.system_id,
                     &manifest.version,
@@ -3533,7 +4583,7 @@ mod tests {
             let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
             let preview = store
                 .patch_draft(
-                    &project.id,
+                    &project_id,
                     &draft.id,
                     draft.revision,
                     &[crate::DraftChangeInput {
@@ -3545,7 +4595,7 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(std::fs::read(&target).unwrap(), original);
-            let validation = store.validate_domain_draft(&project.id, &draft.id).unwrap();
+            let validation = store.validate_domain_draft(&project_id, &draft.id).unwrap();
             assert!(
                 validation.valid,
                 "{}:{} draft validation failed: {:?}",
@@ -3555,18 +4605,23 @@ mod tests {
             );
             let snapshot = store
                 .apply_validated_domain_draft(
-                    &project.id,
+                    &project_id,
                     &draft.id,
                     preview.draft.revision,
                     &preview.diff_hash,
                 )
                 .unwrap();
             assert_ne!(std::fs::read(&target).unwrap(), original);
-            store.restore_snapshot(&project.id, &snapshot.id).unwrap();
+            store.restore_snapshot(&project_id, &snapshot.id).unwrap();
             assert_eq!(std::fs::read(&target).unwrap(), original);
-            exercised += 1;
+            exercised_systems.insert(manifest.system_id.clone());
+            println!("MIR3_CORPUS_WRITE:{}", manifest.system_id);
         }
-        assert!(exercised >= 3);
+        assert_eq!(
+            exercised_systems.len(),
+            manifests.len(),
+            "every domain must complete Draft validation, apply, and Snapshot restore"
+        );
         std::fs::remove_dir_all(base).ok();
     }
 

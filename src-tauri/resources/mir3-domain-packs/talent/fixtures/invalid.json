@@ -8,7 +8,7 @@
       "costPoints": 10000,
       "requiredLevel": 2,
       "grantedSkillId": "skill:missing",
-      "parentNodeId": "talent-parentNodeId-1"
+      "parentNodeId": "talent-nodeId-1"
     },
     {
       "nodeId": "talent-nodeId-1",
@@ -16,7 +16,7 @@
       "costPoints": 2,
       "requiredLevel": 3,
       "grantedSkillId": "skill:fixture-2",
-      "parentNodeId": "talent-parentNodeId-2"
+      "parentNodeId": "talent-nodeId-1"
     }
   ],
   "referenceCatalog": {},

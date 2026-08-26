@@ -101,7 +101,7 @@ const compoundUniqueKeys = {
   talent: ['treeId', 'nodeId'],
 }
 
-function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.2.0') {
+function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.3.0') {
   return { id, category, complexity, renderer, keywords, dependencies, capabilities, version }
 }
 
@@ -158,6 +158,11 @@ function createPack(definition) {
       schema: 'schemas/resource.schema.json',
       stableResourceId: `sha256(${id}:${spec.fields[0].name}:normalizedRelativePath)`,
       mappings: ['file-projection', `${id}.field-mapping-v1`],
+      fieldMappings: spec.fields.map(field => ({
+        field: field.name,
+        aliases: fieldAliases(field.name, field.aliases),
+        valueType: field.type,
+      })),
       dependencyEdges: references,
       uniqueKey,
     },
@@ -232,6 +237,23 @@ function fieldSchema(field) {
   if (field.referenceSystem)
     schema['x-mir3-reference-system'] = field.referenceSystem
   return schema
+}
+
+function fieldAliases(fieldName, declaredAliases = []) {
+  const words = fieldName
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+  const lowerWords = words.map(word => word.toLowerCase())
+  const pascal = words.map(word => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`).join('')
+  return [...new Set([
+    fieldName,
+    pascal,
+    lowerWords.join('_'),
+    lowerWords.join('-'),
+    lowerWords.join(' '),
+    ...declaredAliases,
+  ])]
 }
 
 function resourceSchema(systemId, spec) {
@@ -432,6 +454,10 @@ function validValue(systemId, field, ordinal) {
 function fixtures(systemId, spec) {
   const uniqueKey = compoundUniqueKeys[systemId] || [spec.fields[0].name]
   const records = [1, 2].map(ordinal => Object.fromEntries(spec.fields.map(field => [field.name, validValue(systemId, field, ordinal)])))
+  if (systemId === 'crafting') {
+    for (const [index, record] of records.entries())
+      record.materialItemId = `item:material-${index + 1}`
+  }
   const invalidRecords = records.map(record => ({ ...record }))
   const ranged = spec.fields.find(field => field.maximum !== undefined)
   const patterned = spec.fields.find(field => field.pattern)
@@ -444,14 +470,22 @@ function fixtures(systemId, spec) {
     invalidRecords[0][referenced.name] = `${referenced.referenceSystem}:missing`
   for (const field of uniqueKey)
     invalidRecords[1][field] = invalidRecords[0][field]
+  invalidateRuntimeFixture(systemId, invalidRecords)
   const expectedDiagnostics = [
     { code: `${systemId}.unique`, severity: 'error', field: uniqueKey.join(',') },
     { code: ranged ? `${systemId}.range` : `${systemId}.schema`, severity: 'error', field: (ranged || patterned).name },
     { code: `${systemId}.reference`, severity: 'error', field: referenced.name },
     { code: `${systemId}.runtime`, severity: 'error', rule: spec.runtimeRule },
   ]
+  const referenceSystems = [...new Set(spec.fields.flatMap(field => field.referenceSystem ? [field.referenceSystem] : []))]
+  const referenceCatalog = Object.fromEntries(referenceSystems.map(referenceSystem => [
+    referenceSystem,
+    [...new Set(records.flatMap(record => spec.fields
+      .filter(field => field.referenceSystem === referenceSystem)
+      .map(field => record[field.name])))],
+  ]))
   return {
-    valid: { systemId, fixture: 'valid', records, referenceCatalog: Object.fromEntries(spec.fields.filter(field => field.referenceSystem).map(field => [field.referenceSystem, [`${field.referenceSystem}:fixture-1`, `${field.referenceSystem}:fixture-2`]])) },
+    valid: { systemId, fixture: 'valid', records, referenceCatalog },
     invalid: {
       systemId,
       fixture: 'invalid',
@@ -461,6 +495,71 @@ function fixtures(systemId, spec) {
     },
     expectedDiagnostics,
   }
+}
+
+function invalidateRuntimeFixture(systemId, records) {
+  const first = records[0]
+  const second = records[1]
+  const setters = {
+    map: () => { second.width = 0 },
+    npc: () => { first.scriptPath = '../escape.lua' },
+    monster: () => { first.healthPoints = 0 },
+    equipment: () => { first.durability = 0 },
+    item: () => { first.clientIcon = '../icon.png' },
+    level: () => { second.requiredExperience = first.requiredExperience - 1 },
+    rebirth: () => { second.minimumLevel = first.minimumLevel - 1 },
+    title: () => {
+      second.displayLabel = 'permanent'
+      second.durationSeconds = 1
+    },
+    buff: () => {
+      second.stackMode = 'stack'
+      second.maximumStacks = 1
+    },
+    skill: () => { second.skillId = first.skillId },
+    enhance: () => { first.successRateBasisPoints = 10001 },
+    crafting: () => { first.materialItemId = first.outputItemId },
+    gem: () => { second.socketType = first.socketType },
+    refine: () => { first.minimumValue = first.maximumValue + 1 },
+    quest: () => {
+      first.nextQuestId = second.questId
+      second.nextQuestId = first.questId
+    },
+    checkin: () => { second.cycleId = first.cycleId },
+    online_reward: () => { second.durationSeconds = first.durationSeconds },
+    limited_event: () => { second.startEpochSeconds = second.endEpochSeconds },
+    launch_event: () => {
+      second.scheduleId = first.scheduleId
+      second.openServerDay = first.openServerDay
+    },
+    first_charge: () => { second.chargeThreshold = first.chargeThreshold },
+    cumulative_charge: () => {
+      second.cycleId = first.cycleId
+      second.chargeThreshold = first.chargeThreshold
+    },
+    vip: () => { second.requiredPoints = first.requiredPoints - 1 },
+    shop: () => { second.startEpochSeconds = second.endEpochSeconds },
+    recycle: () => { second.minimumQuality = second.maximumQuality + 1 },
+    guild: () => { second.maximumMembers = first.maximumMembers - 1 },
+    sabac: () => { second.startMinute = second.endMinute },
+    ranking: () => { second.cycleSeconds = 0 },
+    resource_production: () => { second.intervalSeconds = 0 },
+    manor: () => { first.productionPointId = first.entryNpcId },
+    hero_soul: () => {
+      first.routeId = first.nodeId
+      second.routeId = first.nodeId
+    },
+    talent: () => {
+      first.parentNodeId = second.nodeId
+      second.parentNodeId = first.nodeId
+    },
+    season: () => { second.startEpochSeconds = second.endEpochSeconds },
+    cross_server: () => { first.targetShard = first.sourceShard },
+  }
+  const invalidate = setters[systemId]
+  if (!invalidate)
+    throw new Error(`Missing runtime fixture mutator for ${systemId}`)
+  invalidate()
 }
 
 const packs = packDefinitions.map(definition => defineDomainManifest(createPack(definition)))
@@ -504,7 +603,37 @@ for (const entry of packs) {
   const compatibility = `Pack version: \`${entry.version}\`; compiler compatibility: MIR3 System Kernel \`${entry.kernelApiRange}\`; engine range: \`${entry.supportedEngineRange}\`.`
   writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. ${compatibility} Engine versions are normalized only from SemVer, v-prefixed SemVer, or major.minor aliases. Write access additionally requires the real project layout, an owned selector or content fingerprint, and resource-schema validation; unknown/incompatible engines and unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
   const mapChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
-  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.3.0\n\n- Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.\n- Resource projection now preserves canonical fields for validation, cross-system references, and structured operations.\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
 }
+
+const sdkExample = packs.find(entry => entry.systemId === 'level')
+const sdkExampleRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-sdk', 'fixtures', 'example-pack')
+const sdkExampleSpec = domainSpecs.level
+const sdkExampleFixtures = defineDomainFixtures(fixtures('level', sdkExampleSpec))
+mkdirSync(join(sdkExampleRoot, 'schemas'), { recursive: true })
+mkdirSync(join(sdkExampleRoot, 'fixtures'), { recursive: true })
+writeFileSync(join(sdkExampleRoot, 'domain.json'), `${JSON.stringify(sdkExample, null, 2)}\n`)
+writeFileSync(join(sdkExampleRoot, 'schemas', 'resource.schema.json'), `${JSON.stringify(resourceSchema('level', sdkExampleSpec), null, 2)}\n`)
+writeFileSync(join(sdkExampleRoot, 'fixtures', 'valid.json'), `${JSON.stringify(sdkExampleFixtures.valid, null, 2)}\n`)
+writeFileSync(join(sdkExampleRoot, 'fixtures', 'invalid.json'), `${JSON.stringify(sdkExampleFixtures.invalid, null, 2)}\n`)
+writeFileSync(join(sdkExampleRoot, 'fixtures', 'expected-diagnostics.json'), `${JSON.stringify(sdkExampleFixtures.expectedDiagnostics, null, 2)}\n`)
+writeFileSync(join(sdkExampleRoot, 'package.json'), `${JSON.stringify({
+  name: '@mir3-studio/domain-sdk-example-level',
+  kind: 'domain',
+  version: sdkExample.version,
+  private: true,
+  files: ['CHANGELOG.md', 'README.md', 'domain.json', 'fixtures/', 'schemas/'],
+  mir3Domain: {
+    kind: 'domain',
+    systemId: 'level',
+    kernelApiRange: sdkExample.kernelApiRange,
+    supportedEngineRange: sdkExample.supportedEngineRange,
+    engineCompatibility: sdkExample.engineCompatibility,
+    resourceSchema: 'schemas/resource.schema.json',
+    fixtures: sdkExample.fixtures,
+    changelog: 'CHANGELOG.md',
+  },
+}, null, 2)}\n`)
+writeFileSync(join(sdkExampleRoot, 'CHANGELOG.md'), '# Changelog\n\n## 1.3.0 - 2026-08-27\n\n- Added executable schema-backed field mappings to the runtime-installable example.\n')
 
 process.stdout.write(`Generated ${packs.length} MIR3 domain packs with schemas and contract fixtures.\n`)

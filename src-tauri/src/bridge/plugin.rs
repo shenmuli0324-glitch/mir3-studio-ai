@@ -131,13 +131,12 @@ pub fn domain_pack_activate(
     }
     let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
     let project_service = app_handle.state::<crate::service::project::ProjectService>();
-    let mut governance_snapshot = None;
-    let activation = plugin::system::activate_domain_pack_with_canary(
+    let activation = plugin::system::activate_domain_pack_with_governance_canary(
         &root,
         &system_id,
         &expected_candidate_version,
         &expected_candidate_hash,
-        |activated| {
+        |activated, transition| {
             let from_version = activated
                 .previous
                 .as_ref()
@@ -149,11 +148,10 @@ pub fn domain_pack_activate(
                 .map(|release| release.version.as_str())
                 .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
             assert_runtime_domain_version(&app_handle, &system_id, expected)?;
-            governance_snapshot = Some(
-                project_service
-                    .store()
-                    .snapshot_domain_governance(&system_id)?,
-            );
+            let governance_snapshot = project_service
+                .store()
+                .snapshot_domain_governance(&system_id)?;
+            transition.persist_governance_snapshot(&governance_snapshot)?;
             let migration = project_service.store().migrate_domain_governance(
                 &system_id,
                 from_version,
@@ -165,18 +163,12 @@ pub fn domain_pack_activate(
                     migration.conflicts.join(" | ")
                 ));
             }
+            transition.mark_governance_migrated()?;
             Ok(())
         },
+        |value| restore_persisted_governance(project_service.store(), value),
     );
-    if let Err(error) = activation {
-        if let Some(governance_snapshot) = governance_snapshot {
-            project_service
-                .store()
-                .restore_domain_governance_snapshot(&governance_snapshot)
-                .map_err(|restore| format!("{error}; governance_restore={restore}"))?;
-        }
-        return Err(error);
-    }
+    activation?;
     plugin::system::domain_pack_state(&root, &system_id)
 }
 
@@ -192,14 +184,68 @@ pub fn domain_pack_rollback(
         );
     }
     let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
-    let rolled_back = plugin::system::rollback_domain_pack(&root, &system_id)?;
-    let expected = rolled_back
-        .current
-        .as_ref()
-        .map(|release| release.version.as_str())
-        .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
-    assert_runtime_domain_version(&app_handle, &system_id, expected)?;
+    let project_service = app_handle.state::<crate::service::project::ProjectService>();
+    let rollback = plugin::system::rollback_domain_pack_with_governance_canary(
+        &root,
+        &system_id,
+        |rolled_back, transition| {
+            let from_version = rolled_back
+                .previous
+                .as_ref()
+                .map(|release| release.version.as_str())
+                .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+            let expected = rolled_back
+                .current
+                .as_ref()
+                .map(|release| release.version.as_str())
+                .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+            assert_runtime_domain_version(&app_handle, &system_id, expected)?;
+            let governance_snapshot = project_service
+                .store()
+                .snapshot_domain_governance(&system_id)?;
+            transition.persist_governance_snapshot(&governance_snapshot)?;
+            let migration = project_service.store().migrate_domain_governance(
+                &system_id,
+                from_version,
+                expected,
+            )?;
+            if !migration.compatible {
+                return Err(format!(
+                    "DOMAIN_GOVERNANCE_MIGRATION_BLOCKED: {}",
+                    migration.conflicts.join(" | ")
+                ));
+            }
+            transition.mark_governance_migrated()?;
+            Ok(())
+        },
+        |value| restore_persisted_governance(project_service.store(), value),
+    );
+    rollback?;
     plugin::system::domain_pack_state(&root, &system_id)
+}
+
+fn restore_persisted_governance(
+    store: &mir3_domain::DomainStore,
+    value: &serde_json::Value,
+) -> Result<(), String> {
+    let snapshot: mir3_domain::GovernanceSnapshot = serde_json::from_value(value.clone())
+        .map_err(|error| format!("DOMAIN_PACK_GOVERNANCE_SNAPSHOT_INVALID: {error}"))?;
+    store.restore_domain_governance_snapshot(&snapshot)
+}
+
+/// 指针事务失败后必须运行治理补偿；补偿失败与原错误同时返回，禁止伪装成已恢复。
+#[cfg(test)]
+fn finish_governed_domain_pack_transition<T>(
+    transition: Result<T, String>,
+    compensate: impl FnOnce() -> Result<(), String>,
+) -> Result<T, String> {
+    match transition {
+        Ok(value) => Ok(value),
+        Err(error) => match compensate() {
+            Ok(()) => Err(error),
+            Err(restore) => Err(format!("{error}; governance_restore={restore}")),
+        },
+    }
 }
 
 #[tauri::command]
@@ -238,10 +284,7 @@ fn assert_runtime_domain_version(
     let project_service = app_handle.state::<crate::service::project::ProjectService>();
     let active = project_service
         .store()
-        .list_domain_systems()?
-        .into_iter()
-        .find(|manifest| manifest.system_id == system_id)
-        .ok_or_else(|| format!("DOMAIN_PACK_RUNTIME_UNAVAILABLE: {system_id}"))?;
+        .domain_manifest_at_version(system_id, expected_version)?;
     if active.version != expected_version {
         return Err(format!(
             "DOMAIN_PACK_RUNTIME_VERSION_MISMATCH: expected {expected_version}, got {}",
@@ -333,4 +376,43 @@ pub fn recover_plugin(app_handle: AppHandle, id: String) -> Result<(), String> {
     plugin::uninstall_recovery(&app_handle, &id)?;
     plugin::watch::force_emit(&app_handle);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn governed_pack_transition_compensates_every_failure_and_reports_restore_errors() {
+        let compensated = std::cell::Cell::new(false);
+        let error = finish_governed_domain_pack_transition::<()>(
+            Err("DOMAIN_PACK_RUNTIME_CANARY_FAILED: mismatch".to_string()),
+            || {
+                compensated.set(true);
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert!(compensated.get());
+        assert_eq!(error, "DOMAIN_PACK_RUNTIME_CANARY_FAILED: mismatch");
+
+        let combined = finish_governed_domain_pack_transition::<()>(
+            Err("DOMAIN_PACK_ROLLBACK_CANARY_FAILED: mismatch".to_string()),
+            || Err("GOVERNANCE_RESTORE_FAILED: locked".to_string()),
+        )
+        .unwrap_err();
+        assert_eq!(
+            combined,
+            "DOMAIN_PACK_ROLLBACK_CANARY_FAILED: mismatch; governance_restore=GOVERNANCE_RESTORE_FAILED: locked"
+        );
+    }
+
+    #[test]
+    fn governed_pack_transition_never_runs_compensation_after_success() {
+        let result = finish_governed_domain_pack_transition(Ok("stable"), || {
+            panic!("successful transition must not restore the previous governance snapshot")
+        })
+        .unwrap();
+        assert_eq!(result, "stable");
+    }
 }

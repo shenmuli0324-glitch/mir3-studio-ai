@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { projectionTable } from '../projection-model'
+import { SpecializedDomainSummary } from './specialized-domain-summary'
 
 export function ResourceRenderer({ renderer, resource, loading, error }: {
   renderer: string
@@ -23,10 +24,19 @@ export function ResourceRenderer({ renderer, resource, loading, error }: {
   if (resource.projection.kind === 'map')
     return <MapCanvas projection={resource.projection} diagnostics={resource.diagnostics} />
   if (resource.projection.kind === 'xls')
-    return <SemanticPreview renderer={renderer} resource={resource} fallback={<XlsPreview projection={resource.projection} />} />
+    return <CompositePreview resource={resource}><SemanticPreview renderer={renderer} resource={resource} fallback={<XlsPreview projection={resource.projection} />} /></CompositePreview>
   if (isSemanticRenderer(renderer))
-    return <SemanticPreview renderer={renderer} resource={resource} fallback={<StructuredPreview resource={resource} />} />
+    return <CompositePreview resource={resource}><SemanticPreview renderer={renderer} resource={resource} fallback={<StructuredPreview resource={resource} />} /></CompositePreview>
   return <StructuredPreview resource={resource} />
+}
+
+function CompositePreview({ resource, children }: { resource: DomainResourceRecord, children: ReactNode }) {
+  return (
+    <div className="mt-5 space-y-3">
+      <SpecializedDomainSummary resource={resource} />
+      {children}
+    </div>
+  )
 }
 
 function SemanticPreview({ renderer, resource, fallback }: { renderer: string, resource: DomainResourceRecord, fallback: ReactNode }) {

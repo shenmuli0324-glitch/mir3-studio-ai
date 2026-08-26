@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "manor",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -123,6 +123,63 @@
     "mappings": [
       "file-projection",
       "manor.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "manorId",
+        "aliases": [
+          "manorId",
+          "ManorId",
+          "manor_id",
+          "manor-id",
+          "manor id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "mapId",
+        "aliases": [
+          "mapId",
+          "MapId",
+          "map_id",
+          "map-id",
+          "map id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "entryNpcId",
+        "aliases": [
+          "entryNpcId",
+          "EntryNpcId",
+          "entry_npc_id",
+          "entry-npc-id",
+          "entry npc id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "minimumLevel",
+        "aliases": [
+          "minimumLevel",
+          "MinimumLevel",
+          "minimum_level",
+          "minimum-level",
+          "minimum level"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "productionPointId",
+        "aliases": [
+          "productionPointId",
+          "ProductionPointId",
+          "production_point_id",
+          "production-point-id",
+          "production point id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -834,7 +891,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -932,7 +989,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1032,7 +1089,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1104,7 +1161,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1207,7 +1264,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1311,7 +1368,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1401,7 +1458,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

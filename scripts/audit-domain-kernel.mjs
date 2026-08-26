@@ -41,7 +41,7 @@ for (const file of [
 }
 if (existsSync(join(sdkRoot, 'package.json'))) {
   const sdkPackage = JSON.parse(readFileSync(join(sdkRoot, 'package.json'), 'utf8'))
-  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.2.0')
+  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.3.0')
     failures.push('Domain Plugin SDK package identity or SemVer is invalid')
   if (sdkPackage.exports?.['./contract'] !== './contract.mjs')
     failures.push('Domain Plugin SDK contract export is missing')
@@ -229,6 +229,32 @@ for (const pack of registry.packs) {
     || !pack.resources?.mappings?.includes(`${pack.systemId}.field-mapping-v1`)) {
     failures.push(`${pack.systemId}: file/resource bidirectional mapping contract is incomplete`)
   }
+  const resourceSchema = existsSync(join(directory, 'schemas/resource.schema.json'))
+    ? JSON.parse(readFileSync(join(directory, 'schemas/resource.schema.json'), 'utf8'))
+    : { properties: {} }
+  const schemaFields = Object.keys(resourceSchema.properties || {}).sort()
+  const fieldMappings = pack.resources?.fieldMappings || []
+  const mappedFields = fieldMappings.map(mapping => mapping.field).sort()
+  if (JSON.stringify(mappedFields) !== JSON.stringify(schemaFields)
+    || new Set(mappedFields).size !== mappedFields.length
+    || fieldMappings.some(mapping => !Array.isArray(mapping.aliases)
+      || !mapping.aliases.includes(mapping.field)
+      || !['string', 'integer', 'number', 'boolean'].includes(mapping.valueType)
+      || resourceSchema.properties?.[mapping.field]?.type !== mapping.valueType)) {
+    failures.push(`${pack.systemId}: executable field mappings must cover the exact resource schema with matching scalar types`)
+  }
+  const normalizedAliases = fieldMappings
+    .flatMap(mapping => mapping.aliases.map(alias => `${alias.toLowerCase().replaceAll(/[^a-z0-9]/g, '')}:${mapping.field}`))
+  const aliasOwners = new Map()
+  for (const entry of normalizedAliases) {
+    const separator = entry.indexOf(':')
+    const alias = entry.slice(0, separator)
+    const field = entry.slice(separator + 1)
+    const existing = aliasOwners.get(alias)
+    if (existing && existing !== field)
+      failures.push(`${pack.systemId}: field alias ${alias} is ambiguous between ${existing} and ${field}`)
+    aliasOwners.set(alias, field)
+  }
   for (const resourceType of pack.resources?.resourceTypes || []) {
     if (resourceTypes.has(resourceType))
       failures.push(`${pack.systemId}: duplicate resource type ${resourceType}`)
@@ -379,6 +405,9 @@ if (frontendIds.length !== 33 || expectedIds.some(id => !frontendIds.includes(id
 const mcp = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-mcp', 'src', 'main.rs'), 'utf8')
 const packLifecycle = readFileSync(join(root, 'src-tauri', 'src', 'service', 'plugin', 'system.rs'), 'utf8')
 const domainSystems = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'systems.rs'), 'utf8')
+const domainResources = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'resources.rs'), 'utf8')
+const runtimeValidators = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'runtime_validators.rs'), 'utf8')
+const domainMcp = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-mcp', 'src', 'main.rs'), 'utf8')
 const corpusRunner = readFileSync(join(root, 'scripts', 'run-domain-corpus-acceptance.mjs'), 'utf8')
 const domainFixtures = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'fixtures.rs'), 'utf8')
 const systemAi = readFileSync(join(root, 'src', 'features', 'system-ai', 'system-ai-panel.tsx'), 'utf8')
@@ -427,7 +456,7 @@ if (!packLifecycle.includes('execute_domain_pack_fixture_canary')
 }
 if (!packLifecycle.includes('activate_domain_pack_with_canary')
   || !packLifecycle.includes('domain_pack_canary_failure_rolls_back_and_success_advances_lkg')
-  || !pluginBridge.includes('activate_domain_pack_with_canary')) {
+  || !pluginBridge.includes('activate_domain_pack_with_governance_canary')) {
   failures.push('Domain candidate activation must rollback failed canaries and advance LKG only after success')
 }
 if (!iframeShim.includes('invoke<boolean>(\'rollback_core_update\')')
@@ -440,8 +469,41 @@ if (!domainSystems.includes('unknown_extensions_are_readonly')
   || !domainSystems.includes('"every detected domain must be validated"')) {
   failures.push('Domain tests must cover unknown-format readonly behavior and the external corpus matrix')
 }
+if (!domainSystems.includes('load_runtime_resource_schema')
+  || !domainSystems.includes('validate_projected_schema_record')
+  || !domainSystems.includes('bundled_runtime_schema_loader_covers_all_domain_packs')
+  || !domainSystems.includes('schema_validator_loads_pinned_pack_schema_and_fails_closed')
+  || !domainSystems.includes('projected_schema_enforces_required_type_enum_pattern_and_bounds')
+  || !domainSystems.includes('DOMAIN_SCHEMA_RECORD_INVALID:')) {
+  failures.push('Runtime schema validation must load the pinned pack schema, validate projected records, and fail closed')
+}
+if (!domainSystems.includes('canonicalize_mapped_record')
+  || !domainResources.includes('apply_field_mappings')
+  || !domainResources.includes('typed_mapped_value')
+  || !domainMcp.includes('manifest_field_aliases')
+  || !domainMcp.includes('field_line_replacement_with_aliases')) {
+  failures.push('Executable field mappings must canonicalize typed reads, schema validation, and safe text/XLS writes')
+}
+if (!domainSystems.includes('validate_runtime_rule(&validator.rule, projected_records)')
+  || !domainFixtures.includes('validate_runtime_rule(&runtime.rule, &records)')
+  || !domainFixtures.includes('DOMAIN_PACK_FIXTURE_RUNTIME_ASSERTION_MISMATCH')
+  || !runtimeValidators.includes('DOMAIN_RUNTIME_RULE_UNSUPPORTED:')) {
+  failures.push('Runtime diagnostics must execute the shared fail-closed evaluator in fixtures and live project validation')
+}
+for (const rule of runtimeRules) {
+  if (!runtimeValidators.includes(`"${rule}" =>`))
+    failures.push(`Runtime evaluator does not implement declared rule: ${rule}`)
+}
+if (!domainSystems.includes('.filter_map(|record| record.value.get(&reference.field))')
+  || !domainSystems.includes('validation_dependency_values')
+  || !domainSystems.includes('recommended_monster_id=MISSING')) {
+  failures.push('Reference validation must consume canonical field mappings for both source and dependency records')
+}
 if ((domainSystems.match(/#\[ignore = "requires MIR3_DOMAIN_CORPUS_ROOTS/g) || []).length !== 2
   || !domainSystems.includes('MIR3_DOMAIN_CORPUS_ROOTS must be set by the disposable-corpus acceptance runner')
+  || !domainSystems.includes('MIR3_CORPUS_READONLY:')
+  || !domainSystems.includes('MIR3_CORPUS_WRITE:')
+  || !corpusRunner.includes('DOMAIN_CORPUS_DOMAIN_COVERAGE_INCOMPLETE')
   || !/'--ignored'/.test(corpusRunner)) {
   failures.push('External corpus tests must be ignored by default and explicitly executed by the disposable-corpus runner')
 }

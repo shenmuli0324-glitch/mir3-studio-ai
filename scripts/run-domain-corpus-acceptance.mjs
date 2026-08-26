@@ -7,6 +7,12 @@ import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep 
 import process from 'node:process'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
+const domainRegistry = JSON.parse(
+  readFileSync(join(repositoryRoot, 'src-tauri', 'resources', 'mir3-domain-packs', 'registry.json'), 'utf8'),
+)
+const expectedDomainIds = domainRegistry.packs
+  .map(pack => pack.systemId)
+  .sort()
 const ignoredDirectoryNames = ['.git', 'node_modules', 'cache', 'logs', 'log', 'temp', 'tmp']
 const arguments_ = parseArguments(process.argv.slice(2))
 const projectRoots = arguments_.roots.map(validateProjectCopy)
@@ -59,12 +65,14 @@ const restoration = inventories.map((before, index) => ({
     && before.treeSha256 === postInventories[index].treeSha256,
 }))
 const restored = restoration.every(project => project.restored)
+const coverage = domainCoverage(cargo.stdout)
 
 const report = acceptanceReport({
-  status: cargo.status === 0 && restored ? 'passed' : 'failed',
+  status: cargo.status === 0 && restored && coverage.complete ? 'passed' : 'failed',
   auditReport,
   cargo,
   restoration,
+  coverage,
 })
 writeReport(reportPath, report)
 process.stdout.write(`Domain corpus acceptance report: ${reportPath}\n`)
@@ -72,6 +80,8 @@ if (cargo.status !== 0)
   throw new Error(`DOMAIN_CORPUS_MATRIX_FAILED: cargo exited with ${cargo.status ?? 'unknown'}`)
 if (!restored)
   throw new Error('DOMAIN_CORPUS_RESTORE_MISMATCH: at least one project copy differs after the write/restore matrix')
+if (!coverage.complete)
+  throw new Error(`DOMAIN_CORPUS_DOMAIN_COVERAGE_INCOMPLETE: readonly=${coverage.readonly.count}/33 write=${coverage.write.count}/33`)
 
 function parseArguments(values) {
   const roots = []
@@ -226,10 +236,10 @@ function detectedEngineValue(path, content) {
   return text.slice(0, 256) || null
 }
 
-function acceptanceReport({ status, auditReport, cargo, restoration = null }) {
+function acceptanceReport({ status, auditReport, cargo, restoration = null, coverage = null }) {
   const finishedAt = new Date()
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status,
     disposableCopiesConfirmed: true,
     repository: {
@@ -253,11 +263,11 @@ function acceptanceReport({ status, auditReport, cargo, restoration = null }) {
     projects: inventories,
     domainAudit: auditReport,
     restoration,
-    matrix: matrixReport(cargo),
+    matrix: matrixReport(cargo, coverage),
   }
 }
 
-function matrixReport(cargo) {
+function matrixReport(cargo, coverage) {
   if (!cargo)
     return { status: 'not-run' }
   return {
@@ -267,7 +277,30 @@ function matrixReport(cargo) {
     stderrSha256: sha256(cargo.stderr),
     stdoutBytes: Buffer.byteLength(cargo.stdout),
     stderrBytes: Buffer.byteLength(cargo.stderr),
+    domainCoverage: coverage,
   }
+}
+
+function domainCoverage(stdout) {
+  const readonly = markerIds(stdout, 'MIR3_CORPUS_READONLY')
+  const write = markerIds(stdout, 'MIR3_CORPUS_WRITE')
+  const expected = new Set(expectedDomainIds)
+  const unknown = [...new Set([...readonly, ...write])].filter(systemId => !expected.has(systemId)).sort()
+  const readonlyMissing = expectedDomainIds.filter(systemId => !readonly.includes(systemId))
+  const writeMissing = expectedDomainIds.filter(systemId => !write.includes(systemId))
+  return {
+    complete: unknown.length === 0 && readonlyMissing.length === 0 && writeMissing.length === 0,
+    expectedCount: expectedDomainIds.length,
+    readonly: { count: readonly.length, systems: readonly, missing: readonlyMissing },
+    write: { count: write.length, systems: write, missing: writeMissing },
+    unknown,
+  }
+}
+
+function markerIds(stdout, marker) {
+  const matches = [...stdout.matchAll(new RegExp(`^${marker}:([a-z][a-z0-9_]*)$`, 'gmu'))]
+    .map(match => match[1])
+  return [...new Set(matches)].sort()
 }
 
 function writeFailureAndExit(code, error, command, auditReport = null) {

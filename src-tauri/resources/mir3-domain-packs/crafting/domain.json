@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "crafting",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -133,6 +133,63 @@
     "mappings": [
       "file-projection",
       "crafting.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "recipeId",
+        "aliases": [
+          "recipeId",
+          "RecipeId",
+          "recipe_id",
+          "recipe-id",
+          "recipe id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "outputItemId",
+        "aliases": [
+          "outputItemId",
+          "OutputItemId",
+          "output_item_id",
+          "output-item-id",
+          "output item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "outputCount",
+        "aliases": [
+          "outputCount",
+          "OutputCount",
+          "output_count",
+          "output-count",
+          "output count"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "materialItemId",
+        "aliases": [
+          "materialItemId",
+          "MaterialItemId",
+          "material_item_id",
+          "material-item-id",
+          "material item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "materialCount",
+        "aliases": [
+          "materialCount",
+          "MaterialCount",
+          "material_count",
+          "material-count",
+          "material count"
+        ],
+        "valueType": "integer"
+      }
     ],
     "dependencyEdges": [
       {
@@ -646,7 +703,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -741,7 +798,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -827,7 +884,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -921,7 +978,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1021,7 +1078,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

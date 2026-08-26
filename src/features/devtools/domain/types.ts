@@ -174,6 +174,14 @@ export interface DomainValidationReport {
   diagnostics: string[]
 }
 
+export interface DomainDependencyGraph {
+  systemId: string
+  direct: string[]
+  transitive: string[]
+  missing: string[]
+  cycles: string[][]
+}
+
 export interface SafeTextOpen {
   projectId: string
   relativePath: string
@@ -203,7 +211,7 @@ export interface DomainDraft {
   updatedAt: number
 }
 
-interface DomainDraftPreview {
+export interface DomainDraftPreview {
   draft: DomainDraft
   changes: Array<{
     path: string
@@ -232,6 +240,30 @@ export interface DomainSnapshot {
   id: string
   draftId?: string | null
   createdAt: number
+}
+
+export interface CompositeDraftReviewItem {
+  draftId: string
+  systemId: string
+  pluginVersion: string
+  confirmation: DomainDraftConfirmation
+  validation: DomainValidationReport
+}
+
+export interface CompositeDraftReview {
+  compositeId: string
+  drafts: CompositeDraftReviewItem[]
+}
+
+export interface CompositeDraftApplyInput {
+  draftId: string
+  confirmationToken: string
+}
+
+export interface CompositeDraftApplyResult {
+  compositeId: string
+  draftIds: string[]
+  snapshot: DomainSnapshot
 }
 
 export interface SystemSessionBinding {

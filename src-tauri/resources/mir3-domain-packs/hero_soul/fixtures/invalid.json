@@ -3,14 +3,14 @@
   "fixture": "invalid",
   "records": [
     {
-      "routeId": "hero_soul-routeId-1",
+      "routeId": "hero_soul-nodeId-1",
       "nodeId": "hero_soul-nodeId-1",
       "costItemId": "item:missing",
       "grantedSkillId": "skill:fixture-1",
       "powerValue": 2000000001
     },
     {
-      "routeId": "hero_soul-routeId-1",
+      "routeId": "hero_soul-nodeId-1",
       "nodeId": "hero_soul-nodeId-1",
       "costItemId": "item:fixture-2",
       "grantedSkillId": "skill:fixture-2",

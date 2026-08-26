@@ -10,7 +10,7 @@
     },
     {
       "level": 256,
-      "requiredExperience": 2,
+      "requiredExperience": 0,
       "statPoints": 2,
       "recommendedMonsterId": "monster:fixture-2"
     }

@@ -10,7 +10,7 @@
     },
     {
       "vipLevel": 100,
-      "requiredPoints": 2,
+      "requiredPoints": 0,
       "shopDiscountBasisPoints": 2,
       "grantedTitleId": "title:fixture-2"
     }

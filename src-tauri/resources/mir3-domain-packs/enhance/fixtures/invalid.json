@@ -5,7 +5,7 @@
     {
       "enhanceTier": 100,
       "equipmentClass": "weapon",
-      "successRateBasisPoints": 1,
+      "successRateBasisPoints": 10001,
       "materialItemId": "item:missing",
       "failureMode": "none"
     },

@@ -159,9 +159,24 @@ mod tests {
         let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
+        let resources = store
+            .query_domain_resources(&project.id, "map", &crate::DomainResourceQuery::default())
+            .unwrap();
+        let resource = store
+            .get_domain_resource(&project.id, "map", &resources[0].id)
+            .unwrap();
+        assert_eq!(resource.projection["kind"], "map");
+        assert_eq!(resource.projection["header"]["width"], 4);
+        assert_eq!(
+            resource.projection["initialChunk"]["cells"]
+                .as_array()
+                .unwrap()
+                .len(),
+            16
+        );
         let draft = store.open_draft(&project.id, "编辑地图碰撞").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.3.0", None)
             .unwrap();
         let opened = store
             .map_resource_open(&project.id, relative, None, Some((0, 0, 4)))

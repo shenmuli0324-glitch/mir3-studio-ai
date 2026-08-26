@@ -5,7 +5,7 @@
     {
       "monsterId": "monster-monsterId-1",
       "combatLevel": 256,
-      "healthPoints": 2,
+      "healthPoints": 0,
       "spawnMapId": "map:missing",
       "primaryDropItemId": "item:fixture-1"
     },

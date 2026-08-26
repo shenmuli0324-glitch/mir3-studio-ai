@@ -12,7 +12,7 @@
     {
       "gemId": "gem-gemId-1",
       "gemTier": 100,
-      "socketType": "defense",
+      "socketType": "attack",
       "itemId": "item:fixture-2",
       "grantedBuffId": "buff:fixture-2"
     }

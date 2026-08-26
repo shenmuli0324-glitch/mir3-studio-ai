@@ -112,6 +112,218 @@ describe('mir3 Core Plugin public runtime contract', () => {
     expect(runtime.listenerRemoved()).toBe(true)
   })
 
+  it('releases the owner after Session creation fails so another task can retry safely', async () => {
+    const runtime = loadAdapter()
+    const calls = []
+    const sessions = new Map()
+    const context = createHarnessContext({ calls, sessions })
+    const create = context.sessions.create
+    let createAttempts = 0
+    context.sessions.create = async (options) => {
+      createAttempts += 1
+      if (createAttempts === 1) {
+        return {
+          ok: false,
+          error: { code: 'fixture-create-failed', message: 'fixture create failed' },
+        }
+      }
+      return create(options)
+    }
+    runtime.plugin.apply(context)
+    const sessionId = 'mir3-system-create-retry'
+
+    await runtime.send(request('mir3/systemSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime', prompt: 'must not run before archive' },
+      sessionId,
+    }))
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/bridge.error',
+      payload: { message: expect.stringContaining('SYSTEM_SESSION_CREATE_FAILED') },
+    })
+    expect(calls.some(call => call[0] === 'archive' || call[0] === 'open' || call[0] === 'prompt')).toBe(false)
+
+    await runtime.send(request('mir3/systemSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime', prompt: 'retry after create failure' },
+      sessionId,
+      taskId: 'task-create-retry',
+    }))
+    expect(createAttempts).toBe(2)
+    expect(calls).toContainEqual(['archive', sessionId])
+    expect(calls).toContainEqual(['open', sessionId])
+    expect(calls).toContainEqual(['prompt', sessionId, 'retry after create failure', 'queue'])
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/systemSession.created',
+      taskId: 'task-create-retry',
+    })
+  })
+
+  it('reuses a partially created Session after archive fails and never opens it before archive succeeds', async () => {
+    const runtime = loadAdapter()
+    const calls = []
+    const sessions = new Map()
+    const context = createHarnessContext({ calls, sessions })
+    let archiveAttempts = 0
+    context.workspaces.archiveSession = async (sessionId) => {
+      archiveAttempts += 1
+      calls.push(['archive', sessionId])
+      if (archiveAttempts === 1)
+        throw new Error('fixture archive failed')
+    }
+    runtime.plugin.apply(context)
+    const sessionId = 'mir3-system-archive-retry'
+
+    await runtime.send(request('mir3/systemSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime', prompt: 'must stay blocked' },
+      sessionId,
+    }))
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/bridge.error',
+      payload: { message: expect.stringContaining('fixture archive failed') },
+    })
+    expect(calls.filter(call => call[0] === 'session-create')).toHaveLength(1)
+    expect(calls.some(call => call[0] === 'open' || call[0] === 'prompt')).toBe(false)
+
+    await runtime.send(request('mir3/systemSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime', prompt: 'retry after archive failure' },
+      sessionId,
+      taskId: 'task-archive-retry',
+    }))
+    expect(calls.filter(call => call[0] === 'session-create')).toHaveLength(1)
+    expect(calls.filter(call => call[0] === 'archive')).toHaveLength(2)
+    const successfulArchive = calls.findLastIndex(call => call[0] === 'archive')
+    const open = calls.findIndex(call => call[0] === 'open')
+    const prompt = calls.findIndex(call => call[0] === 'prompt')
+    expect(successfulArchive).toBeLessThan(open)
+    expect(open).toBeLessThan(prompt)
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/systemSession.created',
+      taskId: 'task-archive-retry',
+    })
+  })
+
+  it('blocks concurrent Session commands until the archive operation has completed', async () => {
+    const runtime = loadAdapter()
+    const calls = []
+    const sessions = new Map()
+    const context = createHarnessContext({ calls, sessions })
+    let finishArchive
+    context.workspaces.archiveSession = async (sessionId) => {
+      calls.push(['archive', sessionId])
+      await new Promise((resolve) => {
+        finishArchive = resolve
+      })
+    }
+    runtime.plugin.apply(context)
+    const sessionId = 'mir3-system-archive-pending'
+
+    await runtime.send(request('mir3/systemSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime', prompt: 'run only after archive' },
+      sessionId,
+    }))
+    await runtime.send(request('mir3/systemSession.prompt', 2, {
+      payload: { content: 'concurrent prompt' },
+      sessionId,
+    }))
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/bridge.error',
+      payload: { message: expect.stringContaining('SYSTEM_SESSION_PREPARATION_IN_PROGRESS') },
+    })
+    await runtime.send(request('mir3/systemSession.resume', 3, { sessionId }))
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/bridge.error',
+      payload: { message: expect.stringContaining('SYSTEM_SESSION_PREPARATION_IN_PROGRESS') },
+    })
+    expect(calls.some(call => call[0] === 'open' || call[0] === 'prompt')).toBe(false)
+
+    finishArchive()
+    await new Promise(resolve => setImmediate(resolve))
+    expect(calls).toContainEqual(['open', sessionId])
+    expect(calls).toContainEqual(['prompt', sessionId, 'run only after archive', 'queue'])
+  })
+
+  it('re-archives a residual Session after plugin reload and releases a failed resume owner', async () => {
+    const firstRuntime = loadAdapter()
+    const calls = []
+    const sessions = new Map()
+    const context = createHarnessContext({ calls, sessions })
+    let archiveAttempts = 0
+    context.workspaces.archiveSession = async (sessionId) => {
+      archiveAttempts += 1
+      calls.push(['archive', sessionId])
+      if (archiveAttempts <= 2)
+        throw new Error(`fixture archive failed ${archiveAttempts}`)
+    }
+    const dispose = firstRuntime.plugin.apply(context)
+    const sessionId = 'mir3-system-reload-residual'
+
+    await firstRuntime.send(request('mir3/systemSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime', prompt: 'must stay blocked' },
+      sessionId,
+    }))
+    expect(lastMessage(firstRuntime.messages)).toMatchObject({
+      type: 'mir3/bridge.error',
+      payload: { message: expect.stringContaining('fixture archive failed 1') },
+    })
+    expect(calls.some(call => call[0] === 'open' || call[0] === 'prompt')).toBe(false)
+    dispose()
+
+    const resumedRuntime = loadAdapter()
+    resumedRuntime.plugin.apply(context)
+    await resumedRuntime.send(request('mir3/systemSession.resume', 1, { sessionId }))
+    expect(lastMessage(resumedRuntime.messages)).toMatchObject({
+      type: 'mir3/bridge.error',
+      payload: { message: expect.stringContaining('fixture archive failed 2') },
+    })
+    expect(calls.some(call => call[0] === 'open' || call[0] === 'prompt')).toBe(false)
+
+    await resumedRuntime.send(request('mir3/systemSession.resume', 2, {
+      sessionId,
+      taskId: 'task-resume-retry',
+    }))
+    expect(calls.filter(call => call[0] === 'session-create')).toHaveLength(1)
+    expect(calls.filter(call => call[0] === 'archive')).toHaveLength(3)
+    const successfulArchive = calls.findLastIndex(call => call[0] === 'archive')
+    const open = calls.findIndex(call => call[0] === 'open')
+    expect(successfulArchive).toBeLessThan(open)
+    expect(lastMessage(resumedRuntime.messages)).toMatchObject({
+      type: 'mir3/systemSession.resumed',
+      taskId: 'task-resume-retry',
+    })
+  })
+
+  it('rebuilds a global Session subscription after the plugin runtime reloads', async () => {
+    const firstRuntime = loadAdapter()
+    const calls = []
+    const sessions = new Map()
+    const context = createHarnessContext({ calls, sessions })
+    const dispose = firstRuntime.plugin.apply(context)
+    const sessionId = 'global-reload-runtime'
+
+    await firstRuntime.send(request('mir3/globalSession.create', 1, {
+      payload: { cwd: '/tmp/mir3-runtime' },
+      sessionId,
+      systemId: 'shop',
+      taskId: 'global-task-runtime',
+    }))
+    dispose()
+
+    const resumedRuntime = loadAdapter()
+    resumedRuntime.plugin.apply(context)
+    await resumedRuntime.send(request('mir3/globalSession.resume', 1, {
+      sessionId,
+      systemId: 'shop',
+      taskId: 'global-task-runtime',
+    }))
+
+    expect(lastMessage(resumedRuntime.messages)).toMatchObject({
+      type: 'mir3/globalSession.resumed',
+      sessionId,
+      taskId: 'global-task-runtime',
+    })
+    expect(calls.filter(call => call[0] === 'session-create' && call[1] === sessionId)).toHaveLength(1)
+    expect(calls.filter(call => call[0] === 'open' && call[1] === sessionId)).toHaveLength(2)
+  })
+
   it('rejects foreign origins, sources, replayed sequences, and task-owner changes', async () => {
     const runtime = loadAdapter()
     const sessions = new Map()

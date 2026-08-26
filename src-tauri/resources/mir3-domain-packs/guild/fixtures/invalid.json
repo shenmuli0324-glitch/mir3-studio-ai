@@ -11,7 +11,7 @@
     {
       "guildLevel": 100,
       "requiredContribution": 2,
-      "maximumMembers": 3,
+      "maximumMembers": 1,
       "rankingBoardId": "ranking:fixture-2"
     }
   ],

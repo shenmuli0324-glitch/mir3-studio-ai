@@ -12,7 +12,7 @@
     {
       "boardId": "ranking-boardId-1",
       "metric": "power",
-      "cycleSeconds": 62,
+      "cycleSeconds": 0,
       "rewardItemId": "item:fixture-2",
       "seasonId": "season:fixture-2"
     }

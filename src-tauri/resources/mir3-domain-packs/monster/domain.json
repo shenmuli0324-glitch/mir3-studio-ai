@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "monster",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -126,6 +126,63 @@
     "mappings": [
       "file-projection",
       "monster.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "monsterId",
+        "aliases": [
+          "monsterId",
+          "MonsterId",
+          "monster_id",
+          "monster-id",
+          "monster id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "combatLevel",
+        "aliases": [
+          "combatLevel",
+          "CombatLevel",
+          "combat_level",
+          "combat-level",
+          "combat level"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "healthPoints",
+        "aliases": [
+          "healthPoints",
+          "HealthPoints",
+          "health_points",
+          "health-points",
+          "health points"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "spawnMapId",
+        "aliases": [
+          "spawnMapId",
+          "SpawnMapId",
+          "spawn_map_id",
+          "spawn-map-id",
+          "spawn map id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "primaryDropItemId",
+        "aliases": [
+          "primaryDropItemId",
+          "PrimaryDropItemId",
+          "primary_drop_item_id",
+          "primary-drop-item-id",
+          "primary drop item id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -732,7 +789,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -827,7 +884,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -921,7 +978,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1018,7 +1075,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1118,7 +1175,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1204,7 +1261,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

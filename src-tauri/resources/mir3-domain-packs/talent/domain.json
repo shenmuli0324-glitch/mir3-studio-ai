@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "talent",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -117,6 +117,74 @@
     "mappings": [
       "file-projection",
       "talent.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "nodeId",
+        "aliases": [
+          "nodeId",
+          "NodeId",
+          "node_id",
+          "node-id",
+          "node id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "treeId",
+        "aliases": [
+          "treeId",
+          "TreeId",
+          "tree_id",
+          "tree-id",
+          "tree id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "costPoints",
+        "aliases": [
+          "costPoints",
+          "CostPoints",
+          "cost_points",
+          "cost-points",
+          "cost points"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "requiredLevel",
+        "aliases": [
+          "requiredLevel",
+          "RequiredLevel",
+          "required_level",
+          "required-level",
+          "required level"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "grantedSkillId",
+        "aliases": [
+          "grantedSkillId",
+          "GrantedSkillId",
+          "granted_skill_id",
+          "granted-skill-id",
+          "granted skill id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "parentNodeId",
+        "aliases": [
+          "parentNodeId",
+          "ParentNodeId",
+          "parent_node_id",
+          "parent-node-id",
+          "parent node id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -909,7 +977,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1010,7 +1078,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1111,7 +1179,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1181,7 +1249,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1286,7 +1354,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1385,7 +1453,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1490,7 +1558,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1576,7 +1644,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

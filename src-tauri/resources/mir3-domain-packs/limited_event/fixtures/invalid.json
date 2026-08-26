@@ -11,7 +11,7 @@
     },
     {
       "eventId": "limited_event-eventId-1",
-      "startEpochSeconds": 2,
+      "startEpochSeconds": 3,
       "endEpochSeconds": 3,
       "eventMapId": "map:fixture-2",
       "questId": "quest:fixture-2"

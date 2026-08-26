@@ -457,8 +457,8 @@ fn validate_layout(bytes: &[u8], width: u16, height: u16) -> Result<(), String> 
 fn validate_dimensions(width: u16, height: u16) -> Result<(), String> {
     if width == 0
         || height == 0
-        || width % 2 != 0
-        || height % 2 != 0
+        || !width.is_multiple_of(2)
+        || !height.is_multiple_of(2)
         || usize::from(width) > MAX_DIMENSION
         || usize::from(height) > MAX_DIMENSION
     {

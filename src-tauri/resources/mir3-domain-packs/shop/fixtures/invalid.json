@@ -17,7 +17,7 @@
       "itemId": "item:fixture-2",
       "currencyItemId": "item:fixture-2",
       "price": 2,
-      "startEpochSeconds": 2,
+      "startEpochSeconds": 3,
       "endEpochSeconds": 3
     }
   ],

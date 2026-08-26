@@ -114,7 +114,7 @@ impl DomainStore {
                         for field in &target_manifest.resources.unique_key {
                             if let Some(value) = field_value(&target.record.fields, field) {
                                 identities
-                                    .entry(value.to_string())
+                                    .entry(value)
                                     .or_insert_with(|| target.record.id.clone());
                             }
                         }
@@ -214,7 +214,7 @@ impl DomainStore {
                 if row.iter().all(|value| value.trim().is_empty()) {
                     continue;
                 }
-                let fields = fields_from_row(&headers, row);
+                let fields = apply_field_mappings(manifest, fields_from_row(&headers, row));
                 records.push(build_record(
                     manifest,
                     file.clone(),
@@ -278,7 +278,7 @@ fn collect_text_resources(
             records.push(build_record(
                 manifest,
                 file.clone(),
-                fields_from_row(&headers, &values),
+                apply_field_mappings(manifest, fields_from_row(&headers, &values)),
                 DomainResourceSource {
                     path: file.path.clone(),
                     sheet: None,
@@ -292,7 +292,7 @@ fn collect_text_resources(
 
     let blocks = content.split("\n\n").collect::<Vec<_>>();
     for (index, block) in blocks.iter().enumerate() {
-        let fields = parse_text_fields(block);
+        let fields = apply_field_mappings(manifest, parse_text_fields(block));
         if fields.is_empty() {
             continue;
         }
@@ -366,6 +366,66 @@ fn fields_from_row(headers: &[String], row: &[String]) -> Map<String, Value> {
         .collect()
 }
 
+fn apply_field_mappings(
+    manifest: &DomainManifest,
+    fields: Map<String, Value>,
+) -> Map<String, Value> {
+    let aliases = manifest
+        .resources
+        .field_mappings
+        .iter()
+        .flat_map(|mapping| {
+            mapping
+                .aliases
+                .iter()
+                .map(move |alias| (normalize_field(alias), mapping))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut mapped = Map::new();
+    for (source_field, value) in fields {
+        let Some(mapping) = aliases.get(&normalize_field(&source_field)) else {
+            mapped.insert(source_field, value);
+            continue;
+        };
+        let field = mapping.field.clone();
+        let value = typed_mapped_value(&mapping.value_type, value);
+        if mapped.contains_key(&field) {
+            mapped.insert(source_field, value);
+        } else {
+            mapped.insert(field, value);
+        }
+    }
+    mapped
+}
+
+fn typed_mapped_value(value_type: &str, value: Value) -> Value {
+    let Some(text) = value.as_str() else {
+        return value;
+    };
+    match value_type {
+        "integer" => text
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .map(Value::from)
+            .unwrap_or(value),
+        "number" => text
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite())
+            .and_then(serde_json::Number::from_f64)
+            .map(Value::Number)
+            .unwrap_or(value),
+        "boolean" => match text.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" => Value::Bool(true),
+            "false" | "0" => Value::Bool(false),
+            _ => value,
+        },
+        _ => value,
+    }
+}
+
 fn build_record(
     manifest: &DomainManifest,
     file: DomainFileRecord,
@@ -383,7 +443,7 @@ fn build_record(
         .resources
         .unique_key
         .iter()
-        .filter_map(|key| field_value(&fields, key).map(|value| (key.clone(), value.to_string())))
+        .filter_map(|key| field_value(&fields, key).map(|value| (key.clone(), value)))
         .collect::<Vec<_>>();
     let identity = if unique.len() == manifest.resources.unique_key.len() && !unique.is_empty() {
         unique
@@ -452,7 +512,7 @@ fn append_dependency(
     edge: &DomainDependencyEdge,
     target: Option<&Result<BTreeMap<String, String>, String>>,
 ) {
-    let Some(value) = field_value(&resource.record.fields, &edge.field).map(str::to_string) else {
+    let Some(value) = field_value(&resource.record.fields, &edge.field) else {
         if edge.required {
             let diagnostic = format!("DOMAIN_RESOURCE_REFERENCE_FIELD_MISSING:{}", edge.field);
             resource.record.diagnostics.push(diagnostic.clone());
@@ -522,13 +582,17 @@ fn diagnose_duplicate_identities(resources: &mut [RawResource]) {
     }
 }
 
-fn field_value<'a>(fields: &'a Map<String, Value>, expected: &str) -> Option<&'a str> {
+fn field_value(fields: &Map<String, Value>, expected: &str) -> Option<String> {
     let expected = normalize_field(expected);
     fields
         .iter()
         .find(|(field, _)| normalize_field(field) == expected)
-        .and_then(|(_, value)| value.as_str())
-        .filter(|value| !value.trim().is_empty())
+        .and_then(|(_, value)| match value {
+            Value::String(value) => (!value.trim().is_empty()).then(|| value.trim().to_string()),
+            Value::Number(value) => Some(value.to_string()),
+            Value::Bool(value) => Some(value.to_string()),
+            _ => None,
+        })
 }
 
 fn normalize_field(value: &str) -> String {
@@ -559,7 +623,7 @@ fn record_id(system_id: &str, resource_type: &str, identity: &str) -> String {
     hasher.update(resource_type.as_bytes());
     hasher.update([0]);
     hasher.update(identity.as_bytes());
-    format!("{system_id}:{}", format!("{:x}", hasher.finalize()))
+    format!("{system_id}:{:x}", hasher.finalize())
 }
 
 #[cfg(test)]
@@ -571,6 +635,32 @@ mod tests {
 
     fn text_cell(value: &str) -> Biff8Cell {
         Biff8Cell::general(Biff8Value::Text(value.to_string()))
+    }
+
+    #[test]
+    fn executable_field_mappings_canonicalize_aliases_and_scalar_types() {
+        let registry = crate::bundled_domain_registry().unwrap();
+        let manifest = registry
+            .packs
+            .iter()
+            .find(|manifest| manifest.system_id == "level")
+            .unwrap();
+        let source = Map::from_iter([
+            ("Level".to_string(), Value::String("7".to_string())),
+            (
+                "required_experience".to_string(),
+                Value::String("1000".to_string()),
+            ),
+            ("stat-points".to_string(), Value::String("3".to_string())),
+        ]);
+        let mapped = apply_field_mappings(manifest, source);
+        assert_eq!(mapped.get("level").and_then(Value::as_i64), Some(7));
+        assert_eq!(
+            mapped.get("requiredExperience").and_then(Value::as_i64),
+            Some(1000)
+        );
+        assert_eq!(mapped.get("statPoints").and_then(Value::as_i64), Some(3));
+        assert!(!mapped.contains_key("required_experience"));
     }
 
     fn write_shop_workbook(path: &Path) {

@@ -1,15 +1,19 @@
 import type { StudioShellState, StudioView } from './studio-types'
+import type { CompositeDraftReviewRequest } from '@/features/devtools/domain/composite-draft-review'
 import type { VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import { Button } from '@heroui/react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
 import { PluginRecovery } from '@/components/plugin-recovery'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
 import { getDomainResource, previewDomainDraft, validateDomainDraft } from '@/features/devtools/domain/api'
+import { CompositeDraftReviewDialog } from '@/features/devtools/domain/composite-draft-review'
 import { GuiDesignerScope } from '@/features/gui-designer/gui-designer-scope'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
-import { bridgeRequestId, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
-import { draftHandoffs, isGlobalDraftEvent, registeredGlobalTask, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
+import { draftHandoffs, GLOBAL_WORKBENCH_EVENT, isCompletedGlobalTask, isGlobalDraftEvent, isGlobalTerminalEvent, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, restoreGlobalTasks, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { stopScopeLease } from '@/features/system-ai/scope-lease-manager'
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
@@ -25,6 +29,7 @@ import { DEFAULT_STUDIO_VIEW, harnessSurfaceFor, isHarnessView } from './studio-
 import '../i18n'
 
 export function App() {
+  const { t } = useTranslation()
   useDshTheme()
   const { status, recovery } = useStore(store.harness)
   const { activeProject, selectWorkspace } = useMir3Projects()
@@ -35,12 +40,31 @@ export function App() {
   })
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [devtoolsTarget, setDevtoolsTarget] = useState<VerifiedDevtoolsTarget | null>(null)
+  const [compositeReview, setCompositeReview] = useState<CompositeDraftReviewRequest | null>(null)
+  const [pendingCompositeReview, setPendingCompositeReview] = useState<CompositeDraftReviewRequest | null>(null)
   const { activeView, sidebarCollapsed } = shellState
   const harnessVisible = isHarnessView(activeView)
   const harnessSurface = harnessSurfaceFor(activeView)
+  const visibleCompositeReview = reviewForActiveProject(compositeReview, activeProject?.id)
+  const visiblePendingCompositeReview = reviewForActiveProject(pendingCompositeReview, activeProject?.id)
 
   useEffect(() => {
     store.harness.startup()
+  }, [])
+
+  useEffect(() => {
+    const pending = registeredGlobalTasks().find(task => task.projectId === activeProject?.id && task.reviewPending)
+    // eslint-disable-next-line react/set-state-in-effect
+    setPendingCompositeReview(pending ? reviewRequest(pending) : null)
+  }, [activeProject?.id])
+
+  useEffect(() => {
+    restoreGlobalTasks()
+    function showGlobalWorkbench() {
+      setShellState(value => ({ ...value, activeView: 'workbench' }))
+    }
+    window.addEventListener(GLOBAL_WORKBENCH_EVENT, showGlobalWorkbench)
+    return () => window.removeEventListener(GLOBAL_WORKBENCH_EVENT, showGlobalWorkbench)
   }, [])
 
   useEffect(() => {
@@ -52,17 +76,44 @@ export function App() {
   useEffect(() => {
     let disposed = false
     const unsubscribe = subscribeHarnessBridge((message) => {
+      if (message.type === 'mir3/plugin.ready') {
+        for (const task of registeredGlobalTasks()) {
+          postHarnessBridge({
+            type: 'mir3/globalSession.resume',
+            projectId: task.projectId,
+            systemId: task.systemId,
+            taskId: task.taskId,
+            sessionId: task.sessionId,
+            payload: {},
+          })
+        }
+        return
+      }
       if (!isGlobalDraftEvent(message.type))
         return
       const registration = registeredGlobalTask(message)
       if (!registration)
         return
+      const completed = isCompletedGlobalTask(message)
+      const terminal = isGlobalTerminalEvent(message.type)
+      if (completed) {
+        const request = reviewRequest(registration)
+        markGlobalTaskReviewPending(registration)
+        if (registration.projectId === activeProject?.id) {
+          setPendingCompositeReview(request)
+          setCompositeReview(request)
+        }
+      }
       const requestedTarget = returnTarget(message, registration)
       const handoffs = draftHandoffs(message, registration)
-      const completed = message.type === 'mir3/globalSession.completed'
       if (completed) {
-        stopScopeLease(registration)
+        void stopScopeLease(registration)
+      }
+      else if (terminal) {
+        void stopScopeLease(registration)
         unregisterGlobalTask(registration)
+        setPendingCompositeReview(value => sameReviewTask(value, registration) ? null : value)
+        setCompositeReview(value => sameReviewTask(value, registration) ? null : value)
       }
       if (!requestedTarget || requestedTarget.projectId !== activeProject?.id)
         return
@@ -124,6 +175,27 @@ export function App() {
     setShellState(value => ({ ...value, activeView: view }))
   }
 
+  function finishCompositeReview() {
+    const review = compositeReview ?? pendingCompositeReview
+    if (!review)
+      return
+    const task = registeredGlobalTasks().find(candidate => sameReviewTask(review, candidate))
+    if (task) {
+      postHarnessBridge({
+        type: 'mir3/globalSession.complete',
+        projectId: task.projectId,
+        systemId: task.systemId,
+        taskId: task.taskId,
+        sessionId: task.sessionId,
+        payload: {},
+      })
+    }
+    void stopScopeLease(review)
+    unregisterGlobalTask(review)
+    setCompositeReview(null)
+    setPendingCompositeReview(null)
+  }
+
   function readyContent() {
     if (harnessVisible)
       return null
@@ -155,6 +227,18 @@ export function App() {
               <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
                 <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
                 <div className={studioPageClass(activeView)}>{readyContent()}</div>
+                <If cond={visiblePendingCompositeReview != null && visibleCompositeReview == null}>
+                  <Button
+                    className="absolute right-5 top-5 z-20 bg-accent text-white shadow-lg"
+                    size="sm"
+                    onPress={() => setCompositeReview(visiblePendingCompositeReview)}
+                  >
+                    {t('studio.composite_review.reopen')}
+                  </Button>
+                </If>
+                <If cond={visibleCompositeReview != null}>
+                  <CompositeDraftReviewDialog request={visibleCompositeReview!} onClose={() => setCompositeReview(null)} onApplied={finishCompositeReview} />
+                </If>
               </main>
             </div>
           </If>
@@ -175,4 +259,25 @@ function studioPageClass(view: StudioView): string {
   if (isHarnessView(view))
     return `${base} invisible pointer-events-none`
   return `${base} visible`
+}
+
+function reviewForActiveProject(review: CompositeDraftReviewRequest | null, projectId?: string): CompositeDraftReviewRequest | null {
+  if (!review || review.projectId !== projectId)
+    return null
+  return review
+}
+
+function reviewRequest(task: { projectId: string, compositeId: string, taskId: string, sessionId: string }): CompositeDraftReviewRequest {
+  return {
+    projectId: task.projectId,
+    compositeId: task.compositeId,
+    taskId: task.taskId,
+    sessionId: task.sessionId,
+  }
+}
+
+function sameReviewTask(review: CompositeDraftReviewRequest | null, task: { projectId: string, taskId: string, sessionId: string }): boolean {
+  return review?.projectId === task.projectId
+    && review.taskId === task.taskId
+    && review.sessionId === task.sessionId
 }

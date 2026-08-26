@@ -7,7 +7,7 @@
       "mapId": "map:missing",
       "entryNpcId": "npc:fixture-1",
       "minimumLevel": 256,
-      "productionPointId": "resource_production:fixture-1"
+      "productionPointId": "npc:fixture-1"
     },
     {
       "manorId": "manor-manorId-1",

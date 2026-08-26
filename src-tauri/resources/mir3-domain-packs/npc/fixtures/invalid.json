@@ -4,7 +4,7 @@
   "records": [
     {
       "npcId": "npc-npcId-1",
-      "scriptPath": "scripts/npc-1.lua",
+      "scriptPath": "../escape.lua",
       "mapId": "map:missing",
       "coordinateX": 4096,
       "coordinateY": 1,

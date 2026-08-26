@@ -211,11 +211,97 @@ impl ProjectService {
             diff_hash: binding.diff_hash,
         })
     }
+
+    /// 组合确认先完整核对全部一次性令牌，再在同一把锁内整体消费。
+    pub fn consume_composite_confirmations(
+        &self,
+        project_id: &str,
+        requests: &[(String, String)],
+    ) -> Result<Vec<ConfirmationValues>, String> {
+        let mut confirmations = self
+            .confirmations
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut values = Vec::with_capacity(requests.len());
+        let mut tokens = Vec::with_capacity(requests.len());
+        let mut draft_ids = Vec::with_capacity(requests.len());
+        for (draft_id, token) in requests {
+            if tokens.contains(token) || draft_ids.contains(draft_id) {
+                return Err(
+                    "COMPOSITE_CONFIRMATION_DUPLICATE: Drafts and confirmation tokens must be unique"
+                        .to_string(),
+                );
+            }
+            let binding = confirmations.get(token).ok_or_else(|| {
+                "DRAFT_CONFIRMATION_INVALID: confirmation token is invalid or already used"
+                    .to_string()
+            })?;
+            if binding.project_id != project_id || binding.draft_id != *draft_id {
+                return Err(
+                    "DRAFT_CONFIRMATION_INVALID: token belongs to another draft".to_string()
+                );
+            }
+            values.push(ConfirmationValues {
+                revision: binding.revision,
+                diff_hash: binding.diff_hash.clone(),
+            });
+            tokens.push(token.clone());
+            draft_ids.push(draft_id.clone());
+        }
+        for token in tokens {
+            confirmations.remove(&token);
+        }
+        Ok(values)
+    }
 }
 
+#[derive(Debug)]
 pub struct ConfirmationValues {
     pub revision: i64,
     pub diff_hash: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn composite_confirmation_failure_consumes_no_valid_tokens() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-confirmation-{}-{}",
+            std::process::id(),
+            mir3_domain::now_millis()
+        ));
+        let root = base.join("组合确认项目");
+        std::fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        std::fs::create_dir_all(root.join("引擎")).unwrap();
+        let service = ProjectService::new(base.join("data")).unwrap();
+        let project = service.store().import_project(&root).unwrap();
+        let first = service.store().open_draft(&project.id, "first").unwrap();
+        let second = service.store().open_draft(&project.id, "second").unwrap();
+        let first_confirmation = service.create_confirmation(&project.id, &first.id).unwrap();
+        let error = service
+            .consume_composite_confirmations(
+                &project.id,
+                &[
+                    (
+                        first.id.clone(),
+                        first_confirmation.confirmation_token.clone(),
+                    ),
+                    (second.id, "invalid-token".to_string()),
+                ],
+            )
+            .unwrap_err();
+        assert!(error.starts_with("DRAFT_CONFIRMATION_INVALID:"));
+        service
+            .consume_confirmation(
+                &project.id,
+                &first.id,
+                &first_confirmation.confirmation_token,
+            )
+            .unwrap();
+        std::fs::remove_dir_all(base).ok();
+    }
 }
 
 /// 开发与发布环境下定位 Rust MCP sidecar。

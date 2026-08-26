@@ -11,7 +11,7 @@
     },
     {
       "rebirthTier": 100,
-      "minimumLevel": 3,
+      "minimumLevel": 1,
       "costItemId": "item:fixture-2",
       "costAmount": 2,
       "grantedTitleId": "title:fixture-2"

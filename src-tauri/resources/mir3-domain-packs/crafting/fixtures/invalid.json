@@ -6,14 +6,14 @@
       "recipeId": "crafting-recipeId-1",
       "outputItemId": "item:missing",
       "outputCount": 1000000,
-      "materialItemId": "item:fixture-1",
+      "materialItemId": "item:missing",
       "materialCount": 2
     },
     {
       "recipeId": "crafting-recipeId-1",
       "outputItemId": "item:fixture-2",
       "outputCount": 3,
-      "materialItemId": "item:fixture-2",
+      "materialItemId": "item:material-2",
       "materialCount": 3
     }
   ],

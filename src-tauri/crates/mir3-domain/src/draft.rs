@@ -3,12 +3,16 @@ use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use similar::TextDiff;
-use std::fs;
+#[cfg(unix)]
+use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static REPLACE_NONCE: AtomicU64 = AtomicU64::new(0);
+const COMPOSITE_APPLY_JOURNAL_SCHEMA: u32 = 1;
+const COMPOSITE_APPLY_JOURNAL_DIRECTORY: &str = "composite-transactions";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -96,6 +100,16 @@ pub struct CompositeApplyResult {
     pub composite_id: String,
     pub draft_ids: Vec<String>,
     pub snapshot: Snapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompositeApplyJournal {
+    schema_version: u32,
+    project_id: String,
+    composite_id: String,
+    confirmations: Vec<CompositeDraftConfirmation>,
+    snapshot: Snapshot,
 }
 
 impl DomainStore {
@@ -374,6 +388,7 @@ impl DomainStore {
         expected_revision: i64,
         expected_diff_hash: &str,
     ) -> Result<Snapshot, String> {
+        self.ensure_single_draft_apply_allowed(project_id, draft_id)?;
         let report = self.validate_domain_draft(project_id, draft_id)?;
         if !report.valid {
             return Err(format!(
@@ -383,6 +398,30 @@ impl DomainStore {
             ));
         }
         self.apply_draft(project_id, draft_id, expected_revision, expected_diff_hash)
+    }
+
+    /// 已绑定组合任务的 Draft 必须走组合确认入口，避免跨系统变更被拆开提交。
+    fn ensure_single_draft_apply_allowed(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+    ) -> Result<(), String> {
+        let composite_id = self
+            .project_connection(project_id)?
+            .query_row(
+                "SELECT composite_id FROM draft_domains WHERE draft_id=?1 AND legacy=0",
+                [draft_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(|error| format!("COMPOSITE_BINDING_READ_FAILED: {error}"))?
+            .flatten();
+        if let Some(composite_id) = composite_id.filter(|value| !value.trim().is_empty()) {
+            return Err(format!(
+                "COMPOSITE_DRAFT_APPLY_REQUIRED: {draft_id} must be applied atomically with {composite_id}"
+            ));
+        }
+        Ok(())
     }
 
     /// 低层 Apply 保留给已完成独立校验的内部事务；桌面确认入口必须调用上层校验门禁。
@@ -531,6 +570,8 @@ impl DomainStore {
                     .to_string(),
             );
         }
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
+        self.recover_composite_apply_journals_for_project(project_id)?;
         let mutation_ids = confirmations
             .iter()
             .map(|confirmation| confirmation.draft_id.clone())
@@ -611,24 +652,47 @@ impl DomainStore {
             draft_ids.push(confirmation.draft_id.clone());
         }
 
+        let expected_draft_ids = self
+            .list_composite_draft_bindings(project_id, composite_id)?
+            .into_iter()
+            .map(|binding| binding.draft_id)
+            .collect::<Vec<_>>();
+        let mut submitted_draft_ids = draft_ids.clone();
+        submitted_draft_ids.sort();
+        let mut expected_draft_ids = expected_draft_ids;
+        expected_draft_ids.sort();
+        if submitted_draft_ids != expected_draft_ids {
+            return Err(
+                "COMPOSITE_DRAFT_SET_MISMATCH: confirmations must cover every open Draft in the composite"
+                    .to_string(),
+            );
+        }
+
         #[cfg(test)]
         {
-            let barrier = self
+            let barriers = self
                 .composite_apply_test_barrier
                 .lock()
                 .map_err(|_| "COMPOSITE_TEST_BARRIER_FAILED: barrier lock is poisoned".to_string())?
                 .clone();
-            if let Some(barrier) = barrier {
-                barrier.wait();
+            if let Some((entered, release)) = barriers {
+                entered.wait();
+                release.wait();
             }
         }
 
-        self.reserve_composite_drafts(project_id, confirmations)?;
-        let snapshot = self
-            .create_snapshot(project_id, None, &all_paths)
-            .map_err(|error| {
-                self.release_composite_reservation(project_id, confirmations, error)
-            })?;
+        let snapshot = self.create_snapshot(project_id, None, &all_paths)?;
+        let journal = CompositeApplyJournal {
+            schema_version: COMPOSITE_APPLY_JOURNAL_SCHEMA,
+            project_id: project_id.to_string(),
+            composite_id: composite_id.to_string(),
+            confirmations: confirmations.to_vec(),
+            snapshot: snapshot.clone(),
+        };
+        let journal_path = self.persist_composite_apply_journal(&journal)?;
+        if let Err(error) = self.reserve_composite_drafts(project_id, confirmations) {
+            return Err(self.recover_composite_after_failure(&journal_path, &journal, error));
+        }
         for (path, content, deleted) in operations {
             let target = safe_project_target(&root, &path)?;
             let result = if deleted {
@@ -640,10 +704,9 @@ impl DomainStore {
             } else {
                 if let Some(parent) = target.parent() {
                     if let Err(error) = fs::create_dir_all(parent) {
-                        return Err(self.restore_reserved_composite_after_failure(
-                            project_id,
-                            &snapshot.id,
-                            confirmations,
+                        return Err(self.recover_composite_after_failure(
+                            &journal_path,
+                            &journal,
                             format!("COMPOSITE_APPLY_FAILED: {}: {error}", parent.display()),
                         ));
                     }
@@ -651,27 +714,41 @@ impl DomainStore {
                 replace_file_safely(&target, &content.unwrap_or_default())
             };
             if let Err(error) = result {
-                return Err(self.restore_reserved_composite_after_failure(
-                    project_id,
-                    &snapshot.id,
-                    confirmations,
+                return Err(self.recover_composite_after_failure(
+                    &journal_path,
+                    &journal,
                     format!("COMPOSITE_APPLY_FAILED: {}: {error}", target.display()),
                 ));
             }
+            if let Some(parent) = target.parent() {
+                if let Err(error) = sync_directory_ancestors(parent, &root) {
+                    return Err(self.recover_composite_after_failure(
+                        &journal_path,
+                        &journal,
+                        format!("COMPOSITE_APPLY_SYNC_FAILED: {}: {error}", target.display()),
+                    ));
+                }
+            }
+            #[cfg(test)]
+            {
+                use std::sync::atomic::Ordering as TestOrdering;
+                if self.composite_apply_crash_after_writes.fetch_update(
+                    TestOrdering::SeqCst,
+                    TestOrdering::SeqCst,
+                    |remaining| (remaining > 0).then_some(remaining - 1),
+                ) == Ok(1)
+                {
+                    panic!("COMPOSITE_APPLY_CRASH_INJECTED");
+                }
+            }
         }
         let mut connection = self.project_connection(project_id).map_err(|error| {
-            self.restore_reserved_composite_after_failure(
-                project_id,
-                &snapshot.id,
-                confirmations,
-                error,
-            )
+            self.recover_composite_after_failure(&journal_path, &journal, error)
         })?;
         let transaction = connection.transaction().map_err(|error| {
-            self.restore_reserved_composite_after_failure(
-                project_id,
-                &snapshot.id,
-                confirmations,
+            self.recover_composite_after_failure(
+                &journal_path,
+                &journal,
                 format!("COMPOSITE_TRANSACTION_FAILED: {error}"),
             )
         })?;
@@ -685,10 +762,9 @@ impl DomainStore {
                 Ok(1) => {}
                 Ok(rows) => {
                     drop(transaction);
-                    return Err(self.restore_reserved_composite_after_failure(
-                        project_id,
-                        &snapshot.id,
-                        confirmations,
+                    return Err(self.recover_composite_after_failure(
+                        &journal_path,
+                        &journal,
                         format!(
                             "COMPOSITE_STATUS_CONFLICT: {draft_id} expected one reserved draft, updated {rows}"
                         ),
@@ -696,23 +772,30 @@ impl DomainStore {
                 }
                 Err(error) => {
                     drop(transaction);
-                    return Err(self.restore_reserved_composite_after_failure(
-                        project_id,
-                        &snapshot.id,
-                        confirmations,
+                    return Err(self.recover_composite_after_failure(
+                        &journal_path,
+                        &journal,
                         format!("COMPOSITE_STATUS_FAILED: {error}"),
                     ));
                 }
             }
         }
         if let Err(error) = transaction.commit() {
-            return Err(self.restore_reserved_composite_after_failure(
-                project_id,
-                &snapshot.id,
-                confirmations,
+            return Err(self.recover_composite_after_failure(
+                &journal_path,
+                &journal,
                 format!("COMPOSITE_COMMIT_FAILED: {error}"),
             ));
         }
+        #[cfg(test)]
+        if self
+            .composite_apply_crash_after_commit
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            panic!("COMPOSITE_APPLY_POST_COMMIT_CRASH_INJECTED");
+        }
+        self.remove_composite_apply_journal(&journal_path)
+            .map_err(|error| format!("COMPOSITE_APPLIED_JOURNAL_CLEANUP_FAILED: {error}"))?;
         Ok(CompositeApplyResult {
             composite_id: composite_id.to_string(),
             draft_ids,
@@ -749,57 +832,255 @@ impl DomainStore {
             .map_err(|error| format!("COMPOSITE_RESERVATION_FAILED: {error}"))
     }
 
-    /// 仅释放当前调用仍持有的 applying 状态，避免覆盖已经被其他流程推进的 Draft。
-    fn release_composite_reservation(
+    /// 同步错误路径复用启动恢复协议；补偿失败时保留 Journal 供下次启动继续。
+    fn recover_composite_after_failure(
         &self,
-        project_id: &str,
-        confirmations: &[CompositeDraftConfirmation],
+        journal_path: &Path,
+        journal: &CompositeApplyJournal,
         original: String,
     ) -> String {
-        let release = (|| -> Result<(), String> {
-            let mut connection = self.project_connection(project_id)?;
-            let transaction = connection
-                .transaction()
-                .map_err(|error| format!("COMPOSITE_RESERVATION_RELEASE_FAILED: {error}"))?;
-            for confirmation in confirmations {
-                let updated = transaction
-                    .execute(
-                        "UPDATE drafts SET status='open',updated_at=?2 WHERE id=?1 AND status='applying' AND revision=?3",
-                        params![confirmation.draft_id, now_millis(), confirmation.expected_revision],
-                    )
-                    .map_err(|error| {
-                        format!("COMPOSITE_RESERVATION_RELEASE_FAILED: {error}")
-                    })?;
-                if updated != 1 {
-                    return Err(format!(
-                        "COMPOSITE_RESERVATION_RELEASE_CONFLICT: {}",
-                        confirmation.draft_id
-                    ));
-                }
-            }
-            transaction
-                .commit()
-                .map_err(|error| format!("COMPOSITE_RESERVATION_RELEASE_FAILED: {error}"))
-        })();
-        match release {
+        match self.recover_composite_apply_journal(journal_path, journal) {
             Ok(()) => original,
-            Err(error) => format!("{original}; {error}"),
+            Err(error) => format!("{original}; COMPOSITE_RECOVERY_FAILED: {error}"),
         }
     }
 
-    /// 文件恢复与 Draft 预留释放必须同时报告，不能吞掉任一补偿失败。
-    fn restore_reserved_composite_after_failure(
+    /// 启动时在项目锁内恢复所有未完成组合 Apply；任一异常都令 Store 只读而非猜测提交状态。
+    pub(crate) fn recover_composite_apply_journals(&self) -> Result<(), String> {
+        for project in self.list_projects()? {
+            if !self.has_composite_apply_journals(&project.id)? {
+                continue;
+            }
+            let _composite_mutation = self.reserve_composite_mutation(&project.id)?;
+            self.recover_composite_apply_journals_for_project(&project.id)?;
+        }
+        Ok(())
+    }
+
+    fn has_composite_apply_journals(&self, project_id: &str) -> Result<bool, String> {
+        let directory = self
+            .project_dir(project_id)?
+            .join(COMPOSITE_APPLY_JOURNAL_DIRECTORY);
+        if !directory.is_dir() {
+            return Ok(false);
+        }
+        for entry in fs::read_dir(directory)
+            .map_err(|error| format!("COMPOSITE_JOURNAL_LIST_FAILED: {error}"))?
+        {
+            let path = entry
+                .map_err(|error| format!("COMPOSITE_JOURNAL_LIST_FAILED: {error}"))?
+                .path();
+            let file_name = path.file_name().and_then(|value| value.to_str());
+            if path.extension().and_then(|value| value.to_str()) == Some("json")
+                || file_name.is_some_and(|value| value.starts_with(".pending-"))
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn recover_composite_apply_journals_for_project(&self, project_id: &str) -> Result<(), String> {
+        let directory = self
+            .project_dir(project_id)?
+            .join(COMPOSITE_APPLY_JOURNAL_DIRECTORY);
+        if !directory.is_dir() {
+            return Ok(());
+        }
+        let mut paths = fs::read_dir(&directory)
+            .map_err(|error| format!("COMPOSITE_JOURNAL_LIST_FAILED: {error}"))?
+            .map(|entry| {
+                entry
+                    .map(|entry| entry.path())
+                    .map_err(|error| format!("COMPOSITE_JOURNAL_LIST_FAILED: {error}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        paths.sort();
+        for path in paths {
+            let file_name = path.file_name().and_then(|value| value.to_str());
+            if file_name.is_some_and(|value| value.starts_with(".pending-")) {
+                let metadata = fs::symlink_metadata(&path)
+                    .map_err(|error| format!("COMPOSITE_JOURNAL_METADATA_FAILED: {error}"))?;
+                if !metadata.file_type().is_file() {
+                    return Err(format!("COMPOSITE_JOURNAL_INVALID: {}", path.display()));
+                }
+                fs::remove_file(&path)
+                    .map_err(|error| format!("COMPOSITE_JOURNAL_CLEANUP_FAILED: {error}"))?;
+                continue;
+            }
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|error| format!("COMPOSITE_JOURNAL_METADATA_FAILED: {error}"))?;
+            if !metadata.file_type().is_file() || metadata.len() > 4 * 1024 * 1024 {
+                return Err(format!("COMPOSITE_JOURNAL_INVALID: {}", path.display()));
+            }
+            let journal: CompositeApplyJournal = serde_json::from_slice(
+                &fs::read(&path)
+                    .map_err(|error| format!("COMPOSITE_JOURNAL_READ_FAILED: {error}"))?,
+            )
+            .map_err(|error| format!("COMPOSITE_JOURNAL_INVALID: {error}"))?;
+            self.validate_composite_apply_journal(project_id, &journal)?;
+            self.recover_composite_apply_journal(&path, &journal)?;
+        }
+        sync_directory(&directory)?;
+        Ok(())
+    }
+
+    fn validate_composite_apply_journal(
         &self,
         project_id: &str,
-        snapshot_id: &str,
-        confirmations: &[CompositeDraftConfirmation],
-        original: String,
-    ) -> String {
-        let restored = match self.restore_snapshot(project_id, snapshot_id) {
-            Ok(_) => original,
-            Err(error) => format!("{original}; SNAPSHOT_RESTORE_AFTER_APPLY_FAILED: {error}"),
-        };
-        self.release_composite_reservation(project_id, confirmations, restored)
+        journal: &CompositeApplyJournal,
+    ) -> Result<(), String> {
+        if journal.schema_version != COMPOSITE_APPLY_JOURNAL_SCHEMA
+            || journal.project_id != project_id
+            || journal.composite_id.trim().is_empty()
+            || journal.confirmations.len() < 2
+            || journal.snapshot.id.trim().is_empty()
+            || !is_safe_storage_id(&journal.snapshot.id)
+        {
+            return Err(format!(
+                "COMPOSITE_JOURNAL_INCOMPATIBLE: {}",
+                journal.composite_id
+            ));
+        }
+        let mut draft_ids = journal
+            .confirmations
+            .iter()
+            .map(|confirmation| confirmation.draft_id.as_str())
+            .collect::<Vec<_>>();
+        draft_ids.sort();
+        if draft_ids.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err("COMPOSITE_JOURNAL_DUPLICATE_DRAFT: duplicate Draft ids".to_string());
+        }
+        Ok(())
+    }
+
+    fn persist_composite_apply_journal(
+        &self,
+        journal: &CompositeApplyJournal,
+    ) -> Result<PathBuf, String> {
+        self.validate_composite_apply_journal(&journal.project_id, journal)?;
+        let directory = self
+            .project_dir(&journal.project_id)?
+            .join(COMPOSITE_APPLY_JOURNAL_DIRECTORY);
+        fs::create_dir_all(&directory)
+            .map_err(|error| format!("COMPOSITE_JOURNAL_DIRECTORY_FAILED: {error}"))?;
+        if let Some(parent) = directory.parent() {
+            sync_directory(parent)?;
+        }
+        let path = directory.join(format!(
+            "{}.json",
+            hash_bytes(journal.composite_id.as_bytes())
+        ));
+        if path.exists() {
+            return Err(format!(
+                "COMPOSITE_JOURNAL_ALREADY_PENDING: {}",
+                journal.composite_id
+            ));
+        }
+        let nonce = REPLACE_NONCE.fetch_add(1, Ordering::Relaxed);
+        let pending = directory.join(format!(".pending-{}-{nonce}", std::process::id()));
+        let content = format!(
+            "{}\n",
+            serde_json::to_string_pretty(journal)
+                .map_err(|error| format!("COMPOSITE_JOURNAL_RENDER_FAILED: {error}"))?
+        );
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&pending)
+            .map_err(|error| format!("COMPOSITE_JOURNAL_WRITE_FAILED: {error}"))?;
+        file.write_all(content.as_bytes())
+            .map_err(|error| format!("COMPOSITE_JOURNAL_WRITE_FAILED: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("COMPOSITE_JOURNAL_SYNC_FAILED: {error}"))?;
+        drop(file);
+        fs::rename(&pending, &path)
+            .map_err(|error| format!("COMPOSITE_JOURNAL_COMMIT_FAILED: {error}"))?;
+        sync_directory_tree(&directory)?;
+        if let Some(parent) = directory.parent() {
+            sync_directory(parent)?;
+        }
+        Ok(path)
+    }
+
+    fn recover_composite_apply_journal(
+        &self,
+        path: &Path,
+        journal: &CompositeApplyJournal,
+    ) -> Result<(), String> {
+        self.validate_composite_apply_journal(&journal.project_id, journal)?;
+        let connection = self.project_connection(&journal.project_id)?;
+        let mut statuses = Vec::with_capacity(journal.confirmations.len());
+        for confirmation in &journal.confirmations {
+            statuses.push(
+                connection
+                    .query_row(
+                        "SELECT status,revision FROM drafts WHERE id=?1",
+                        [&confirmation.draft_id],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                    )
+                    .map_err(|error| format!("COMPOSITE_RECOVERY_STATE_FAILED: {error}"))?,
+            );
+        }
+        let revisions_match = statuses
+            .iter()
+            .zip(&journal.confirmations)
+            .all(|((_, revision), confirmation)| *revision == confirmation.expected_revision);
+        if !revisions_match {
+            return Err(
+                "COMPOSITE_RECOVERY_REVISION_MISMATCH: Draft changed after crash".to_string(),
+            );
+        }
+        if statuses.iter().all(|(status, _)| status == "applied") {
+            return self.remove_composite_apply_journal(path);
+        }
+        if statuses.iter().all(|(status, _)| status == "open") {
+            return self.remove_composite_apply_journal(path);
+        }
+        if !statuses.iter().all(|(status, _)| status == "applying") {
+            return Err(
+                "COMPOSITE_RECOVERY_STATE_MIXED: Draft states do not share one atomic outcome"
+                    .to_string(),
+            );
+        }
+
+        self.restore_snapshot_files(&journal.project_id, &journal.snapshot)?;
+        let mut connection = self.project_connection(&journal.project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("COMPOSITE_RECOVERY_TRANSACTION_FAILED: {error}"))?;
+        for confirmation in &journal.confirmations {
+            let updated = transaction
+                .execute(
+                    "UPDATE drafts SET status='open',updated_at=?2 WHERE id=?1 AND status='applying' AND revision=?3",
+                    params![confirmation.draft_id, now_millis(), confirmation.expected_revision],
+                )
+                .map_err(|error| format!("COMPOSITE_RECOVERY_STATUS_FAILED: {error}"))?;
+            if updated != 1 {
+                return Err(format!(
+                    "COMPOSITE_RECOVERY_STATUS_CONFLICT: {}",
+                    confirmation.draft_id
+                ));
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("COMPOSITE_RECOVERY_COMMIT_FAILED: {error}"))?;
+        self.remove_composite_apply_journal(path)
+    }
+
+    fn remove_composite_apply_journal(&self, path: &Path) -> Result<(), String> {
+        if path.exists() {
+            fs::remove_file(path)
+                .map_err(|error| format!("COMPOSITE_JOURNAL_CLEANUP_FAILED: {error}"))?;
+            if let Some(directory) = path.parent() {
+                sync_directory(directory)?;
+            }
+        }
+        Ok(())
     }
 
     /// 文件系统与 SQLite 无法共享事务；因此数据库状态提交失败时必须把同一快照
@@ -861,7 +1142,7 @@ impl DomainStore {
                     fs::create_dir_all(parent)
                         .map_err(|e| format!("SNAPSHOT_CREATE_FAILED: {e}"))?;
                 }
-                fs::write(target, bytes).map_err(|e| format!("SNAPSHOT_WRITE_FAILED: {e}"))?;
+                write_file_synced(&target, bytes, "SNAPSHOT_WRITE_FAILED")?;
             }
             files.push(SnapshotFile {
                 path: relative.clone(),
@@ -877,8 +1158,15 @@ impl DomainStore {
         };
         let manifest = serde_json::to_string_pretty(&snapshot)
             .map_err(|e| format!("SNAPSHOT_SERIALIZE_FAILED: {e}"))?;
-        fs::write(directory.join("manifest.json"), format!("{manifest}\n"))
-            .map_err(|e| format!("SNAPSHOT_WRITE_FAILED: {e}"))?;
+        write_file_synced(
+            &directory.join("manifest.json"),
+            format!("{manifest}\n").as_bytes(),
+            "SNAPSHOT_WRITE_FAILED",
+        )?;
+        sync_directory_tree(&directory)?;
+        if let Some(parent) = directory.parent() {
+            sync_directory(parent)?;
+        }
         self.project_connection(project_id)?
             .execute(
                 "INSERT INTO snapshots(id,draft_id,manifest,created_at) VALUES(?1,?2,?3,?4)",
@@ -917,12 +1205,18 @@ impl DomainStore {
             .into_iter()
             .find(|snapshot| snapshot.id == snapshot_id)
             .ok_or_else(|| format!("SNAPSHOT_NOT_FOUND: {snapshot_id}"))?;
+        self.restore_snapshot_files(project_id, &snapshot)?;
+        Ok(snapshot)
+    }
+
+    /// Journal 携带完整快照清单，因此即使列表查询不可用也能幂等恢复文件。
+    fn restore_snapshot_files(&self, project_id: &str, snapshot: &Snapshot) -> Result<(), String> {
         let project = self.get_project(project_id)?;
         let root = PathBuf::from(&project.root);
         let directory = self
             .project_dir(project_id)?
             .join("snapshots")
-            .join(snapshot_id)
+            .join(&snapshot.id)
             .join("files");
         for file in &snapshot.files {
             let target = safe_project_target(&root, &file.path)?;
@@ -930,6 +1224,10 @@ impl DomainStore {
                 let source = directory.join(&file.path);
                 let bytes = fs::read(&source)
                     .map_err(|e| format!("SNAPSHOT_READ_FAILED: {}: {e}", source.display()))?;
+                let actual_hash = hash_bytes(&bytes);
+                if file.sha256.as_deref() != Some(actual_hash.as_str()) {
+                    return Err(format!("SNAPSHOT_HASH_MISMATCH: {}", source.display()));
+                }
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent)
                         .map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
@@ -938,10 +1236,82 @@ impl DomainStore {
                     .map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
             } else if target.exists() {
                 fs::remove_file(&target).map_err(|e| format!("SNAPSHOT_RESTORE_FAILED: {e}"))?;
+                if let Some(parent) = target.parent() {
+                    sync_directory(parent)?;
+                }
             }
         }
-        Ok(snapshot)
+        Ok(())
     }
+}
+
+fn write_file_synced(path: &Path, bytes: &[u8], prefix: &str) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| format!("{prefix}: {error}"))?;
+    file.write_all(bytes)
+        .map_err(|error| format!("{prefix}: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("{prefix}: {error}"))?;
+    drop(file);
+    if let Some(parent) = path.parent() {
+        sync_directory(parent)?;
+    }
+    Ok(())
+}
+
+fn is_safe_storage_id(value: &str) -> bool {
+    let mut components = Path::new(value).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
+fn sync_directory_tree(root: &Path) -> Result<(), String> {
+    for entry in
+        fs::read_dir(root).map_err(|error| format!("COMPOSITE_DIRECTORY_SYNC_FAILED: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("COMPOSITE_DIRECTORY_SYNC_FAILED: {error}"))?;
+        if entry
+            .file_type()
+            .map_err(|error| format!("COMPOSITE_DIRECTORY_SYNC_FAILED: {error}"))?
+            .is_dir()
+        {
+            sync_directory_tree(&entry.path())?;
+        }
+    }
+    sync_directory(root)
+}
+
+fn sync_directory_ancestors(directory: &Path, root: &Path) -> Result<(), String> {
+    let mut current = directory;
+    loop {
+        sync_directory(current)?;
+        if current == root {
+            return Ok(());
+        }
+        current = current.parent().ok_or_else(|| {
+            "COMPOSITE_DIRECTORY_SYNC_FAILED: target parent escaped project root".to_string()
+        })?;
+        if !current.starts_with(root) && current != root {
+            return Err(
+                "COMPOSITE_DIRECTORY_SYNC_FAILED: target parent escaped project root".to_string(),
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), String> {
+    File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("COMPOSITE_DIRECTORY_SYNC_FAILED: {error}"))
+}
+
+#[cfg(windows)]
+fn sync_directory(_path: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 fn row_to_draft(row: &rusqlite::Row<'_>) -> rusqlite::Result<Draft> {
@@ -1035,9 +1405,10 @@ fn replace_file_safely(target: &Path, content: &[u8]) -> std::io::Result<()> {
     drop(output);
 
     if !target.exists() {
-        return fs::rename(&temporary, target).inspect_err(|_| {
+        fs::rename(&temporary, target).inspect_err(|_| {
             let _ = fs::remove_file(&temporary);
-        });
+        })?;
+        return sync_directory_io(parent);
     }
 
     if let Err(error) = fs::rename(target, &backup) {
@@ -1047,7 +1418,7 @@ fn replace_file_safely(target: &Path, content: &[u8]) -> std::io::Result<()> {
     match fs::rename(&temporary, target) {
         Ok(()) => {
             let _ = fs::remove_file(backup);
-            Ok(())
+            sync_directory_io(parent)
         }
         Err(error) => {
             let _ = fs::rename(&backup, target);
@@ -1055,6 +1426,16 @@ fn replace_file_safely(target: &Path, content: &[u8]) -> std::io::Result<()> {
             Err(error)
         }
     }
+}
+
+#[cfg(unix)]
+fn sync_directory_io(path: &Path) -> std::io::Result<()> {
+    File::open(path)?.sync_all()
+}
+
+#[cfg(windows)]
+fn sync_directory_io(_path: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -1095,7 +1476,7 @@ mod tests {
         let imported = store.import_project(&project).unwrap();
         let draft = store.open_draft(&imported.id, "修改入口").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.2.0", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -1142,7 +1523,7 @@ mod tests {
 
         let quest = store.open_draft(&imported.id, "更新任务").unwrap();
         store
-            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.2.0", Some("release-1"))
+            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.3.0", Some("release-1"))
             .unwrap();
         let denied = store.patch_draft(
             &imported.id,
@@ -1174,7 +1555,7 @@ mod tests {
 
         let shop = store.open_draft(&imported.id, "更新商城").unwrap();
         store
-            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.2.0", Some("release-1"))
+            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.3.0", Some("release-1"))
             .unwrap();
         let shop_preview = store
             .patch_draft(
@@ -1300,6 +1681,97 @@ mod tests {
             fs::read_to_string(project.join(shop_path)).unwrap(),
             "shop=1\n"
         );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_drafts_reject_single_apply_and_partial_confirmation_sets() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-gate-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("组合门禁项目");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let composite_id = "review-all-three";
+        let cases = [
+            ("quest", "quest.txt"),
+            ("shop", "shop.txt"),
+            ("item", "cfg_item.txt"),
+        ];
+        for (_, file_name) in cases {
+            fs::write(
+                project.join("引擎/Mir200/Envir").join(file_name),
+                "value=1\n",
+            )
+            .unwrap();
+        }
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+        let mut confirmations = Vec::new();
+        for (system_id, file_name) in cases {
+            let draft = store.open_draft(&imported.id, system_id).unwrap();
+            store
+                .bind_draft_domain(
+                    &imported.id,
+                    &draft.id,
+                    system_id,
+                    "1.3.0",
+                    Some(composite_id),
+                )
+                .unwrap();
+            let path = format!("引擎/Mir200/Envir/{file_name}");
+            let preview = store
+                .patch_draft(
+                    &imported.id,
+                    &draft.id,
+                    0,
+                    &[DraftChangeInput {
+                        path,
+                        content: Some("value=2\n".to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )
+                .unwrap();
+            confirmations.push(CompositeDraftConfirmation {
+                draft_id: draft.id,
+                expected_revision: preview.draft.revision,
+                expected_diff_hash: preview.diff_hash,
+            });
+        }
+
+        let single = store
+            .apply_validated_domain_draft(
+                &imported.id,
+                &confirmations[0].draft_id,
+                confirmations[0].expected_revision,
+                &confirmations[0].expected_diff_hash,
+            )
+            .unwrap_err();
+        assert!(single.starts_with("COMPOSITE_DRAFT_APPLY_REQUIRED:"));
+
+        let partial = store
+            .apply_composite_drafts(&imported.id, composite_id, &confirmations[..2])
+            .unwrap_err();
+        assert!(partial.starts_with("COMPOSITE_DRAFT_SET_MISMATCH:"));
+        for confirmation in &confirmations {
+            assert_eq!(
+                store
+                    .get_draft(&imported.id, &confirmation.draft_id)
+                    .unwrap()
+                    .status,
+                DraftStatus::Open
+            );
+        }
+        for (_, file_name) in cases {
+            assert_eq!(
+                fs::read_to_string(project.join("引擎/Mir200/Envir").join(file_name)).unwrap(),
+                "value=1\n"
+            );
+        }
         fs::remove_dir_all(base).ok();
     }
 
@@ -1430,7 +1902,7 @@ mod tests {
         store.scan_project(&imported.id, || false).unwrap();
         let draft = store.open_draft(&imported.id, "并发修改").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.2.0", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.0", None)
             .unwrap();
 
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
@@ -1482,6 +1954,247 @@ mod tests {
     }
 
     #[test]
+    fn composite_apply_recovers_files_and_draft_states_after_injected_process_crash() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-crash-recovery-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("组合崩溃恢复项目");
+        let quest_path = "引擎/Mir200/Envir/QuestDiary/quest.txt";
+        let shop_path = "引擎/Mir200/Envir/Shop/shop.txt";
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir/QuestDiary")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir/Shop")).unwrap();
+        fs::write(project.join(quest_path), "quest=0\n").unwrap();
+        fs::write(project.join(shop_path), "shop=0\n").unwrap();
+        let data_root = base.join("data");
+        let store = DomainStore::new_trusted_fixture(&data_root).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+        let composite_id = "crash-safe-release";
+        let mut confirmations = Vec::new();
+        for (system_id, path, content) in [
+            ("quest", quest_path, "quest=1\n"),
+            ("shop", shop_path, "shop=1\n"),
+        ] {
+            let draft = store.open_draft(&imported.id, system_id).unwrap();
+            store
+                .bind_draft_domain(
+                    &imported.id,
+                    &draft.id,
+                    system_id,
+                    "1.3.0",
+                    Some(composite_id),
+                )
+                .unwrap();
+            let preview = store
+                .patch_draft(
+                    &imported.id,
+                    &draft.id,
+                    0,
+                    &[DraftChangeInput {
+                        path: path.to_string(),
+                        content: Some(content.to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )
+                .unwrap();
+            confirmations.push(CompositeDraftConfirmation {
+                draft_id: draft.id,
+                expected_revision: preview.draft.revision,
+                expected_diff_hash: preview.diff_hash,
+            });
+        }
+
+        store
+            .composite_apply_crash_after_writes
+            .store(1, std::sync::atomic::Ordering::SeqCst);
+        let crashed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            store
+                .apply_composite_drafts(&imported.id, composite_id, &confirmations)
+                .unwrap();
+        }));
+        assert!(crashed.is_err());
+        assert!(confirmations.iter().all(|confirmation| {
+            store
+                .get_draft(&imported.id, &confirmation.draft_id)
+                .unwrap()
+                .status
+                == DraftStatus::Applying
+        }));
+        assert!(
+            fs::read_to_string(project.join(quest_path)).unwrap() == "quest=1\n"
+                || fs::read_to_string(project.join(shop_path)).unwrap() == "shop=1\n"
+        );
+        drop(store);
+
+        let recovered = DomainStore::new_trusted_fixture(&data_root).unwrap();
+        assert!(recovered.read_only_reason().is_none());
+        assert_eq!(
+            fs::read_to_string(project.join(quest_path)).unwrap(),
+            "quest=0\n"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(shop_path)).unwrap(),
+            "shop=0\n"
+        );
+        for confirmation in &confirmations {
+            assert_eq!(
+                recovered
+                    .get_draft(&imported.id, &confirmation.draft_id)
+                    .unwrap()
+                    .status,
+                DraftStatus::Open
+            );
+        }
+        let journals = recovered
+            .project_dir(&imported.id)
+            .unwrap()
+            .join(COMPOSITE_APPLY_JOURNAL_DIRECTORY);
+        assert_eq!(
+            fs::read_dir(journals)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(
+                    |entry| entry.path().extension().and_then(|value| value.to_str())
+                        == Some("json")
+                )
+                .count(),
+            0
+        );
+
+        recovered
+            .composite_apply_crash_after_commit
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let committed_crash = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            recovered
+                .apply_composite_drafts(&imported.id, composite_id, &confirmations)
+                .unwrap();
+        }));
+        assert!(committed_crash.is_err());
+        assert!(confirmations.iter().all(|confirmation| {
+            recovered
+                .get_draft(&imported.id, &confirmation.draft_id)
+                .unwrap()
+                .status
+                == DraftStatus::Applied
+        }));
+        drop(recovered);
+
+        let committed = DomainStore::new_trusted_fixture(&data_root).unwrap();
+        assert!(committed.read_only_reason().is_none());
+        assert_eq!(
+            fs::read_to_string(project.join(quest_path)).unwrap(),
+            "quest=1\n"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(shop_path)).unwrap(),
+            "shop=1\n"
+        );
+        for confirmation in &confirmations {
+            assert_eq!(
+                committed
+                    .get_draft(&imported.id, &confirmation.draft_id)
+                    .unwrap()
+                    .status,
+                DraftStatus::Applied
+            );
+        }
+        assert!(!committed
+            .has_composite_apply_journals(&imported.id)
+            .unwrap());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_apply_lock_rejects_binding_added_after_complete_set_check() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-membership-race-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("组合成员竞态项目");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir")).unwrap();
+        let data_root = base.join("data");
+        let store = DomainStore::new_trusted_fixture(&data_root).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        let composite_id = "locked-membership";
+        let mut confirmations = Vec::new();
+        for (system_id, file_name) in [("quest", "quest.txt"), ("shop", "shop.txt")] {
+            let path = format!("引擎/Mir200/Envir/{file_name}");
+            fs::write(project.join(&path), "value=0\n").unwrap();
+            let draft = store.open_draft(&imported.id, system_id).unwrap();
+            store
+                .bind_draft_domain(
+                    &imported.id,
+                    &draft.id,
+                    system_id,
+                    "1.3.0",
+                    Some(composite_id),
+                )
+                .unwrap();
+            let preview = store
+                .patch_draft(
+                    &imported.id,
+                    &draft.id,
+                    0,
+                    &[DraftChangeInput {
+                        path,
+                        content: Some("value=1\n".to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )
+                .unwrap();
+            confirmations.push(CompositeDraftConfirmation {
+                draft_id: draft.id,
+                expected_revision: preview.draft.revision,
+                expected_diff_hash: preview.diff_hash,
+            });
+        }
+        let late = store.open_draft(&imported.id, "late member").unwrap();
+        store
+            .bind_draft_domain(&imported.id, &late.id, "item", "1.3.0", None)
+            .unwrap();
+        let second_store = DomainStore::new_trusted_fixture(&data_root).unwrap();
+        let entered = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let release = std::sync::Arc::new(std::sync::Barrier::new(2));
+        *store.composite_apply_test_barrier.lock().unwrap() =
+            Some((entered.clone(), release.clone()));
+        let worker_store = store.clone();
+        let worker_project = imported.id.clone();
+        let worker_confirmations = confirmations.clone();
+        let worker = std::thread::spawn(move || {
+            worker_store.apply_composite_drafts(
+                &worker_project,
+                composite_id,
+                &worker_confirmations,
+            )
+        });
+        entered.wait();
+        let rejected = second_store
+            .associate_draft_composite(&imported.id, &late.id, "item", "1.3.0", composite_id)
+            .unwrap_err();
+        assert!(rejected.starts_with("DRAFT_MUTATION_RESERVED:"));
+        release.wait();
+        worker.join().unwrap().unwrap();
+        let late_binding = store
+            .project_connection(&imported.id)
+            .unwrap()
+            .query_row(
+                "SELECT composite_id FROM draft_domains WHERE draft_id=?1",
+                [&late.id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .unwrap();
+        assert!(late_binding.is_none());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn concurrent_composite_apply_has_one_winner_without_rolling_back_its_files() {
         let base = std::env::temp_dir().join(format!(
             "mir3-composite-concurrency-{}-{}",
@@ -1514,7 +2227,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.2.0",
+                    "1.3.0",
                     Some(composite_id),
                 )
                 .unwrap();

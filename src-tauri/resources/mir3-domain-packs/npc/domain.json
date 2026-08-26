@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "npc",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -129,6 +129,74 @@
     "mappings": [
       "file-projection",
       "npc.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "npcId",
+        "aliases": [
+          "npcId",
+          "NpcId",
+          "npc_id",
+          "npc-id",
+          "npc id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "scriptPath",
+        "aliases": [
+          "scriptPath",
+          "ScriptPath",
+          "script_path",
+          "script-path",
+          "script path"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "mapId",
+        "aliases": [
+          "mapId",
+          "MapId",
+          "map_id",
+          "map-id",
+          "map id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "coordinateX",
+        "aliases": [
+          "coordinateX",
+          "CoordinateX",
+          "coordinate_x",
+          "coordinate-x",
+          "coordinate x"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "coordinateY",
+        "aliases": [
+          "coordinateY",
+          "CoordinateY",
+          "coordinate_y",
+          "coordinate-y",
+          "coordinate y"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "shopId",
+        "aliases": [
+          "shopId",
+          "ShopId",
+          "shop_id",
+          "shop-id",
+          "shop id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -848,7 +916,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -929,7 +997,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1032,7 +1100,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1119,7 +1187,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1226,7 +1294,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1327,7 +1395,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1434,7 +1502,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

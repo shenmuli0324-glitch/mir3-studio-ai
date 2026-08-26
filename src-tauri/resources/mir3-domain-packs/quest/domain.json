@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "quest",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -126,6 +126,74 @@
     "mappings": [
       "file-projection",
       "quest.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "questId",
+        "aliases": [
+          "questId",
+          "QuestId",
+          "quest_id",
+          "quest-id",
+          "quest id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "startNpcId",
+        "aliases": [
+          "startNpcId",
+          "StartNpcId",
+          "start_npc_id",
+          "start-npc-id",
+          "start npc id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "targetMonsterId",
+        "aliases": [
+          "targetMonsterId",
+          "TargetMonsterId",
+          "target_monster_id",
+          "target-monster-id",
+          "target monster id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "rewardItemId",
+        "aliases": [
+          "rewardItemId",
+          "RewardItemId",
+          "reward_item_id",
+          "reward-item-id",
+          "reward item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "minimumLevel",
+        "aliases": [
+          "minimumLevel",
+          "MinimumLevel",
+          "minimum_level",
+          "minimum-level",
+          "minimum level"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "nextQuestId",
+        "aliases": [
+          "nextQuestId",
+          "NextQuestId",
+          "next_quest_id",
+          "next-quest-id",
+          "next quest id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -686,7 +754,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -787,7 +855,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -901,7 +969,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -990,7 +1058,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1097,7 +1165,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

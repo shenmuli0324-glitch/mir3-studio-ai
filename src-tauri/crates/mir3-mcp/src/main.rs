@@ -9,6 +9,7 @@ use mir3_domain::{
     DomainFileQuery, DomainManifest, DomainResourceQuery, DomainResourceRecord, DomainStore,
     DraftChangeInput, MapDraftOperation, SafeTextPatch, SafeXlsDraftPatch,
 };
+use semver::{Version, VersionReq};
 use serde_json::{json, Value};
 use std::env;
 use std::io::{self, BufRead, Write};
@@ -412,7 +413,20 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                             &parameters,
                             "params",
                         )?;
-                        let files = store.query_domain_files(
+                        let projection = parameters
+                            .get("projection")
+                            .and_then(Value::as_str)
+                            .unwrap_or("merged");
+                        let include_dependencies = parameters
+                            .get("includeDependencies")
+                            .and_then(Value::as_bool)
+                            .or_else(|| {
+                                parameters
+                                    .get("includeDependencyValues")
+                                    .and_then(Value::as_bool)
+                            })
+                            .unwrap_or(true);
+                        let mut files = store.query_domain_files(
                             project_id,
                             &system_id,
                             &DomainFileQuery {
@@ -425,6 +439,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                                 offset: None,
                             },
                         )?;
+                        filter_files_for_projection(&mut files, projection)?;
                         let mut resource_ids = parameters
                             .get("resourceIds")
                             .and_then(Value::as_array)
@@ -440,17 +455,52 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         }
                         resource_ids.sort();
                         resource_ids.dedup();
-                        let resources = resource_ids
+                        let mut resources = resource_ids
                             .iter()
                             .map(|resource_id| {
                                 store.get_domain_resource(project_id, &system_id, resource_id)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        let dependencies = store.resolve_domain_dependencies(&system_id)?;
-                        let validation = (capability_id.starts_with("validate-")
+                        filter_resources_for_projection(&mut resources, projection)?;
+                        if let Some(limit) = parameters.get("sampleLimit").and_then(Value::as_u64)
+                        {
+                            resources.truncate(limit as usize);
+                        }
+                        if !include_dependencies {
+                            for resource in &mut resources {
+                                resource.dependencies.clear();
+                                resource.dependency_systems.clear();
+                            }
+                        }
+                        let dependencies = include_dependencies
+                            .then(|| store.resolve_domain_dependencies(&system_id))
+                            .transpose()?;
+                        let mut validation = (capability_id.starts_with("validate-")
                             || capability_id.starts_with("preview-"))
                         .then(|| store.validate_domain_system(project_id, &system_id))
                         .transpose()?;
+                        let include_runtime_diagnostics = parameters
+                            .get("includeRuntimeDiagnostics")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true);
+                        if !include_runtime_diagnostics {
+                            if let Some(report) = &mut validation {
+                                report.validators.retain(|validator| {
+                                    validator.kind != "runtime-diagnostics"
+                                });
+                                report.diagnostics.retain(|diagnostic| {
+                                    !diagnostic.contains("runtime")
+                                        && !diagnostic.contains("RUNTIME")
+                                });
+                            }
+                        }
+                        let target_engine = parameters
+                            .get("targetEngineVersion")
+                            .and_then(Value::as_str)
+                            .map(|version| {
+                                validate_target_engine(store, &system_id, version)
+                            })
+                            .transpose()?;
                         return Ok(json!({
                             "mode":"read",
                             "systemId":system_id,
@@ -458,7 +508,9 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                             "files":files,
                             "resources":resources,
                             "dependencies":dependencies,
-                            "validation":validation
+                            "validation":validation,
+                            "projection":projection,
+                            "targetEngine":target_engine
                         }));
                     }
                     let draft_id = required_string(&args, "draftId")?;
@@ -676,6 +728,78 @@ fn find_official_capability(
         ));
     }
     Ok(matches.into_iter().next())
+}
+
+fn filter_files_for_projection(
+    files: &mut Vec<mir3_domain::DomainFileRecord>,
+    projection: &str,
+) -> Result<(), String> {
+    if projection == "merged" {
+        return Ok(());
+    }
+    if !matches!(projection, "client" | "engine") {
+        return Err(format!("DOMAIN_RESOURCE_PROJECTION_INVALID: {projection}"));
+    }
+    files.retain(|file| file.role == projection);
+    Ok(())
+}
+
+fn filter_resources_for_projection(
+    resources: &mut Vec<DomainResourceRecord>,
+    projection: &str,
+) -> Result<(), String> {
+    if projection == "merged" {
+        return Ok(());
+    }
+    if !matches!(projection, "client" | "engine") {
+        return Err(format!("DOMAIN_RESOURCE_PROJECTION_INVALID: {projection}"));
+    }
+    for resource in resources.iter_mut() {
+        resource.files.retain(|file| file.role == projection);
+    }
+    if resources.iter().any(|resource| resource.files.is_empty()) {
+        return Err(format!(
+            "DOMAIN_RESOURCE_PROJECTION_UNAVAILABLE: requested {projection} projection"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_target_engine(
+    store: &DomainStore,
+    system_id: &str,
+    requested: &str,
+) -> Result<Value, String> {
+    let manifest = store
+        .list_domain_systems()?
+        .into_iter()
+        .find(|manifest| manifest.system_id == system_id)
+        .ok_or_else(|| format!("DOMAIN_SYSTEM_NOT_FOUND: {system_id}"))?;
+    let normalized = if requested.matches('.').count() == 1 {
+        format!("{requested}.0")
+    } else {
+        requested.to_string()
+    };
+    let version = Version::parse(&normalized)
+        .map_err(|error| format!("DOMAIN_TARGET_ENGINE_INVALID: {requested}: {error}"))?;
+    let requirement = VersionReq::parse(&manifest.supported_engine_range).map_err(|error| {
+        format!(
+            "DOMAIN_ENGINE_RANGE_INVALID: {}: {error}",
+            manifest.supported_engine_range
+        )
+    })?;
+    if !requirement.matches(&version) {
+        return Err(format!(
+            "DOMAIN_TARGET_ENGINE_INCOMPATIBLE: {version} does not match {} for {system_id}",
+            manifest.supported_engine_range
+        ));
+    }
+    Ok(json!({
+        "requested": requested,
+        "normalized": version.to_string(),
+        "supportedRange": manifest.supported_engine_range,
+        "compatible": true
+    }))
 }
 
 fn invoke_global_user_capability(
@@ -1475,6 +1599,7 @@ fn execute_manifest_operation_unrecorded(
                 compile_xls_field_changes(
                     store,
                     project_id,
+                    draft_id,
                     &resource,
                     &changes,
                     expected_reference.as_ref(),
@@ -1988,7 +2113,9 @@ fn clone_text_resource(
     let replacements = changes
         .iter()
         .map(|(field, value)| {
-            let (old, new, _) = field_line_replacement(&opened.content, field, value)?;
+            let aliases = manifest_field_aliases(store, project_id, draft_id, field)?;
+            let (old, new, _) =
+                field_line_replacement_with_aliases(&opened.content, field, &aliases, value)?;
             Ok(json!({"old":old,"new":new,"expectedCount":1}))
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -2036,7 +2163,14 @@ fn apply_resource_changes(
             expected_reference,
         )?
     } else if extension.eq_ignore_ascii_case("xls") {
-        compile_xls_field_changes(store, project_id, resource, changes, expected_reference)?
+        compile_xls_field_changes(
+            store,
+            project_id,
+            draft_id,
+            resource,
+            changes,
+            expected_reference,
+        )?
     } else {
         return Err(format!("DOMAIN_COMPILER_WRITER_UNSUPPORTED: {}", file.path));
     };
@@ -2110,7 +2244,9 @@ fn read_scalar_field(
         return Err("DOMAIN_COMPILER_NUMERIC_TYPE_UNSUPPORTED: expected TXT or Lua".to_string());
     }
     let opened = store.safe_text_open(project_id, &file.path, Some(draft_id))?;
-    let (_, _, value) = field_line_replacement(&opened.content, field, &Value::Null)?;
+    let aliases = manifest_field_aliases(store, project_id, draft_id, field)?;
+    let (_, _, value) =
+        field_line_replacement_with_aliases(&opened.content, field, &aliases, &Value::Null)?;
     Ok(value)
 }
 
@@ -2314,6 +2450,28 @@ fn compiled_result(operation_id: &str, revision: i64, results: Vec<Value>) -> Va
     })
 }
 
+fn manifest_field_aliases(
+    store: &DomainStore,
+    project_id: &str,
+    draft_id: &str,
+    field: &str,
+) -> Result<Vec<String>, String> {
+    let manifest = store.draft_domain_manifest(project_id, draft_id)?;
+    manifest
+        .resources
+        .field_mappings
+        .into_iter()
+        .find(|mapping| mapping.field == field)
+        .map(|mapping| mapping.aliases)
+        .filter(|aliases| !aliases.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "DOMAIN_FIELD_MAPPING_MISSING: {}:{field}",
+                manifest.system_id
+            )
+        })
+}
+
 fn compile_text_field_changes(
     store: &DomainStore,
     project_id: &str,
@@ -2325,7 +2483,9 @@ fn compile_text_field_changes(
     let opened = store.safe_text_open(project_id, path, Some(draft_id))?;
     let mut replacements = Vec::with_capacity(changes.len());
     for (field, value) in changes {
-        let (old, new, old_value) = field_line_replacement(&opened.content, field, value)?;
+        let aliases = manifest_field_aliases(store, project_id, draft_id, field)?;
+        let (old, new, old_value) =
+            field_line_replacement_with_aliases(&opened.content, field, &aliases, value)?;
         if expected_reference.is_some_and(|(expected_field, expected)| {
             expected_field == field && expected != &old_value
         }) {
@@ -2341,46 +2501,61 @@ fn compile_text_field_changes(
     }))
 }
 
-fn field_line_replacement(
+fn field_line_replacement_with_aliases(
     content: &str,
     field: &str,
+    aliases: &[String],
     value: &Value,
 ) -> Result<(String, String, String), String> {
     let rendered = scalar_text(value)?;
     let mut matches = Vec::new();
+    let normalized_aliases = aliases
+        .iter()
+        .map(|alias| canonical_xls_field(alias))
+        .collect::<std::collections::BTreeSet<_>>();
     for line in content.lines() {
         let leading = line.len().saturating_sub(line.trim_start().len());
         let trimmed = line.trim_start();
-        for marker in [
-            format!("{field}="),
-            format!("{field}:"),
-            format!("{field}\t"),
-        ] {
-            if let Some(old_value) = trimmed.strip_prefix(&marker) {
-                matches.push((
-                    line.to_string(),
-                    format!("{}{}{}", &line[..leading], marker, rendered),
-                    old_value.trim().trim_matches(['\"', '\'']).to_string(),
-                ));
+        for separator in ['=', ':', '\t'] {
+            let Some((source_field, old_value)) = trimmed.split_once(separator) else {
+                continue;
+            };
+            if source_field.starts_with('"')
+                || source_field.starts_with('\'')
+                || !normalized_aliases.contains(&canonical_xls_field(source_field.trim()))
+            {
+                continue;
             }
+            let marker = format!("{source_field}{separator}");
+            matches.push((
+                line.to_string(),
+                format!("{}{}{}", &line[..leading], marker, rendered),
+                old_value.trim().trim_matches(['\"', '\'']).to_string(),
+            ));
+            break;
         }
-        let json_marker = format!("\"{field}\"");
-        if let Some(rest) = trimmed.strip_prefix(&json_marker) {
-            if let Some(rest) = rest.trim_start().strip_prefix(':') {
-                let comma = rest.trim_end().ends_with(',');
-                let old_value = rest.trim().trim_end_matches(',').trim();
-                matches.push((
-                    line.to_string(),
-                    format!(
-                        "{}{}: {}{}",
-                        &line[..leading],
-                        json_marker,
-                        serde_json::to_string(value)
-                            .map_err(|error| format!("DOMAIN_FIELD_VALUE_INVALID: {error}"))?,
-                        if comma { "," } else { "" }
-                    ),
-                    old_value.trim_matches(['\"', '\'']).to_string(),
-                ));
+        if let Some(rest) = trimmed.strip_prefix('"') {
+            if let Some((source_field, rest)) = rest.split_once('"') {
+                if normalized_aliases.contains(&canonical_xls_field(source_field)) {
+                    if let Some(rest) = rest.trim_start().strip_prefix(':') {
+                        let comma = rest.trim_end().ends_with(',');
+                        let old_value = rest.trim().trim_end_matches(',').trim();
+                        let json_marker = format!("\"{source_field}\"");
+                        matches.push((
+                            line.to_string(),
+                            format!(
+                                "{}{}: {}{}",
+                                &line[..leading],
+                                json_marker,
+                                serde_json::to_string(value).map_err(|error| format!(
+                                    "DOMAIN_FIELD_VALUE_INVALID: {error}"
+                                ))?,
+                                if comma { "," } else { "" }
+                            ),
+                            old_value.trim_matches(['\"', '\'']).to_string(),
+                        ));
+                    }
+                }
             }
         }
     }
@@ -2396,6 +2571,7 @@ fn field_line_replacement(
 fn compile_xls_field_changes(
     store: &DomainStore,
     project_id: &str,
+    draft_id: &str,
     resource: &DomainResourceRecord,
     changes: &serde_json::Map<String, Value>,
     expected_reference: Option<&(String, String)>,
@@ -2410,6 +2586,7 @@ fn compile_xls_field_changes(
         return compile_xls_record_changes(
             store,
             project_id,
+            draft_id,
             path,
             &workbook.sha256,
             sheet,
@@ -2420,6 +2597,7 @@ fn compile_xls_field_changes(
     }
     let mut updates = Vec::with_capacity(changes.len());
     for (field, value) in changes {
+        let aliases = manifest_field_aliases(store, project_id, draft_id, field)?;
         let mut matches = Vec::new();
         for sheet in &workbook.sheets {
             let data =
@@ -2428,7 +2606,10 @@ fn compile_xls_field_changes(
                 continue;
             }
             for (column, header) in data.rows[0].iter().enumerate() {
-                if header == field {
+                if aliases
+                    .iter()
+                    .any(|alias| canonical_xls_field(header) == canonical_xls_field(alias))
+                {
                     matches.push((sheet.name.clone(), column, data.rows[1][column].clone()));
                 }
             }
@@ -2464,6 +2645,7 @@ fn compile_xls_field_changes(
 fn compile_xls_record_changes(
     store: &DomainStore,
     project_id: &str,
+    draft_id: &str,
     path: &str,
     workbook_sha256: &str,
     sheet: &str,
@@ -2485,10 +2667,15 @@ fn compile_xls_record_changes(
         .ok_or_else(|| format!("DOMAIN_XLS_ROW_MISSING: {sheet}:{row}"))?;
     let mut updates = Vec::with_capacity(changes.len());
     for (field, value) in changes {
+        let aliases = manifest_field_aliases(store, project_id, draft_id, field)?;
         let matches = headers
             .iter()
             .enumerate()
-            .filter(|(_, header)| canonical_xls_field(header) == canonical_xls_field(field))
+            .filter(|(_, header)| {
+                aliases
+                    .iter()
+                    .any(|alias| canonical_xls_field(header) == canonical_xls_field(alias))
+            })
             .collect::<Vec<_>>();
         if matches.len() != 1 {
             return Err(format!(
@@ -3064,9 +3251,14 @@ mod tests {
             .find(|resource| resource.label == "OFFER_B")
             .unwrap();
         assert_eq!(record.source.row, Some(3));
+        let draft = store.open_draft(&project.id, "xls alias edit").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.0", None)
+            .unwrap();
         let primitive = compile_xls_field_changes(
             &store,
             &project.id,
+            &draft.id,
             &record,
             &serde_json::Map::from_iter([("price".to_string(), json!(25))]),
             None,
@@ -3357,6 +3549,11 @@ mod tests {
         fs::create_dir_all(root.join("客户端/dev/Lua")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir/QuestDiary")).unwrap();
         fs::write(root.join("客户端/dev/Lua/main.lua"), "return 'MIR3'\n").unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/QuestDiary/quest.txt"),
+            "questId=Q1\nquestType=main\nrequiredLevel=1\nrewardItemId=I1\nnextQuestId=Q2\n",
+        )
+        .unwrap();
         let store = DomainStore::new(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
@@ -3368,7 +3565,7 @@ mod tests {
                 &["quest".to_string()],
                 &["quest".to_string()],
                 &[],
-                json!({"quest":"1.2.0"}),
+                json!({"quest":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3384,13 +3581,106 @@ mod tests {
             &project.id,
             "mir3_capability_invoke",
             json!({
-                "scopeToken":lease.token,
+                "scopeToken":lease.token.clone(),
                 "systemId":"quest",
                 "capabilityId":"inspect-quest",
                 "params":{"operation":"inspect-quest"}
             }),
         );
         assert_eq!(inspect.get("isError"), Some(&Value::Bool(false)));
+        let resource = store
+            .query_domain_resources(
+                &project.id,
+                "quest",
+                &DomainResourceQuery {
+                    text: "Q1".to_string(),
+                    resource_type: None,
+                    limit: Some(10),
+                    offset: None,
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        let projected = call_tool(
+            &store,
+            &project.id,
+            "mir3_capability_invoke",
+            json!({
+                "scopeToken":lease.token,
+                "systemId":"quest",
+                "capabilityId":"inspect-quest",
+                "params":{
+                    "operation":"inspect-quest",
+                    "resourceId":resource.id,
+                    "includeDependencies":false,
+                    "projection":"engine"
+                }
+            }),
+        );
+        assert_eq!(projected["isError"], false);
+        assert!(projected
+            .pointer("/structuredContent/dependencies")
+            .unwrap()
+            .is_null());
+        assert_eq!(projected["structuredContent"]["projection"], "engine");
+        assert!(
+            projected["structuredContent"]["resources"][0]["dependencies"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            validate_target_engine(&store, "quest", "1.2").unwrap()["compatible"]
+                .as_bool()
+                .unwrap()
+        );
+        assert!(validate_target_engine(&store, "quest", "0.1")
+            .unwrap_err()
+            .starts_with("DOMAIN_TARGET_ENGINE_INCOMPATIBLE:"));
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn manifest_field_aliases_compile_canonical_changes_to_real_text_keys() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-mcp-field-alias-{}-{}",
+            std::process::id(),
+            mir3_domain::now_millis()
+        ));
+        let root = base.join("项目/字段别名");
+        let relative = "引擎/Mir200/Envir/level.txt";
+        fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
+        fs::write(
+            root.join(relative),
+            "Level=1\nRequired_Experience=100\nStat_Points=1\nRecommended_Monster_Id=M1\n",
+        )
+        .unwrap();
+        let store = test_store(&base);
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let draft = store.open_draft(&project.id, "alias edit").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
+            .unwrap();
+        let primitive = compile_text_field_changes(
+            &store,
+            &project.id,
+            &draft.id,
+            relative,
+            &serde_json::Map::from_iter([("requiredExperience".to_string(), json!(250))]),
+            None,
+        )
+        .unwrap();
+        let result = apply_safe_operation(&store, &project.id, &draft.id, 0, &primitive).unwrap();
+        assert_eq!(primitive_revision(&result).unwrap(), 1);
+        let opened = store
+            .safe_text_open(&project.id, relative, Some(&draft.id))
+            .unwrap();
+        assert!(opened.content.contains("Required_Experience=250"));
         fs::remove_dir_all(base).ok();
     }
 
@@ -3412,7 +3702,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "检查 Draft Diff").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.3.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -3434,7 +3724,7 @@ mod tests {
                 &["quest".to_string()],
                 &["quest".to_string()],
                 std::slice::from_ref(&draft.id),
-                json!({"quest":"1.2.0"}),
+                json!({"quest":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3460,7 +3750,7 @@ mod tests {
 
         let unrelated = store.open_draft(&project.id, "另一个 Draft").unwrap();
         store
-            .bind_draft_domain(&project.id, &unrelated.id, "quest", "1.2.0", None)
+            .bind_draft_domain(&project.id, &unrelated.id, "quest", "1.3.0", None)
             .unwrap();
         let denied = call_tool(
             &store,
@@ -3518,7 +3808,13 @@ mod tests {
         fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
         fs::write(
             root.join(level_path),
-            "level=1\nrequiredExperience=100\nrecommendedMonsterId=M1\n",
+            "level=1\nrequiredExperience=100\nstatPoints=1\nrecommendedMonsterId=M1\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Level")).unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Level/Level.txt"),
+            "level=1\nrequiredExperience=100\nstatPoints=1\nrecommendedMonsterId=M1\n",
         )
         .unwrap();
         fs::write(
@@ -3533,7 +3829,7 @@ mod tests {
             .open_draft(&project.id, "MCP overlay validation")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
             .unwrap();
         store
             .patch_draft(
@@ -3543,7 +3839,7 @@ mod tests {
                 &[DraftChangeInput {
                     path: level_path.to_string(),
                     content: Some(
-                        "level=999\nrequiredExperience=100\nrecommendedMonsterId=MISSING\n"
+                        "level=999\nrequiredExperience=100\nstatPoints=1\nrecommendedMonsterId=MISSING\n"
                             .to_string(),
                     ),
                     deleted: false,
@@ -3558,7 +3854,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                json!({"level":"1.2.0"}),
+                json!({"level":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3616,7 +3912,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "安全能力调用").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.3.0", None)
             .unwrap();
         let lease = store
             .issue_task_scope(
@@ -3625,7 +3921,7 @@ mod tests {
                 &["map".to_string()],
                 &["map".to_string()],
                 &[],
-                json!({"map":"1.2.0"}),
+                json!({"map":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3741,7 +4037,7 @@ mod tests {
 
         let shop_draft = store.open_draft(&project.id, "越权商城能力").unwrap();
         store
-            .bind_draft_domain(&project.id, &shop_draft.id, "shop", "1.2.0", None)
+            .bind_draft_domain(&project.id, &shop_draft.id, "shop", "1.3.0", None)
             .unwrap();
         let scope_escalation = call_tool(
             &store,
@@ -3762,7 +4058,7 @@ mod tests {
             &project.id,
             &lease.token,
             &draft.id,
-            Some("1.2.0"),
+            Some("1.3.0"),
             valid_params,
         );
         assert_eq!(applied.get("isError"), Some(&Value::Bool(false)));
@@ -3786,13 +4082,16 @@ mod tests {
         fs::create_dir_all(shop_path.parent().unwrap()).unwrap();
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
-        fs::write(&shop_path, "shopId=1\nprice=1\n").unwrap();
+        fs::write(&shop_path, shop_text("O1", 1)).unwrap();
+        fs::write(root.join("客户端/dev/shop.txt"), shop_text("O1", 1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/cfg_item.txt"), item_text(1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/buff.txt"), "buffId=B1\n").unwrap();
         let store = test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let source = store.open_draft(&project.id, "source task").unwrap();
         store
-            .bind_draft_domain(&project.id, &source.id, "shop", "1.2.0", None)
+            .bind_draft_domain(&project.id, &source.id, "shop", "1.3.0", None)
             .unwrap();
         store
             .patch_draft(
@@ -3801,7 +4100,7 @@ mod tests {
                 0,
                 &[DraftChangeInput {
                     path: "引擎/Mir200/Envir/shop.txt".to_string(),
-                    content: Some("shopId=1\nprice=2\n".to_string()),
+                    content: Some(shop_text("O1", 2)),
                     deleted: false,
                     expected_sha256: None,
                 }],
@@ -3889,7 +4188,7 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 &[],
-                json!({"shop":"1.2.0"}),
+                json!({"shop":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3951,7 +4250,7 @@ mod tests {
 
         let target = store.open_draft(&project.id, "new session").unwrap();
         store
-            .bind_draft_domain(&project.id, &target.id, "shop", "1.2.0", None)
+            .bind_draft_domain(&project.id, &target.id, "shop", "1.3.0", None)
             .unwrap();
         let target_lease = store
             .issue_task_scope(
@@ -3960,7 +4259,7 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 std::slice::from_ref(&target.id),
-                json!({"shop":"1.2.0"}),
+                json!({"shop":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -4022,21 +4321,17 @@ mod tests {
         fs::create_dir_all(root.join("引擎/Mir200/Envir/Shop")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir/Item")).unwrap();
         fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
-        fs::write(
-            root.join("引擎/Mir200/Envir/shop.txt"),
-            "shopId=1\nprice=1\n",
-        )
-        .unwrap();
-        fs::write(
-            root.join("引擎/Mir200/Envir/cfg_item.txt"),
-            "itemId=1\nstackLimit=1\n",
-        )
-        .unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/shop.txt"), shop_text("O1", 1)).unwrap();
+        fs::write(root.join("客户端/dev/shop.txt"), shop_text("O1", 1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/cfg_item.txt"), item_text(1)).unwrap();
+        fs::write(root.join("客户端/dev/cfg_item.txt"), item_text(1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/buff.txt"), "buffId=B1\n").unwrap();
         fs::write(
             root.join("引擎/Mir200/Envir/shop-extra.txt"),
-            "shopId=2\nprice=1\n",
+            shop_text("O2", 1),
         )
         .unwrap();
+        fs::write(root.join("客户端/dev/shop-extra.txt"), shop_text("O2", 1)).unwrap();
         let store = test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
@@ -4046,21 +4341,21 @@ mod tests {
                 "shop",
                 "batch-price-shop",
                 "引擎/Mir200/Envir/shop.txt",
-                "shopId=1\nprice=2\n",
+                shop_text("O1", 2),
                 json!({"operation":"batch-price-shop","resourceIds":["shop:source"],"changes":{"price":2},"expectedRevision":0}),
             ),
             (
                 "item",
                 "batch-edit-item",
                 "引擎/Mir200/Envir/cfg_item.txt",
-                "itemId=1\nstackLimit=2\n",
+                item_text(2),
                 json!({"operation":"batch-edit-item","resourceIds":["item:source"],"changes":{"stackLimit":2},"expectedRevision":0}),
             ),
             (
                 "shop",
                 "batch-price-shop",
                 "引擎/Mir200/Envir/shop-extra.txt",
-                "shopId=2\nprice=3\n",
+                shop_text("O2", 3),
                 json!({"operation":"batch-price-shop","resourceIds":["shop:source-2"],"changes":{"price":3},"expectedRevision":0}),
             ),
         ];
@@ -4072,7 +4367,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.2.0",
+                    "1.3.0",
                     Some(source_composite),
                 )
                 .unwrap();
@@ -4083,7 +4378,7 @@ mod tests {
                     0,
                     &[DraftChangeInput {
                         path: path.to_string(),
-                        content: Some(content.to_string()),
+                        content: Some(content),
                         deleted: false,
                         expected_sha256: None,
                     }],
@@ -4214,7 +4509,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.2.0",
+                    "1.3.0",
                     Some(target_composite),
                 )
                 .unwrap();
@@ -4227,7 +4522,7 @@ mod tests {
                 &["shop".to_string(), "item".to_string()],
                 &["shop".to_string(), "item".to_string()],
                 &target_drafts,
-                json!({"shop":"1.2.0","item":"1.2.0"}),
+                json!({"shop":"1.3.0","item":"1.3.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -4452,6 +4747,18 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    fn shop_text(offer_id: &str, price: usize) -> String {
+        format!(
+            "offerId={offer_id}\nshopId=S1\nitemId=I1\ncurrencyItemId=I1\nprice={price}\nstartEpochSeconds=0\nendEpochSeconds=1\n"
+        )
+    }
+
+    fn item_text(stack_limit: usize) -> String {
+        format!(
+            "itemId=I1\nitemType=consumable\nstackLimit={stack_limit}\nclientIcon=icons/I1.png\nengineStdMode=1\nlinkedBuffId=B1\n"
+        )
     }
 
     fn shaped_test_params(

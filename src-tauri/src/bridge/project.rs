@@ -618,6 +618,25 @@ pub fn domain_draft_composite_associate(
     )
 }
 
+/// 仅用于全局任务初始化失败后的精确关联补偿。
+#[tauri::command]
+pub fn domain_draft_composite_disassociate(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    draft_id: String,
+    system_id: String,
+    plugin_version: String,
+    composite_id: String,
+) -> Result<(), String> {
+    service.store().disassociate_draft_composite(
+        &project_id,
+        &draft_id,
+        &system_id,
+        &plugin_version,
+        &composite_id,
+    )
+}
+
 #[tauri::command]
 pub fn draft_preview(
     service: State<'_, ProjectService>,
@@ -669,6 +688,53 @@ pub struct CompositeDraftApplyInput {
     pub confirmation_token: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeDraftReviewItem {
+    pub draft_id: String,
+    pub system_id: String,
+    pub plugin_version: String,
+    pub confirmation: DraftConfirmation,
+    pub validation: DomainValidationReport,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeDraftReview {
+    pub composite_id: String,
+    pub drafts: Vec<CompositeDraftReviewItem>,
+}
+
+/// 联合审查一次返回完整绑定集合、真实 Diff、逐 Draft 校验和一次性确认令牌。
+#[tauri::command]
+pub fn draft_composite_preview(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    composite_id: String,
+) -> Result<CompositeDraftReview, String> {
+    let bindings = service
+        .store()
+        .list_composite_draft_bindings(&project_id, &composite_id)?;
+    let mut drafts = Vec::with_capacity(bindings.len());
+    for binding in bindings {
+        let validation = service
+            .store()
+            .validate_domain_draft(&project_id, &binding.draft_id)?;
+        let confirmation = service.create_confirmation(&project_id, &binding.draft_id)?;
+        drafts.push(CompositeDraftReviewItem {
+            draft_id: binding.draft_id,
+            system_id: binding.system_id,
+            plugin_version: binding.plugin_version,
+            confirmation,
+            validation,
+        });
+    }
+    Ok(CompositeDraftReview {
+        composite_id,
+        drafts,
+    })
+}
+
 #[tauri::command]
 pub fn draft_composite_apply(
     service: State<'_, ProjectService>,
@@ -676,13 +742,13 @@ pub fn draft_composite_apply(
     composite_id: String,
     drafts: Vec<CompositeDraftApplyInput>,
 ) -> Result<CompositeApplyResult, String> {
+    let requests = drafts
+        .iter()
+        .map(|draft| (draft.draft_id.clone(), draft.confirmation_token.clone()))
+        .collect::<Vec<_>>();
+    let values = service.consume_composite_confirmations(&project_id, &requests)?;
     let mut confirmations = Vec::with_capacity(drafts.len());
-    for draft in drafts {
-        let confirmation = service.consume_confirmation(
-            &project_id,
-            &draft.draft_id,
-            &draft.confirmation_token,
-        )?;
+    for (draft, confirmation) in drafts.into_iter().zip(values) {
         confirmations.push(CompositeDraftConfirmation {
             draft_id: draft.draft_id,
             expected_revision: confirmation.revision,

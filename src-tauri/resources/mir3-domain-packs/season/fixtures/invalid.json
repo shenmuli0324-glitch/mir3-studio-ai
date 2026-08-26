@@ -11,7 +11,7 @@
     },
     {
       "seasonId": "season-seasonId-1",
-      "startEpochSeconds": 2,
+      "startEpochSeconds": 3,
       "endEpochSeconds": 3,
       "rankingBoardId": "ranking:fixture-2",
       "seasonShopId": "shop:fixture-2"

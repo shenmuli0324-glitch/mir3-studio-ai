@@ -11,7 +11,7 @@
     },
     {
       "rewardId": "online_reward-rewardId-1",
-      "durationSeconds": 3,
+      "durationSeconds": 604801,
       "rewardItemId": "item:fixture-2",
       "rewardCount": 3,
       "minimumVipLevel": 2

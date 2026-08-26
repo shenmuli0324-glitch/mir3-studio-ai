@@ -11,8 +11,8 @@
     },
     {
       "buffId": "buff-buffId-1",
-      "stackMode": "refresh",
-      "maximumStacks": 3,
+      "stackMode": "stack",
+      "maximumStacks": 1,
       "durationMilliseconds": 3,
       "effectSkillId": "skill:fixture-2"
     }

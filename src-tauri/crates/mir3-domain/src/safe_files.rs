@@ -739,7 +739,7 @@ fn decode_as(payload: &[u8], encoding: TextEncoding) -> Result<String, String> {
                 .ok_or_else(|| "SAFE_TEXT_GB18030_INVALID: undecodable input".to_string())
         }
         TextEncoding::Utf16Le | TextEncoding::Utf16Be => {
-            if payload.len() % 2 != 0 {
+            if !payload.len().is_multiple_of(2) {
                 return Err("SAFE_TEXT_UTF16_INVALID: odd byte length".to_string());
             }
             let units = payload.chunks_exact(2).map(|pair| {
@@ -754,7 +754,7 @@ fn decode_as(payload: &[u8], encoding: TextEncoding) -> Result<String, String> {
                 .map_err(|e| format!("SAFE_TEXT_UTF16_INVALID: {e}"))
         }
         TextEncoding::Utf32Le | TextEncoding::Utf32Be => {
-            if payload.len() % 4 != 0 {
+            if !payload.len().is_multiple_of(4) {
                 return Err("SAFE_TEXT_UTF32_INVALID: invalid byte length".to_string());
             }
             payload
@@ -1138,7 +1138,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "安全编辑任务配置").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.3.0", None)
             .unwrap();
         let result = store
             .safe_text_patch(
@@ -1239,7 +1239,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "修改商品价格").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.0", None)
             .unwrap();
         let result = store
             .safe_xls_patch(

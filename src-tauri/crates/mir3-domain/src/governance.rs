@@ -151,7 +151,8 @@ pub struct GovernanceMigrationReport {
     pub created_at: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GovernanceSnapshot {
     system_id: String,
     project_rows: Vec<ProjectGovernanceSnapshot>,
@@ -159,20 +160,23 @@ pub struct GovernanceSnapshot {
     shared_memories: Vec<SharedMemoryRow>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ProjectGovernanceSnapshot {
     project_id: String,
     capabilities: Vec<UserCapability>,
     memories: Vec<DomainMemory>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SharedCapabilityRow {
     source_project_id: String,
     capability: UserCapability,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SharedMemoryRow {
     source_project_id: String,
     memory: DomainMemory,
@@ -254,6 +258,7 @@ impl DomainStore {
         plugin_version: &str,
         composite_id: Option<&str>,
     ) -> Result<(), String> {
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
         let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         if system_id != "__studio_gui__" {
             self.runtime_manifest_at_version(system_id, Some(plugin_version))?;
@@ -278,6 +283,7 @@ impl DomainStore {
         plugin_version: &str,
         composite_id: &str,
     ) -> Result<(), String> {
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
         let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         if composite_id.trim().is_empty() {
             return Err("COMPOSITE_DRAFT_ID_REQUIRED: composite id is required".to_string());
@@ -328,6 +334,40 @@ impl DomainStore {
                 params![draft_id, composite_id],
             )
             .map_err(|error| format!("COMPOSITE_DRAFT_ASSOCIATE_FAILED: {error}"))?;
+        Ok(())
+    }
+
+    /// 初始化组合任务失败时，只允许解除调用方刚建立且仍精确匹配的关联。
+    pub fn disassociate_draft_composite(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        system_id: &str,
+        plugin_version: &str,
+        composite_id: &str,
+    ) -> Result<(), String> {
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
+        let draft = self.get_draft(project_id, draft_id)?;
+        if draft.status != crate::DraftStatus::Open {
+            return Err(
+                "COMPOSITE_DRAFT_NOT_OPEN: only open drafts can be disassociated".to_string(),
+            );
+        }
+        let updated = self
+            .project_connection(project_id)?
+            .execute(
+                "UPDATE draft_domains SET composite_id=NULL
+                 WHERE draft_id=?1 AND system_id=?2 AND plugin_version=?3 AND composite_id=?4 AND legacy=0",
+                params![draft_id, system_id, plugin_version, composite_id],
+            )
+            .map_err(|error| format!("COMPOSITE_DRAFT_DISASSOCIATE_FAILED: {error}"))?;
+        if updated != 1 {
+            return Err(
+                "COMPOSITE_DRAFT_DISASSOCIATE_MISMATCH: binding changed before compensation"
+                    .to_string(),
+            );
+        }
         Ok(())
     }
 
@@ -383,6 +423,7 @@ impl DomainStore {
     where
         F: FnOnce(&[CompositeDraftBinding]) -> Result<T, String>,
     {
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
         let bindings = self.list_composite_draft_bindings(project_id, composite_id)?;
         let draft_ids = bindings
             .iter()
@@ -593,6 +634,7 @@ impl DomainStore {
         drop(statement);
         drop(connection);
         let draft = self.open_draft(project_id, &request.intent)?;
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
         let _mutation = self.reserve_draft_mutation(project_id, &draft.id)?;
         let clone_result = (|| -> Result<DraftPreview, String> {
             self.bind_draft_domain(
@@ -1224,6 +1266,7 @@ impl DomainStore {
         let source_hash = self.draft_change_evidence_hash(project_id, source_draft_id)?;
         verify_replay_proofs(evidence, &source_hash)?;
         let replay = self.open_draft(project_id, "capability isolated replay")?;
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
         let _mutation = self.reserve_draft_mutation(project_id, &replay.id)?;
         self.bind_draft_domain(
             project_id,
@@ -2894,6 +2937,8 @@ impl DomainStore {
             .map_err(|error| format!("SYSTEM_SESSION_READ_FAILED: {error}"))
     }
 
+    // 作用域租约参数逐项对应协议安全边界，保持显式参数便于审计调用方。
+    #[allow(clippy::too_many_arguments)]
     pub fn issue_task_scope(
         &self,
         project_id: &str,
@@ -3849,7 +3894,7 @@ mod tests {
             body: serde_json::json!({"minimum":1}),
             status: "candidate".to_string(),
             source_task_id: "task-1".to_string(),
-            plugin_version: "1.2.0".to_string(),
+            plugin_version: "1.3.0".to_string(),
             created_at: now,
             updated_at: now,
         };
@@ -3880,7 +3925,7 @@ mod tests {
             summary: "批量价格规则".to_string(),
             status: "applied".to_string(),
             draft_id: None,
-            plugin_versions: serde_json::json!({"domain":"1.2.0"}),
+            plugin_versions: serde_json::json!({"domain":"1.3.0"}),
             evidence: serde_json::json!({"diffHash":"abc"}),
             created_at: now,
         };
@@ -3932,7 +3977,7 @@ mod tests {
             .project_connection(&project.id)
             .unwrap()
             .execute(
-                "UPDATE domain_memories SET plugin_version='1.2.0' WHERE id=?1",
+                "UPDATE domain_memories SET plugin_version='1.3.0' WHERE id=?1",
                 [&proposed_id],
             )
             .unwrap();
@@ -3944,7 +3989,7 @@ mod tests {
                 &["shop".to_string(), "item".to_string()],
                 &["shop".to_string()],
                 &[],
-                serde_json::json!({"shop":"1.2.0","item":"1.2.0"}),
+                serde_json::json!({"shop":"1.3.0","item":"1.3.0"}),
                 now + 60_000,
             )
             .unwrap();
@@ -3981,7 +4026,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             &[],
-            serde_json::json!({"shop":"1.2.0"}),
+            serde_json::json!({"shop":"1.3.0"}),
             now + TASK_SCOPE_MAX_TTL_MILLIS + 60_000,
         );
         assert!(too_long
@@ -3995,7 +4040,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             std::slice::from_ref(&unscoped.id),
-            serde_json::json!({"shop":"1.2.0"}),
+            serde_json::json!({"shop":"1.3.0"}),
             now + 60_000,
         );
         assert!(unscoped_lease
@@ -4004,7 +4049,7 @@ mod tests {
 
         let foreign = store.open_draft(&project.id, "foreign").unwrap();
         store
-            .bind_draft_domain(&project.id, &foreign.id, "item", "1.2.0", None)
+            .bind_draft_domain(&project.id, &foreign.id, "item", "1.3.0", None)
             .unwrap();
         let foreign_lease = store.issue_task_scope(
             &project.id,
@@ -4012,7 +4057,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             std::slice::from_ref(&foreign.id),
-            serde_json::json!({"shop":"1.2.0"}),
+            serde_json::json!({"shop":"1.3.0"}),
             now + 60_000,
         );
         assert!(foreign_lease
@@ -4020,6 +4065,74 @@ mod tests {
             .starts_with("TASK_SCOPE_DRAFT_SYSTEM_MISMATCH:"));
 
         fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_association_compensation_is_exact_and_retryable() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-disassociate-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let root = base.join("木立");
+        fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
+        let store = governance_test_store(&base);
+        let project = store.import_project(&root).unwrap();
+        let draft = store.open_draft(&project.id, "existing draft").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.0", None)
+            .unwrap();
+        store
+            .associate_draft_composite(
+                &project.id,
+                &draft.id,
+                "shop",
+                "1.3.0",
+                "failed-global-task",
+            )
+            .unwrap();
+
+        assert!(store
+            .disassociate_draft_composite(&project.id, &draft.id, "shop", "1.3.0", "foreign-task",)
+            .unwrap_err()
+            .starts_with("COMPOSITE_DRAFT_DISASSOCIATE_MISMATCH:"));
+        store
+            .disassociate_draft_composite(
+                &project.id,
+                &draft.id,
+                "shop",
+                "1.3.0",
+                "failed-global-task",
+            )
+            .unwrap();
+        store
+            .associate_draft_composite(
+                &project.id,
+                &draft.id,
+                "shop",
+                "1.3.0",
+                "retried-global-task",
+            )
+            .unwrap();
+
+        fs::remove_dir_all(base).ok();
+    }
+
+    fn shop_record(price: usize) -> String {
+        shop_record_with_offer("O1", price)
+    }
+
+    fn shop_record_with_offer(offer_id: &str, price: usize) -> String {
+        format!(
+            "offerId={offer_id}\nshopId=S1\nitemId=I1\ncurrencyItemId=I1\nprice={price}\nstartEpochSeconds=0\nendEpochSeconds=1\n"
+        )
+    }
+
+    fn item_record(stack_limit: usize) -> String {
+        format!(
+            "itemId=I1\nitemType=consumable\nstackLimit={stack_limit}\nclientIcon=icons/I1.png\nengineStdMode=1\nlinkedBuffId=B1\n"
+        )
     }
 
     fn applied_shop_source(
@@ -4034,17 +4147,20 @@ mod tests {
         let relative = "引擎/Mir200/Envir/shop.txt";
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
-        fs::write(root.join(relative), "shopId=1\nprice=1\n").unwrap();
+        fs::write(root.join(relative), shop_record(1)).unwrap();
+        fs::write(root.join("客户端/dev/shop.txt"), shop_record(1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/cfg_item.txt"), item_record(1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/buff.txt"), "buffId=B1\n").unwrap();
         let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "shop operations").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.2.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.0", None)
             .unwrap();
         for (index, operation_id) in operation_ids.iter().enumerate() {
             let revision_before = index as i64;
-            let content = format!("shopId=1\nprice={}\n", index + 2);
+            let content = shop_record(index + 2);
             store
                 .patch_draft(
                     &project.id,
@@ -4113,8 +4229,21 @@ mod tests {
         let item_path = "引擎/Mir200/Envir/cfg_item.txt";
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
-        fs::write(root.join(shop_path), "shopId=1\nprice=1\n").unwrap();
-        fs::write(root.join(item_path), "cfg_item=1\nitemId=1\nstackLimit=1\n").unwrap();
+        fs::write(root.join(shop_path), shop_record(1)).unwrap();
+        fs::write(root.join(item_path), item_record(1)).unwrap();
+        fs::write(root.join("客户端/dev/shop.txt"), shop_record(1)).unwrap();
+        fs::write(
+            root.join("客户端/dev/shop-extra.txt"),
+            shop_record_with_offer("O2", 1),
+        )
+        .unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/shop-extra.txt"),
+            shop_record_with_offer("O2", 1),
+        )
+        .unwrap();
+        fs::write(root.join("客户端/dev/cfg_item.txt"), item_record(1)).unwrap();
+        fs::write(root.join("引擎/Mir200/Envir/buff.txt"), "buffId=B1\n").unwrap();
         let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
@@ -4124,7 +4253,7 @@ mod tests {
                 "shop",
                 "batch-price-shop",
                 shop_path,
-                "shopId=1\nprice=2\n",
+                shop_record(2),
                 serde_json::json!({
                     "operation":"batch-price-shop","resourceIds":["shop:1"],
                     "changes":{"price":2},"expectedRevision":0
@@ -4134,7 +4263,7 @@ mod tests {
                 "item",
                 "batch-edit-item",
                 item_path,
-                "cfg_item=1\nitemId=1\nstackLimit=2\n",
+                item_record(2),
                 serde_json::json!({
                     "operation":"batch-edit-item","resourceIds":["item:1"],
                     "changes":{"stackLimit":2},"expectedRevision":0
@@ -4150,7 +4279,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.2.0",
+                    "1.3.0",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -4161,7 +4290,7 @@ mod tests {
                     0,
                     &[crate::DraftChangeInput {
                         path: path.to_string(),
-                        content: Some(content.to_string()),
+                        content: Some(content),
                         deleted: false,
                         expected_sha256: None,
                     }],
@@ -4509,7 +4638,7 @@ mod tests {
                 && step
                     .get("pluginVersion")
                     .and_then(serde_json::Value::as_str)
-                    == Some("1.2.0")
+                    == Some("1.3.0")
                 && step
                     .get("parameterKey")
                     .and_then(serde_json::Value::as_str)
@@ -4533,7 +4662,7 @@ mod tests {
                     &project_id,
                     &draft.id,
                     system_id,
-                    "1.2.0",
+                    "1.3.0",
                     Some(invocation_composite),
                 )
                 .unwrap();
@@ -4853,7 +4982,7 @@ mod tests {
                 &LegacyDraftCloneRequest {
                     legacy_draft_id,
                     system_id: "shop".to_string(),
-                    plugin_version: "1.2.0".to_string(),
+                    plugin_version: "1.3.0".to_string(),
                     expected_sources: BTreeMap::from([(
                         "引擎/Mir200/Envir/shop.txt".to_string(),
                         hash_bytes(&current),
@@ -4990,7 +5119,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.2.0",
+                    "1.3.0",
                     Some(&composite_id),
                 )
                 .unwrap();
@@ -5056,8 +5185,9 @@ mod tests {
             .unwrap()
             .id;
         let snapshot = store.snapshot_domain_governance("shop").unwrap();
+        let persisted_snapshot = serde_json::to_vec(&snapshot).unwrap();
         let report = store
-            .migrate_domain_governance("shop", "1.2.0", "1.2.0")
+            .migrate_domain_governance("shop", "1.3.0", "1.3.0")
             .unwrap();
         assert!(report.compatible);
         assert_eq!(report.status, "applied");
@@ -5080,7 +5210,11 @@ mod tests {
             "active"
         );
 
-        store.restore_domain_governance_snapshot(&snapshot).unwrap();
+        let recovered_snapshot: GovernanceSnapshot =
+            serde_json::from_slice(&persisted_snapshot).unwrap();
+        store
+            .restore_domain_governance_snapshot(&recovered_snapshot)
+            .unwrap();
         assert_eq!(
             store
                 .get_project_capability(&project_id, &capability.id, Some("0.1.0"))
@@ -5096,7 +5230,7 @@ mod tests {
                 .get_domain_memory(&project_id, &memory_id)
                 .unwrap()
                 .plugin_version,
-            "1.2.0"
+            "1.3.0"
         );
         let shared = store
             .shared_capability("personal", &capability.id, Some("0.1.0"))
@@ -5236,7 +5370,7 @@ mod tests {
         );
         let invocation = store.open_draft(&project_id, "invoke").unwrap();
         store
-            .bind_draft_domain(&project_id, &invocation.id, "shop", "1.2.0", None)
+            .bind_draft_domain(&project_id, &invocation.id, "shop", "1.3.0", None)
             .unwrap();
         connection
             .execute(
@@ -5283,7 +5417,7 @@ mod tests {
             summary: "atomic".to_string(),
             status: "applied".to_string(),
             draft_id: None,
-            plugin_versions: serde_json::json!({"shop":"1.2.0"}),
+            plugin_versions: serde_json::json!({"shop":"1.3.0"}),
             evidence: serde_json::json!({"diffHash":"x"}),
             created_at: now_millis(),
         };

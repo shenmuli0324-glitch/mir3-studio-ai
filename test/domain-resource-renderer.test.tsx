@@ -87,6 +87,78 @@ describe('domain resource projection', () => {
     expect(rendered.container.querySelectorAll('svg path')).toHaveLength(1)
   })
 
+  it('combines dedicated quest, talent, activity, Sabac, and cross-server summaries with semantic views', () => {
+    const quest = resourceWithProjection({
+      kind: 'text',
+      content: 'questId\tname\tnextQuestId\nq1\tStart\tq2\nq2\tFinish\t',
+      truncated: false,
+    }, 'quest')
+    const rendered = render(<ResourceRenderer renderer="flow-v1" resource={quest} loading={false} error={null} />)
+    expect(screen.getByText('Quest flow overview')).toBeTruthy()
+    expect(screen.getByText('Terminal nodes')).toBeTruthy()
+
+    rendered.rerender(
+      <ResourceRenderer
+        renderer="graph-v1"
+        resource={resourceWithProjection({
+          kind: 'text',
+          content: 'nodeId\tparentNodeId\tcostPoints\trequiredLevel\nn1\t\t2\t10\nn2\tn1\t3\t20',
+          truncated: false,
+        }, 'talent')}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('Talent tree budget')).toBeTruthy()
+    expect(screen.getByText('Total cost')).toBeTruthy()
+
+    rendered.rerender(
+      <ResourceRenderer
+        renderer="timeline-v1"
+        resource={resourceWithProjection({
+          kind: 'text',
+          content: 'eventId\tstartEpochSeconds\tendEpochSeconds\ne1\t200\t100',
+          truncated: false,
+        }, 'limited_event')}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('Activity schedule integrity')).toBeTruthy()
+    expect(screen.getByText('Warnings: 1')).toBeTruthy()
+
+    rendered.rerender(
+      <ResourceRenderer
+        renderer="spatial-flow-v1"
+        resource={resourceWithProjection({
+          kind: 'text',
+          content: 'phaseId\tbattleMapId\tstartMinute\tendMinute\np1\t3\t60\t120',
+          truncated: false,
+        }, 'sabac')}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('Sabac spatial state')).toBeTruthy()
+    expect(screen.getByText('Battle maps')).toBeTruthy()
+
+    rendered.rerender(
+      <ResourceRenderer
+        renderer="topology-v1"
+        resource={resourceWithProjection({
+          kind: 'text',
+          content: 'routeId\tsourceShard\ttargetShard\tengineRange\nr1\ts1\ts2\t>=1.0.0',
+          truncated: false,
+        }, 'cross_server')}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('Cross-server compatibility matrix')).toBeTruthy()
+    expect(screen.getByText('Source shard')).toBeTruthy()
+    expect(screen.getByText('>=1.0.0')).toBeTruthy()
+  })
+
   it('draws map cells and exposes dimensions, coordinates, layers, and walkability', () => {
     const fillRect = vi.fn()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
@@ -106,10 +178,10 @@ describe('domain resource projection', () => {
   })
 })
 
-function resourceWithProjection(projection: DomainResourceRecord['projection']): DomainResourceRecord {
+function resourceWithProjection(projection: DomainResourceRecord['projection'], systemId = 'fixture'): DomainResourceRecord {
   return {
     id: 'resource-1',
-    systemId: 'fixture',
+    systemId,
     resourceType: 'file',
     label: 'fixture',
     files: [],
@@ -117,6 +189,10 @@ function resourceWithProjection(projection: DomainResourceRecord['projection']):
     writable: false,
     projection,
     diagnostics: [],
+    fields: {},
+    source: { path: 'fixture.txt', sheet: null, row: null, headers: [] },
+    dependencies: [],
+    mappingsApplied: [],
   }
 }
 

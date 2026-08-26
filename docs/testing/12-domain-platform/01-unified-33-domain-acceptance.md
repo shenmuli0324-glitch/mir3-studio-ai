@@ -24,6 +24,10 @@
 - fixture canary 对 valid、invalid、expected diagnostics 做精确匹配，并 dry-run 全部官方操作。
 - 地图使用 `map-canvas-v1` 和通用 Draft；跟踪源码中不存在旧地图页面、`MapSystemService` 或旧 `map_*` Tauri 命令。
 
+`mir3-map` crate 仅保留经过验证的 `.map` 二进制解析、编码和分块算法，供 map
+领域适配器调用；它不暴露页面、会话、Tauri 命令、独立 Draft 或真实项目写入入口，
+因此属于 Kernel 的可测试算法库，不是旧地图系统架构。
+
 当前注册表包含 194 个官方能力，其中 155 个为 Draft 写能力。依赖审计报告的两个强连通分量属于资源交叉引用，不是插件加载顺序或执行依赖；Kernel 对缺失或损坏包仍按单包故障隔离处理。
 
 ## Kernel 与治理证据
@@ -111,11 +115,15 @@ SHA-256、总字节数、整树 SHA-256 和引擎/客户端版本标记，再执
 `mir3-domain-corpus-acceptance/<corpus-identity>/report.json`。若显式指定 `--output`，
 仓库内路径必须已被 Git ignore，且不能位于任何项目副本内。
 
+schema v2 报告从 Rust 测试输出提取 `MIR3_CORPUS_READONLY` 与
+`MIR3_CORPUS_WRITE` 逐领域标记；只读识别/校验和 Draft 应用/恢复必须分别达到
+33/33，存在缺失或未知领域标记时，即使 Cargo 退出码为 0 也不得标记为 `passed`。
+
 报告状态为 `passed` 后，以下两项才具有可重复验收证据：
 
-- `external_real_project_corpus_runs_the_full_readonly_domain_matrix` 验证每份副本中所有实际识别领域的文件、资源、依赖与校验链。
-- `external_real_project_corpus_applies_and_restores_verified_drafts` 对每份副本执行 Draft、Diff、领域校验、应用和 Snapshot 字节级恢复。
-- 33 个领域的逐包结构化写入由 bundled fixture 与 155 个 MCP 编译用例覆盖；真实副本没有覆盖到的领域不得据此宣称已完成真实游戏格式专项验收。
+- `external_real_project_corpus_runs_the_full_readonly_domain_matrix` 验证三份副本合计识别并校验全部 33 个领域，同时保持每份真实目录的只读树签名不变。
+- `external_real_project_corpus_applies_and_restores_verified_drafts` 要求每个领域都能从三份副本中找到一个已验证的可写文件，完成 Draft、Diff、领域校验、应用和 Snapshot 字节级恢复。
+- 33 个领域的逐包结构化写入另由 bundled fixture 与 155 个 MCP 编译用例覆盖；真实副本通过仍不等于真实游戏运行环境专项验收。
 
 ## 最终自动化门禁
 

@@ -49,18 +49,30 @@ export interface AiTaskIdentity {
   allowedWriteSystems?: string[]
 }
 
-interface RegisteredGlobalTask extends AiTaskIdentity {
+export interface RegisteredGlobalTask extends AiTaskIdentity {
+  compositeId: string
   draftIds: string[]
+  reviewPending: boolean
+  updatedAt: number
 }
 
 const globalTasks = new Map<string, RegisteredGlobalTask>()
+const GLOBAL_TASK_STORAGE_KEY = 'mir3-global-tasks:v1'
+const GLOBAL_TASK_MAX_AGE = 24 * 60 * 60 * 1000
+export const GLOBAL_WORKBENCH_EVENT = 'mir3:global-workbench-open'
 
-export function registerGlobalTask(task: RegisteredGlobalTask): void {
-  globalTasks.set(taskKey(task), task)
+export function registerGlobalTask(task: Omit<RegisteredGlobalTask, 'reviewPending' | 'updatedAt'> & { reviewPending?: boolean, updatedAt?: number }): void {
+  globalTasks.set(taskKey(task), {
+    ...task,
+    reviewPending: task.reviewPending ?? false,
+    updatedAt: task.updatedAt ?? Date.now(),
+  })
+  persistGlobalTasks()
 }
 
 export function unregisterGlobalTask(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>): void {
   globalTasks.delete(taskKey(identity))
+  persistGlobalTasks()
 }
 
 export function includeGlobalTaskDraft(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>, draftId: string): void {
@@ -68,6 +80,45 @@ export function includeGlobalTaskDraft(identity: Pick<AiTaskIdentity, 'projectId
   if (!task || task.draftIds.includes(draftId))
     return
   task.draftIds = [...task.draftIds, draftId]
+  task.updatedAt = Date.now()
+  persistGlobalTasks()
+}
+
+export function markGlobalTaskReviewPending(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>): RegisteredGlobalTask | null {
+  const task = globalTasks.get(taskKey(identity))
+  if (!task)
+    return null
+  task.reviewPending = true
+  task.updatedAt = Date.now()
+  persistGlobalTasks()
+  return task
+}
+
+export function registeredGlobalTasks(): RegisteredGlobalTask[] {
+  return [...globalTasks.values()]
+}
+
+export function restoreGlobalTasks(now = Date.now()): RegisteredGlobalTask[] {
+  const stored = readStoredGlobalTasks()
+  globalTasks.clear()
+  for (const task of stored) {
+    if (now - task.updatedAt <= GLOBAL_TASK_MAX_AGE)
+      globalTasks.set(taskKey(task), task)
+  }
+  persistGlobalTasks()
+  return [...globalTasks.values()]
+}
+
+export function requestGlobalWorkbench(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>): void {
+  if (typeof window === 'undefined')
+    return
+  window.dispatchEvent(new CustomEvent(GLOBAL_WORKBENCH_EVENT, {
+    detail: {
+      projectId: identity.projectId,
+      taskId: identity.taskId,
+      sessionId: identity.sessionId,
+    },
+  }))
 }
 
 export function registeredGlobalTask(message: Mir3BridgeEnvelope): RegisteredGlobalTask | null {
@@ -104,7 +155,27 @@ export function returnTarget(message: Mir3BridgeEnvelope, identity: AiTaskIdenti
 }
 
 export function isGlobalDraftEvent(type: string): boolean {
-  return type === 'mir3/globalSession.snapshot' || type === 'mir3/globalSession.completed'
+  return type === 'mir3/globalSession.snapshot' || type === 'mir3/globalSession.resumed' || type === 'mir3/globalSession.completed'
+    || type === 'mir3/globalSession.cancelled' || type === 'mir3/bridge.error'
+}
+
+export function isGlobalTerminalEvent(type: string): boolean {
+  return type === 'mir3/globalSession.completed'
+    || type === 'mir3/globalSession.cancelled'
+    || type === 'mir3/bridge.error'
+}
+
+export function isCompletedGlobalTask(message: Mir3BridgeEnvelope): boolean {
+  if (message.type === 'mir3/globalSession.completed')
+    return true
+  if (message.type !== 'mir3/globalSession.resumed')
+    return false
+  const payload = asRecord(message.payload)
+  return payload?.running === false
+    && Array.isArray(payload.nodes) && payload.nodes.length > 0
+    && Array.isArray(payload.pending) && payload.pending.length === 0
+    && Array.isArray(payload.queue) && payload.queue.length === 0
+    && Array.isArray(payload.runningCalls) && payload.runningCalls.length === 0
 }
 
 export async function verifyDevtoolsTarget(
@@ -198,6 +269,7 @@ function isSnapshotOrComplete(type: string): boolean {
   return type === 'mir3/systemSession.snapshot'
     || type === 'mir3/systemSession.completed'
     || type === 'mir3/globalSession.snapshot'
+    || type === 'mir3/globalSession.resumed'
     || type === 'mir3/globalSession.completed'
 }
 
@@ -217,4 +289,76 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function taskKey(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>): string {
   return `${identity.projectId}\u241F${identity.taskId}\u241F${identity.sessionId}`
+}
+
+function persistGlobalTasks(): void {
+  if (typeof window === 'undefined')
+    return
+  try {
+    window.localStorage.setItem(GLOBAL_TASK_STORAGE_KEY, JSON.stringify({ schemaVersion: 1, tasks: [...globalTasks.values()] }))
+  }
+  catch {}
+}
+
+function readStoredGlobalTasks(): RegisteredGlobalTask[] {
+  if (typeof window === 'undefined')
+    return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(GLOBAL_TASK_STORAGE_KEY) ?? '') as unknown
+    const record = asRecord(parsed)
+    if (record?.schemaVersion !== 1 || !Array.isArray(record.tasks))
+      return []
+    return record.tasks.flatMap((value) => {
+      const task = parseStoredGlobalTask(value)
+      return task ? [task] : []
+    }).slice(0, 64)
+  }
+  catch {
+    return []
+  }
+}
+
+function parseStoredGlobalTask(value: unknown): RegisteredGlobalTask | null {
+  const record = asRecord(value)
+  if (!record)
+    return null
+  const projectId = portableIdentifier(record.projectId, 160)
+  const systemId = portableIdentifier(record.systemId, 64)
+  const taskId = portableIdentifier(record.taskId, 200)
+  const sessionId = portableIdentifier(record.sessionId, 200)
+  const compositeId = portableIdentifier(record.compositeId, 200)
+  const allowedSystems = portableIdentifierArray(record.allowedSystems, 64, 33)
+  const allowedWriteSystems = portableIdentifierArray(record.allowedWriteSystems, 64, 33)
+  const draftIds = portableIdentifierArray(record.draftIds, 160, 64)
+  const updatedAt = record.updatedAt
+  if (!projectId || !systemId || !taskId || !sessionId || !compositeId
+    || allowedSystems.length === 0 || allowedWriteSystems.length === 0 || draftIds.length === 0
+    || !allowedSystems.includes(systemId) || allowedWriteSystems.some(item => !allowedSystems.includes(item))
+    || !Number.isSafeInteger(updatedAt) || Number(updatedAt) < 1) {
+    return null
+  }
+  return {
+    projectId,
+    systemId,
+    taskId,
+    sessionId,
+    compositeId,
+    allowedSystems,
+    allowedWriteSystems,
+    draftIds,
+    reviewPending: record.reviewPending === true,
+    updatedAt: Number(updatedAt),
+  }
+}
+
+function portableIdentifierArray(value: unknown, maxLength: number, maximumItems: number): string[] {
+  if (!Array.isArray(value) || value.length > maximumItems)
+    return []
+  const parsed = value.flatMap((item) => {
+    const identifier = portableIdentifier(item, maxLength)
+    return identifier ? [identifier] : []
+  })
+  if (parsed.length !== value.length)
+    return []
+  return [...new Set(parsed)]
 }

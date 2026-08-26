@@ -116,6 +116,14 @@ function validateResources(resources, systemId) {
   }
   if (!resources.stableResourceId.includes(`${systemId}:`))
     throw new Error('DOMAIN_SDK_RESOURCE_ID_SCOPE_INVALID: stable resource ID must include systemId')
+  if (!nonEmptyArray(resources.fieldMappings)
+    || new Set(resources.fieldMappings.map(mapping => mapping.field)).size !== resources.fieldMappings.length
+    || resources.fieldMappings.some(mapping => typeof mapping?.field !== 'string' || mapping.field.length === 0
+      || !nonEmptyArray(mapping.aliases) || !mapping.aliases.includes(mapping.field)
+      || mapping.aliases.some(alias => typeof alias !== 'string' || alias.length === 0)
+      || !['string', 'integer', 'number', 'boolean'].includes(mapping.valueType))) {
+    throw new Error('DOMAIN_SDK_FIELD_MAPPING_INVALID: canonical fields need unique aliases and scalar types')
+  }
   if (!Array.isArray(resources.dependencyEdges)
     || resources.dependencyEdges.some(edge => typeof edge?.field !== 'string' || edge.field.length === 0
       || typeof edge?.systemId !== 'string' || edge.systemId.length === 0 || typeof edge.required !== 'boolean')) {

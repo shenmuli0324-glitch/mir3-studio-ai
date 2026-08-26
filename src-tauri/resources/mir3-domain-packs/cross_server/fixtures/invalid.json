@@ -5,7 +5,7 @@
     {
       "routeId": "cross_server-routeId-1",
       "sourceShard": "cross_server-sourceShard-1",
-      "targetShard": "cross_server-targetShard-1",
+      "targetShard": "cross_server-sourceShard-1",
       "minimumEngineVersion": "1.8",
       "maximumEngineVersion": "1.8",
       "maximumConcurrentPlayers": 1000001,

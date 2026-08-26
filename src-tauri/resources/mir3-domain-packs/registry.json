@@ -4,7 +4,7 @@
     {
       "kind": "domain",
       "systemId": "map",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -137,6 +137,68 @@
         "mappings": [
           "file-projection",
           "map.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "mapId",
+            "aliases": [
+              "mapId",
+              "MapId",
+              "map_id",
+              "map-id",
+              "map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "displayName",
+            "aliases": [
+              "displayName",
+              "DisplayName",
+              "display_name",
+              "display-name",
+              "display name"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "width",
+            "aliases": [
+              "width",
+              "Width"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "height",
+            "aliases": [
+              "height",
+              "Height"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "safeZoneMode",
+            "aliases": [
+              "safeZoneMode",
+              "SafeZoneMode",
+              "safe_zone_mode",
+              "safe-zone-mode",
+              "safe zone mode"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "spawnNpcId",
+            "aliases": [
+              "spawnNpcId",
+              "SpawnNpcId",
+              "spawn_npc_id",
+              "spawn-npc-id",
+              "spawn npc id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -1041,7 +1103,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1145,7 +1207,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1251,7 +1313,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1506,7 +1568,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1617,7 +1679,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1727,7 +1789,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1814,7 +1876,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1900,7 +1962,7 @@
     {
       "kind": "domain",
       "systemId": "npc",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -2028,6 +2090,74 @@
         "mappings": [
           "file-projection",
           "npc.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "npcId",
+            "aliases": [
+              "npcId",
+              "NpcId",
+              "npc_id",
+              "npc-id",
+              "npc id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "scriptPath",
+            "aliases": [
+              "scriptPath",
+              "ScriptPath",
+              "script_path",
+              "script-path",
+              "script path"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "mapId",
+            "aliases": [
+              "mapId",
+              "MapId",
+              "map_id",
+              "map-id",
+              "map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "coordinateX",
+            "aliases": [
+              "coordinateX",
+              "CoordinateX",
+              "coordinate_x",
+              "coordinate-x",
+              "coordinate x"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "coordinateY",
+            "aliases": [
+              "coordinateY",
+              "CoordinateY",
+              "coordinate_y",
+              "coordinate-y",
+              "coordinate y"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "shopId",
+            "aliases": [
+              "shopId",
+              "ShopId",
+              "shop_id",
+              "shop-id",
+              "shop id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -2747,7 +2877,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2828,7 +2958,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2931,7 +3061,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3018,7 +3148,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3125,7 +3255,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3226,7 +3356,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3333,7 +3463,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3423,7 +3553,7 @@
     {
       "kind": "domain",
       "systemId": "monster",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -3548,6 +3678,63 @@
         "mappings": [
           "file-projection",
           "monster.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "monsterId",
+            "aliases": [
+              "monsterId",
+              "MonsterId",
+              "monster_id",
+              "monster-id",
+              "monster id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "combatLevel",
+            "aliases": [
+              "combatLevel",
+              "CombatLevel",
+              "combat_level",
+              "combat-level",
+              "combat level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "healthPoints",
+            "aliases": [
+              "healthPoints",
+              "HealthPoints",
+              "health_points",
+              "health-points",
+              "health points"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "spawnMapId",
+            "aliases": [
+              "spawnMapId",
+              "SpawnMapId",
+              "spawn_map_id",
+              "spawn-map-id",
+              "spawn map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "primaryDropItemId",
+            "aliases": [
+              "primaryDropItemId",
+              "PrimaryDropItemId",
+              "primary_drop_item_id",
+              "primary-drop-item-id",
+              "primary drop item id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -4154,7 +4341,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4249,7 +4436,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4343,7 +4530,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4440,7 +4627,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4540,7 +4727,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4626,7 +4813,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4716,7 +4903,7 @@
     {
       "kind": "domain",
       "systemId": "equipment",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -4844,6 +5031,57 @@
         "mappings": [
           "file-projection",
           "equipment.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "equipmentId",
+            "aliases": [
+              "equipmentId",
+              "EquipmentId",
+              "equipment_id",
+              "equipment-id",
+              "equipment id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "slot",
+            "aliases": [
+              "slot",
+              "Slot"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "baseItemId",
+            "aliases": [
+              "baseItemId",
+              "BaseItemId",
+              "base_item_id",
+              "base-item-id",
+              "base item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "requiredLevel",
+            "aliases": [
+              "requiredLevel",
+              "RequiredLevel",
+              "required_level",
+              "required-level",
+              "required level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "durability",
+            "aliases": [
+              "durability",
+              "Durability"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -5400,7 +5638,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5505,7 +5743,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5616,7 +5854,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5704,7 +5942,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5814,7 +6052,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5899,7 +6137,7 @@
     {
       "kind": "domain",
       "systemId": "item",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -6024,6 +6262,74 @@
         "mappings": [
           "file-projection",
           "item.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "itemId",
+            "aliases": [
+              "itemId",
+              "ItemId",
+              "item_id",
+              "item-id",
+              "item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "itemType",
+            "aliases": [
+              "itemType",
+              "ItemType",
+              "item_type",
+              "item-type",
+              "item type"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "stackLimit",
+            "aliases": [
+              "stackLimit",
+              "StackLimit",
+              "stack_limit",
+              "stack-limit",
+              "stack limit"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "clientIcon",
+            "aliases": [
+              "clientIcon",
+              "ClientIcon",
+              "client_icon",
+              "client-icon",
+              "client icon"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "engineStdMode",
+            "aliases": [
+              "engineStdMode",
+              "EngineStdMode",
+              "engine_std_mode",
+              "engine-std-mode",
+              "engine std mode"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "linkedBuffId",
+            "aliases": [
+              "linkedBuffId",
+              "LinkedBuffId",
+              "linked_buff_id",
+              "linked-buff-id",
+              "linked buff id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -6566,7 +6872,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6670,7 +6976,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6780,7 +7086,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6865,7 +7171,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6975,7 +7281,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7060,7 +7366,7 @@
     {
       "kind": "domain",
       "systemId": "level",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -7185,6 +7491,49 @@
         "mappings": [
           "file-projection",
           "level.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "level",
+            "aliases": [
+              "level",
+              "Level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "requiredExperience",
+            "aliases": [
+              "requiredExperience",
+              "RequiredExperience",
+              "required_experience",
+              "required-experience",
+              "required experience"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "statPoints",
+            "aliases": [
+              "statPoints",
+              "StatPoints",
+              "stat_points",
+              "stat-points",
+              "stat points"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "recommendedMonsterId",
+            "aliases": [
+              "recommendedMonsterId",
+              "RecommendedMonsterId",
+              "recommended_monster_id",
+              "recommended-monster-id",
+              "recommended monster id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -7771,7 +8120,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7866,7 +8215,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7958,7 +8307,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8053,7 +8402,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8143,7 +8492,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8228,7 +8577,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8318,7 +8667,7 @@
     {
       "kind": "domain",
       "systemId": "rebirth",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -8440,6 +8789,63 @@
         "mappings": [
           "file-projection",
           "rebirth.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "rebirthTier",
+            "aliases": [
+              "rebirthTier",
+              "RebirthTier",
+              "rebirth_tier",
+              "rebirth-tier",
+              "rebirth tier"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "minimumLevel",
+            "aliases": [
+              "minimumLevel",
+              "MinimumLevel",
+              "minimum_level",
+              "minimum-level",
+              "minimum level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "costItemId",
+            "aliases": [
+              "costItemId",
+              "CostItemId",
+              "cost_item_id",
+              "cost-item-id",
+              "cost item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "costAmount",
+            "aliases": [
+              "costAmount",
+              "CostAmount",
+              "cost_amount",
+              "cost-amount",
+              "cost amount"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "grantedTitleId",
+            "aliases": [
+              "grantedTitleId",
+              "GrantedTitleId",
+              "granted_title_id",
+              "granted-title-id",
+              "granted title id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -8968,7 +9374,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9070,7 +9476,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9172,7 +9578,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9268,7 +9674,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9355,7 +9761,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9450,7 +9856,7 @@
     {
       "kind": "domain",
       "systemId": "title",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -9563,6 +9969,63 @@
         "mappings": [
           "file-projection",
           "title.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "titleId",
+            "aliases": [
+              "titleId",
+              "TitleId",
+              "title_id",
+              "title-id",
+              "title id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "displayLabel",
+            "aliases": [
+              "displayLabel",
+              "DisplayLabel",
+              "display_label",
+              "display-label",
+              "display label"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "grantedBuffId",
+            "aliases": [
+              "grantedBuffId",
+              "GrantedBuffId",
+              "granted_buff_id",
+              "granted-buff-id",
+              "granted buff id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "durationSeconds",
+            "aliases": [
+              "durationSeconds",
+              "DurationSeconds",
+              "duration_seconds",
+              "duration-seconds",
+              "duration seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "minimumLevel",
+            "aliases": [
+              "minimumLevel",
+              "MinimumLevel",
+              "minimum_level",
+              "minimum-level",
+              "minimum level"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -10074,7 +10537,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10168,7 +10631,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10268,7 +10731,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10367,7 +10830,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10452,7 +10915,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10537,7 +11000,7 @@
     {
       "kind": "domain",
       "systemId": "buff",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -10656,6 +11119,63 @@
         "mappings": [
           "file-projection",
           "buff.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "buffId",
+            "aliases": [
+              "buffId",
+              "BuffId",
+              "buff_id",
+              "buff-id",
+              "buff id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "stackMode",
+            "aliases": [
+              "stackMode",
+              "StackMode",
+              "stack_mode",
+              "stack-mode",
+              "stack mode"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "maximumStacks",
+            "aliases": [
+              "maximumStacks",
+              "MaximumStacks",
+              "maximum_stacks",
+              "maximum-stacks",
+              "maximum stacks"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "durationMilliseconds",
+            "aliases": [
+              "durationMilliseconds",
+              "DurationMilliseconds",
+              "duration_milliseconds",
+              "duration-milliseconds",
+              "duration milliseconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "effectSkillId",
+            "aliases": [
+              "effectSkillId",
+              "EffectSkillId",
+              "effect_skill_id",
+              "effect-skill-id",
+              "effect skill id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -11279,7 +11799,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11378,7 +11898,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11479,7 +11999,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11583,7 +12103,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11688,7 +12208,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11773,7 +12293,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11858,7 +12378,7 @@
     {
       "kind": "domain",
       "systemId": "skill",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -11977,6 +12497,63 @@
         "mappings": [
           "file-projection",
           "skill.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "skillId",
+            "aliases": [
+              "skillId",
+              "SkillId",
+              "skill_id",
+              "skill-id",
+              "skill id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "skillLevel",
+            "aliases": [
+              "skillLevel",
+              "SkillLevel",
+              "skill_level",
+              "skill-level",
+              "skill level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "manaCost",
+            "aliases": [
+              "manaCost",
+              "ManaCost",
+              "mana_cost",
+              "mana-cost",
+              "mana cost"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "cooldownMilliseconds",
+            "aliases": [
+              "cooldownMilliseconds",
+              "CooldownMilliseconds",
+              "cooldown_milliseconds",
+              "cooldown-milliseconds",
+              "cooldown milliseconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "appliedBuffId",
+            "aliases": [
+              "appliedBuffId",
+              "AppliedBuffId",
+              "applied_buff_id",
+              "applied-buff-id",
+              "applied buff id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -12493,7 +13070,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12588,7 +13165,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12696,7 +13273,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12774,7 +13351,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12875,7 +13452,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12966,7 +13543,7 @@
     {
       "kind": "domain",
       "systemId": "enhance",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -13085,6 +13662,63 @@
         "mappings": [
           "file-projection",
           "enhance.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "enhanceTier",
+            "aliases": [
+              "enhanceTier",
+              "EnhanceTier",
+              "enhance_tier",
+              "enhance-tier",
+              "enhance tier"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "equipmentClass",
+            "aliases": [
+              "equipmentClass",
+              "EquipmentClass",
+              "equipment_class",
+              "equipment-class",
+              "equipment class"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "successRateBasisPoints",
+            "aliases": [
+              "successRateBasisPoints",
+              "SuccessRateBasisPoints",
+              "success_rate_basis_points",
+              "success-rate-basis-points",
+              "success rate basis points"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "materialItemId",
+            "aliases": [
+              "materialItemId",
+              "MaterialItemId",
+              "material_item_id",
+              "material-item-id",
+              "material item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "failureMode",
+            "aliases": [
+              "failureMode",
+              "FailureMode",
+              "failure_mode",
+              "failure-mode",
+              "failure mode"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -13613,7 +14247,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13727,7 +14361,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13821,7 +14455,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13922,7 +14556,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14007,7 +14641,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14093,7 +14727,7 @@
     {
       "kind": "domain",
       "systemId": "crafting",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -14225,6 +14859,63 @@
         "mappings": [
           "file-projection",
           "crafting.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "recipeId",
+            "aliases": [
+              "recipeId",
+              "RecipeId",
+              "recipe_id",
+              "recipe-id",
+              "recipe id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "outputItemId",
+            "aliases": [
+              "outputItemId",
+              "OutputItemId",
+              "output_item_id",
+              "output-item-id",
+              "output item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "outputCount",
+            "aliases": [
+              "outputCount",
+              "OutputCount",
+              "output_count",
+              "output-count",
+              "output count"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "materialItemId",
+            "aliases": [
+              "materialItemId",
+              "MaterialItemId",
+              "material_item_id",
+              "material-item-id",
+              "material item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "materialCount",
+            "aliases": [
+              "materialCount",
+              "MaterialCount",
+              "material_count",
+              "material-count",
+              "material count"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -14738,7 +15429,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14833,7 +15524,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14919,7 +15610,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15013,7 +15704,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15113,7 +15804,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15203,7 +15894,7 @@
     {
       "kind": "domain",
       "systemId": "gem",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -15331,6 +16022,63 @@
         "mappings": [
           "file-projection",
           "gem.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "gemId",
+            "aliases": [
+              "gemId",
+              "GemId",
+              "gem_id",
+              "gem-id",
+              "gem id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "gemTier",
+            "aliases": [
+              "gemTier",
+              "GemTier",
+              "gem_tier",
+              "gem-tier",
+              "gem tier"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "socketType",
+            "aliases": [
+              "socketType",
+              "SocketType",
+              "socket_type",
+              "socket-type",
+              "socket type"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "itemId",
+            "aliases": [
+              "itemId",
+              "ItemId",
+              "item_id",
+              "item-id",
+              "item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "grantedBuffId",
+            "aliases": [
+              "grantedBuffId",
+              "GrantedBuffId",
+              "granted_buff_id",
+              "granted-buff-id",
+              "granted buff id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -15977,7 +16725,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16090,7 +16838,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16192,7 +16940,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16292,7 +17040,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16398,7 +17146,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16485,7 +17233,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16571,7 +17319,7 @@
     {
       "kind": "domain",
       "systemId": "refine",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -16687,6 +17435,71 @@
         "mappings": [
           "file-projection",
           "refine.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "poolId",
+            "aliases": [
+              "poolId",
+              "PoolId",
+              "pool_id",
+              "pool-id",
+              "pool id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "equipmentId",
+            "aliases": [
+              "equipmentId",
+              "EquipmentId",
+              "equipment_id",
+              "equipment-id",
+              "equipment id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "attributeKey",
+            "aliases": [
+              "attributeKey",
+              "AttributeKey",
+              "attribute_key",
+              "attribute-key",
+              "attribute key"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "weight",
+            "aliases": [
+              "weight",
+              "Weight"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "minimumValue",
+            "aliases": [
+              "minimumValue",
+              "MinimumValue",
+              "minimum_value",
+              "minimum-value",
+              "minimum value"
+            ],
+            "valueType": "number"
+          },
+          {
+            "field": "maximumValue",
+            "aliases": [
+              "maximumValue",
+              "MaximumValue",
+              "maximum_value",
+              "maximum-value",
+              "maximum value"
+            ],
+            "valueType": "number"
+          }
         ],
         "dependencyEdges": [
           {
@@ -17329,7 +18142,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17435,7 +18248,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17539,7 +18352,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17649,7 +18462,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17759,7 +18572,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17843,7 +18656,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17935,7 +18748,7 @@
     {
       "kind": "domain",
       "systemId": "quest",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -18060,6 +18873,74 @@
         "mappings": [
           "file-projection",
           "quest.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "questId",
+            "aliases": [
+              "questId",
+              "QuestId",
+              "quest_id",
+              "quest-id",
+              "quest id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "startNpcId",
+            "aliases": [
+              "startNpcId",
+              "StartNpcId",
+              "start_npc_id",
+              "start-npc-id",
+              "start npc id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "targetMonsterId",
+            "aliases": [
+              "targetMonsterId",
+              "TargetMonsterId",
+              "target_monster_id",
+              "target-monster-id",
+              "target monster id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "minimumLevel",
+            "aliases": [
+              "minimumLevel",
+              "MinimumLevel",
+              "minimum_level",
+              "minimum-level",
+              "minimum level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "nextQuestId",
+            "aliases": [
+              "nextQuestId",
+              "NextQuestId",
+              "next_quest_id",
+              "next-quest-id",
+              "next quest id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -18620,7 +19501,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18721,7 +19602,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18835,7 +19716,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18924,7 +19805,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19031,7 +19912,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19121,7 +20002,7 @@
     {
       "kind": "domain",
       "systemId": "checkin",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -19240,6 +20121,63 @@
         "mappings": [
           "file-projection",
           "checkin.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "cycleId",
+            "aliases": [
+              "cycleId",
+              "CycleId",
+              "cycle_id",
+              "cycle-id",
+              "cycle id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "dayIndex",
+            "aliases": [
+              "dayIndex",
+              "DayIndex",
+              "day_index",
+              "day-index",
+              "day index"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardCount",
+            "aliases": [
+              "rewardCount",
+              "RewardCount",
+              "reward_count",
+              "reward-count",
+              "reward count"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "vipMultiplier",
+            "aliases": [
+              "vipMultiplier",
+              "VipMultiplier",
+              "vip_multiplier",
+              "vip-multiplier",
+              "vip multiplier"
+            ],
+            "valueType": "number"
+          }
         ],
         "dependencyEdges": [
           {
@@ -19758,7 +20696,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19861,7 +20799,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19956,7 +20894,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20057,7 +20995,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20142,7 +21080,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20233,7 +21171,7 @@
     {
       "kind": "domain",
       "systemId": "online_reward",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -20349,6 +21287,63 @@
         "mappings": [
           "file-projection",
           "online_reward.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "rewardId",
+            "aliases": [
+              "rewardId",
+              "RewardId",
+              "reward_id",
+              "reward-id",
+              "reward id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "durationSeconds",
+            "aliases": [
+              "durationSeconds",
+              "DurationSeconds",
+              "duration_seconds",
+              "duration-seconds",
+              "duration seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardCount",
+            "aliases": [
+              "rewardCount",
+              "RewardCount",
+              "reward_count",
+              "reward-count",
+              "reward count"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "minimumVipLevel",
+            "aliases": [
+              "minimumVipLevel",
+              "MinimumVipLevel",
+              "minimum_vip_level",
+              "minimum-vip-level",
+              "minimum vip level"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -20948,7 +21943,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21044,7 +22039,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21128,7 +22123,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21227,7 +22222,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21321,7 +22316,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21421,7 +22416,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21511,7 +22506,7 @@
     {
       "kind": "domain",
       "systemId": "limited_event",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -21636,6 +22631,63 @@
         "mappings": [
           "file-projection",
           "limited_event.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "eventId",
+            "aliases": [
+              "eventId",
+              "EventId",
+              "event_id",
+              "event-id",
+              "event id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "startEpochSeconds",
+            "aliases": [
+              "startEpochSeconds",
+              "StartEpochSeconds",
+              "start_epoch_seconds",
+              "start-epoch-seconds",
+              "start epoch seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "endEpochSeconds",
+            "aliases": [
+              "endEpochSeconds",
+              "EndEpochSeconds",
+              "end_epoch_seconds",
+              "end-epoch-seconds",
+              "end epoch seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "eventMapId",
+            "aliases": [
+              "eventMapId",
+              "EventMapId",
+              "event_map_id",
+              "event-map-id",
+              "event map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "questId",
+            "aliases": [
+              "questId",
+              "QuestId",
+              "quest_id",
+              "quest-id",
+              "quest id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -22247,7 +23299,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22344,7 +23396,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22425,7 +23477,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22527,7 +23579,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22630,7 +23682,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22718,7 +23770,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22808,7 +23860,7 @@
     {
       "kind": "domain",
       "systemId": "launch_event",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -22939,6 +23991,63 @@
         "mappings": [
           "file-projection",
           "launch_event.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "scheduleId",
+            "aliases": [
+              "scheduleId",
+              "ScheduleId",
+              "schedule_id",
+              "schedule-id",
+              "schedule id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "openServerDay",
+            "aliases": [
+              "openServerDay",
+              "OpenServerDay",
+              "open_server_day",
+              "open-server-day",
+              "open server day"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "eventId",
+            "aliases": [
+              "eventId",
+              "EventId",
+              "event_id",
+              "event-id",
+              "event id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardCount",
+            "aliases": [
+              "rewardCount",
+              "RewardCount",
+              "reward_count",
+              "reward-count",
+              "reward count"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -23566,7 +24675,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23665,7 +24774,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23748,7 +24857,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23852,7 +24961,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23957,7 +25066,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24047,7 +25156,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24137,7 +25246,7 @@
     {
       "kind": "domain",
       "systemId": "first_charge",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -24259,6 +25368,63 @@
         "mappings": [
           "file-projection",
           "first_charge.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "tierId",
+            "aliases": [
+              "tierId",
+              "TierId",
+              "tier_id",
+              "tier-id",
+              "tier id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "chargeThreshold",
+            "aliases": [
+              "chargeThreshold",
+              "ChargeThreshold",
+              "charge_threshold",
+              "charge-threshold",
+              "charge threshold"
+            ],
+            "valueType": "number"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardCount",
+            "aliases": [
+              "rewardCount",
+              "RewardCount",
+              "reward_count",
+              "reward-count",
+              "reward count"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "minimumVipLevel",
+            "aliases": [
+              "minimumVipLevel",
+              "MinimumVipLevel",
+              "minimum_vip_level",
+              "minimum-vip-level",
+              "minimum vip level"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -24780,7 +25946,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24866,7 +26032,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24962,7 +26128,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25063,7 +26229,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25165,7 +26331,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25255,7 +26421,7 @@
     {
       "kind": "domain",
       "systemId": "cumulative_charge",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -25374,6 +26540,63 @@
         "mappings": [
           "file-projection",
           "cumulative_charge.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "tierId",
+            "aliases": [
+              "tierId",
+              "TierId",
+              "tier_id",
+              "tier-id",
+              "tier id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "cycleId",
+            "aliases": [
+              "cycleId",
+              "CycleId",
+              "cycle_id",
+              "cycle-id",
+              "cycle id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "chargeThreshold",
+            "aliases": [
+              "chargeThreshold",
+              "ChargeThreshold",
+              "charge_threshold",
+              "charge-threshold",
+              "charge threshold"
+            ],
+            "valueType": "number"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "rewardCount",
+            "aliases": [
+              "rewardCount",
+              "RewardCount",
+              "reward_count",
+              "reward-count",
+              "reward count"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -25894,7 +27117,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26001,7 +27224,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26095,7 +27318,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26195,7 +27418,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26280,7 +27503,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26366,7 +27589,7 @@
     {
       "kind": "domain",
       "systemId": "vip",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -26485,6 +27708,52 @@
         "mappings": [
           "file-projection",
           "vip.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "vipLevel",
+            "aliases": [
+              "vipLevel",
+              "VipLevel",
+              "vip_level",
+              "vip-level",
+              "vip level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "requiredPoints",
+            "aliases": [
+              "requiredPoints",
+              "RequiredPoints",
+              "required_points",
+              "required-points",
+              "required points"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "shopDiscountBasisPoints",
+            "aliases": [
+              "shopDiscountBasisPoints",
+              "ShopDiscountBasisPoints",
+              "shop_discount_basis_points",
+              "shop-discount-basis-points",
+              "shop discount basis points"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "grantedTitleId",
+            "aliases": [
+              "grantedTitleId",
+              "GrantedTitleId",
+              "granted_title_id",
+              "granted-title-id",
+              "granted title id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -27006,7 +28275,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27111,7 +28380,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27209,7 +28478,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27301,7 +28570,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27388,7 +28657,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27478,7 +28747,7 @@
     {
       "kind": "domain",
       "systemId": "shop",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -27609,6 +28878,82 @@
         "mappings": [
           "file-projection",
           "shop.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "offerId",
+            "aliases": [
+              "offerId",
+              "OfferId",
+              "offer_id",
+              "offer-id",
+              "offer id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "shopId",
+            "aliases": [
+              "shopId",
+              "ShopId",
+              "shop_id",
+              "shop-id",
+              "shop id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "itemId",
+            "aliases": [
+              "itemId",
+              "ItemId",
+              "item_id",
+              "item-id",
+              "item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "currencyItemId",
+            "aliases": [
+              "currencyItemId",
+              "CurrencyItemId",
+              "currency_item_id",
+              "currency-item-id",
+              "currency item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "price",
+            "aliases": [
+              "price",
+              "Price"
+            ],
+            "valueType": "number"
+          },
+          {
+            "field": "startEpochSeconds",
+            "aliases": [
+              "startEpochSeconds",
+              "StartEpochSeconds",
+              "start_epoch_seconds",
+              "start-epoch-seconds",
+              "start epoch seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "endEpochSeconds",
+            "aliases": [
+              "endEpochSeconds",
+              "EndEpochSeconds",
+              "end_epoch_seconds",
+              "end-epoch-seconds",
+              "end epoch seconds"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -28256,7 +29601,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28368,7 +29713,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28456,7 +29801,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28544,7 +29889,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28657,7 +30002,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28763,7 +30108,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28858,7 +30203,7 @@
     {
       "kind": "domain",
       "systemId": "recycle",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -28977,6 +30322,74 @@
         "mappings": [
           "file-projection",
           "recycle.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "ruleId",
+            "aliases": [
+              "ruleId",
+              "RuleId",
+              "rule_id",
+              "rule-id",
+              "rule id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "itemType",
+            "aliases": [
+              "itemType",
+              "ItemType",
+              "item_type",
+              "item-type",
+              "item type"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "minimumQuality",
+            "aliases": [
+              "minimumQuality",
+              "MinimumQuality",
+              "minimum_quality",
+              "minimum-quality",
+              "minimum quality"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "maximumQuality",
+            "aliases": [
+              "maximumQuality",
+              "MaximumQuality",
+              "maximum_quality",
+              "maximum-quality",
+              "maximum quality"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "currencyItemId",
+            "aliases": [
+              "currencyItemId",
+              "CurrencyItemId",
+              "currency_item_id",
+              "currency-item-id",
+              "currency item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "returnValue",
+            "aliases": [
+              "returnValue",
+              "ReturnValue",
+              "return_value",
+              "return-value",
+              "return value"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -29581,7 +30994,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29690,7 +31103,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29759,7 +31172,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29868,7 +31281,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29971,7 +31384,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30056,7 +31469,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30146,7 +31559,7 @@
     {
       "kind": "domain",
       "systemId": "guild",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -30268,6 +31681,52 @@
         "mappings": [
           "file-projection",
           "guild.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "guildLevel",
+            "aliases": [
+              "guildLevel",
+              "GuildLevel",
+              "guild_level",
+              "guild-level",
+              "guild level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "requiredContribution",
+            "aliases": [
+              "requiredContribution",
+              "RequiredContribution",
+              "required_contribution",
+              "required-contribution",
+              "required contribution"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "maximumMembers",
+            "aliases": [
+              "maximumMembers",
+              "MaximumMembers",
+              "maximum_members",
+              "maximum-members",
+              "maximum members"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "rankingBoardId",
+            "aliases": [
+              "rankingBoardId",
+              "RankingBoardId",
+              "ranking_board_id",
+              "ranking-board-id",
+              "ranking board id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -30871,7 +32330,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30964,7 +32423,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31068,7 +32527,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31159,7 +32618,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31256,7 +32715,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31342,7 +32801,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31432,7 +32891,7 @@
     {
       "kind": "domain",
       "systemId": "sabac",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -31560,6 +33019,63 @@
         "mappings": [
           "file-projection",
           "sabac.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "phaseId",
+            "aliases": [
+              "phaseId",
+              "PhaseId",
+              "phase_id",
+              "phase-id",
+              "phase id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "battleMapId",
+            "aliases": [
+              "battleMapId",
+              "BattleMapId",
+              "battle_map_id",
+              "battle-map-id",
+              "battle map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "startMinute",
+            "aliases": [
+              "startMinute",
+              "StartMinute",
+              "start_minute",
+              "start-minute",
+              "start minute"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "endMinute",
+            "aliases": [
+              "endMinute",
+              "EndMinute",
+              "end_minute",
+              "end-minute",
+              "end minute"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "guildRewardItemId",
+            "aliases": [
+              "guildRewardItemId",
+              "GuildRewardItemId",
+              "guild_reward_item_id",
+              "guild-reward-item-id",
+              "guild reward item id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -32361,7 +33877,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32461,7 +33977,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32561,7 +34077,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32633,7 +34149,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32736,7 +34252,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32834,7 +34350,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32938,7 +34454,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33027,7 +34543,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33117,7 +34633,7 @@
     {
       "kind": "domain",
       "systemId": "ranking",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -33239,6 +34755,60 @@
         "mappings": [
           "file-projection",
           "ranking.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "boardId",
+            "aliases": [
+              "boardId",
+              "BoardId",
+              "board_id",
+              "board-id",
+              "board id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "metric",
+            "aliases": [
+              "metric",
+              "Metric"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "cycleSeconds",
+            "aliases": [
+              "cycleSeconds",
+              "CycleSeconds",
+              "cycle_seconds",
+              "cycle-seconds",
+              "cycle seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "rewardItemId",
+            "aliases": [
+              "rewardItemId",
+              "RewardItemId",
+              "reward_item_id",
+              "reward-item-id",
+              "reward item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "seasonId",
+            "aliases": [
+              "seasonId",
+              "SeasonId",
+              "season_id",
+              "season-id",
+              "season id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -33880,7 +35450,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33981,7 +35551,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34084,7 +35654,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34171,7 +35741,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34277,7 +35847,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34384,7 +35954,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34469,7 +36039,7 @@
     {
       "kind": "domain",
       "systemId": "resource_production",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -34591,6 +36161,74 @@
         "mappings": [
           "file-projection",
           "resource_production.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "pointId",
+            "aliases": [
+              "pointId",
+              "PointId",
+              "point_id",
+              "point-id",
+              "point id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "mapId",
+            "aliases": [
+              "mapId",
+              "MapId",
+              "map_id",
+              "map-id",
+              "map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "outputItemId",
+            "aliases": [
+              "outputItemId",
+              "OutputItemId",
+              "output_item_id",
+              "output-item-id",
+              "output item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "intervalSeconds",
+            "aliases": [
+              "intervalSeconds",
+              "IntervalSeconds",
+              "interval_seconds",
+              "interval-seconds",
+              "interval seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "yieldCount",
+            "aliases": [
+              "yieldCount",
+              "YieldCount",
+              "yield_count",
+              "yield-count",
+              "yield count"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "guardMonsterId",
+            "aliases": [
+              "guardMonsterId",
+              "GuardMonsterId",
+              "guard_monster_id",
+              "guard-monster-id",
+              "guard monster id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -35239,7 +36877,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35342,7 +36980,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35443,7 +37081,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35550,7 +37188,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35657,7 +37295,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35745,7 +37383,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35840,7 +37478,7 @@
     {
       "kind": "domain",
       "systemId": "manor",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -35962,6 +37600,63 @@
         "mappings": [
           "file-projection",
           "manor.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "manorId",
+            "aliases": [
+              "manorId",
+              "ManorId",
+              "manor_id",
+              "manor-id",
+              "manor id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "mapId",
+            "aliases": [
+              "mapId",
+              "MapId",
+              "map_id",
+              "map-id",
+              "map id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "entryNpcId",
+            "aliases": [
+              "entryNpcId",
+              "EntryNpcId",
+              "entry_npc_id",
+              "entry-npc-id",
+              "entry npc id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "minimumLevel",
+            "aliases": [
+              "minimumLevel",
+              "MinimumLevel",
+              "minimum_level",
+              "minimum-level",
+              "minimum level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "productionPointId",
+            "aliases": [
+              "productionPointId",
+              "ProductionPointId",
+              "production_point_id",
+              "production-point-id",
+              "production point id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -36673,7 +38368,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36771,7 +38466,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36871,7 +38566,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36943,7 +38638,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37046,7 +38741,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37150,7 +38845,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37240,7 +38935,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37330,7 +39025,7 @@
     {
       "kind": "domain",
       "systemId": "hero_soul",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -37455,6 +39150,63 @@
         "mappings": [
           "file-projection",
           "hero_soul.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "routeId",
+            "aliases": [
+              "routeId",
+              "RouteId",
+              "route_id",
+              "route-id",
+              "route id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "nodeId",
+            "aliases": [
+              "nodeId",
+              "NodeId",
+              "node_id",
+              "node-id",
+              "node id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "costItemId",
+            "aliases": [
+              "costItemId",
+              "CostItemId",
+              "cost_item_id",
+              "cost-item-id",
+              "cost item id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "grantedSkillId",
+            "aliases": [
+              "grantedSkillId",
+              "GrantedSkillId",
+              "granted_skill_id",
+              "granted-skill-id",
+              "granted skill id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "powerValue",
+            "aliases": [
+              "powerValue",
+              "PowerValue",
+              "power_value",
+              "power-value",
+              "power value"
+            ],
+            "valueType": "integer"
+          }
         ],
         "dependencyEdges": [
           {
@@ -37987,7 +39739,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38088,7 +39840,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38190,7 +39942,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38286,7 +40038,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38374,7 +40126,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38460,7 +40212,7 @@
     {
       "kind": "domain",
       "systemId": "talent",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -38576,6 +40328,74 @@
         "mappings": [
           "file-projection",
           "talent.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "nodeId",
+            "aliases": [
+              "nodeId",
+              "NodeId",
+              "node_id",
+              "node-id",
+              "node id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "treeId",
+            "aliases": [
+              "treeId",
+              "TreeId",
+              "tree_id",
+              "tree-id",
+              "tree id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "costPoints",
+            "aliases": [
+              "costPoints",
+              "CostPoints",
+              "cost_points",
+              "cost-points",
+              "cost points"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "requiredLevel",
+            "aliases": [
+              "requiredLevel",
+              "RequiredLevel",
+              "required_level",
+              "required-level",
+              "required level"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "grantedSkillId",
+            "aliases": [
+              "grantedSkillId",
+              "GrantedSkillId",
+              "granted_skill_id",
+              "granted-skill-id",
+              "granted skill id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "parentNodeId",
+            "aliases": [
+              "parentNodeId",
+              "ParentNodeId",
+              "parent_node_id",
+              "parent-node-id",
+              "parent node id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -39368,7 +41188,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39469,7 +41289,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39570,7 +41390,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39640,7 +41460,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39745,7 +41565,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39844,7 +41664,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39949,7 +41769,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40035,7 +41855,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40121,7 +41941,7 @@
     {
       "kind": "domain",
       "systemId": "season",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -40240,6 +42060,63 @@
         "mappings": [
           "file-projection",
           "season.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "seasonId",
+            "aliases": [
+              "seasonId",
+              "SeasonId",
+              "season_id",
+              "season-id",
+              "season id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "startEpochSeconds",
+            "aliases": [
+              "startEpochSeconds",
+              "StartEpochSeconds",
+              "start_epoch_seconds",
+              "start-epoch-seconds",
+              "start epoch seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "endEpochSeconds",
+            "aliases": [
+              "endEpochSeconds",
+              "EndEpochSeconds",
+              "end_epoch_seconds",
+              "end-epoch-seconds",
+              "end epoch seconds"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "rankingBoardId",
+            "aliases": [
+              "rankingBoardId",
+              "RankingBoardId",
+              "ranking_board_id",
+              "ranking-board-id",
+              "ranking board id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "seasonShopId",
+            "aliases": [
+              "seasonShopId",
+              "SeasonShopId",
+              "season_shop_id",
+              "season-shop-id",
+              "season shop id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -40918,7 +42795,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41015,7 +42892,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41096,7 +42973,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41167,7 +43044,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41269,7 +43146,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41372,7 +43249,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41460,7 +43337,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41550,7 +43427,7 @@
     {
       "kind": "domain",
       "systemId": "cross_server",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -41675,6 +43552,85 @@
         "mappings": [
           "file-projection",
           "cross_server.field-mapping-v1"
+        ],
+        "fieldMappings": [
+          {
+            "field": "routeId",
+            "aliases": [
+              "routeId",
+              "RouteId",
+              "route_id",
+              "route-id",
+              "route id"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "sourceShard",
+            "aliases": [
+              "sourceShard",
+              "SourceShard",
+              "source_shard",
+              "source-shard",
+              "source shard"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "targetShard",
+            "aliases": [
+              "targetShard",
+              "TargetShard",
+              "target_shard",
+              "target-shard",
+              "target shard"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "minimumEngineVersion",
+            "aliases": [
+              "minimumEngineVersion",
+              "MinimumEngineVersion",
+              "minimum_engine_version",
+              "minimum-engine-version",
+              "minimum engine version"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "maximumEngineVersion",
+            "aliases": [
+              "maximumEngineVersion",
+              "MaximumEngineVersion",
+              "maximum_engine_version",
+              "maximum-engine-version",
+              "maximum engine version"
+            ],
+            "valueType": "string"
+          },
+          {
+            "field": "maximumConcurrentPlayers",
+            "aliases": [
+              "maximumConcurrentPlayers",
+              "MaximumConcurrentPlayers",
+              "maximum_concurrent_players",
+              "maximum-concurrent-players",
+              "maximum concurrent players"
+            ],
+            "valueType": "integer"
+          },
+          {
+            "field": "seasonId",
+            "aliases": [
+              "seasonId",
+              "SeasonId",
+              "season_id",
+              "season-id",
+              "season id"
+            ],
+            "valueType": "string"
+          }
         ],
         "dependencyEdges": [
           {
@@ -42399,7 +44355,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42506,7 +44462,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42577,7 +44533,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42689,7 +44645,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42794,7 +44750,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42905,7 +44861,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42992,7 +44948,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.2.0",
+          "version": "1.3.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true

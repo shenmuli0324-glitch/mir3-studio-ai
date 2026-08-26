@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "launch_event",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -132,6 +132,63 @@
     "mappings": [
       "file-projection",
       "launch_event.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "scheduleId",
+        "aliases": [
+          "scheduleId",
+          "ScheduleId",
+          "schedule_id",
+          "schedule-id",
+          "schedule id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "openServerDay",
+        "aliases": [
+          "openServerDay",
+          "OpenServerDay",
+          "open_server_day",
+          "open-server-day",
+          "open server day"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "eventId",
+        "aliases": [
+          "eventId",
+          "EventId",
+          "event_id",
+          "event-id",
+          "event id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "rewardItemId",
+        "aliases": [
+          "rewardItemId",
+          "RewardItemId",
+          "reward_item_id",
+          "reward-item-id",
+          "reward item id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "rewardCount",
+        "aliases": [
+          "rewardCount",
+          "RewardCount",
+          "reward_count",
+          "reward-count",
+          "reward count"
+        ],
+        "valueType": "integer"
+      }
     ],
     "dependencyEdges": [
       {
@@ -759,7 +816,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -858,7 +915,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -941,7 +998,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1045,7 +1102,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1150,7 +1207,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1240,7 +1297,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

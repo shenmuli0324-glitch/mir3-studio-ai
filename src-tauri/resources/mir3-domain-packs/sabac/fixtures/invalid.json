@@ -12,7 +12,7 @@
     {
       "phaseId": "sabac-phaseId-1",
       "battleMapId": "map:fixture-2",
-      "startMinute": 2,
+      "startMinute": 3,
       "endMinute": 3,
       "guildRewardItemId": "item:fixture-2"
     }

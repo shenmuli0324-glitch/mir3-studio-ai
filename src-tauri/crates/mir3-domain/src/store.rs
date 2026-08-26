@@ -16,6 +16,9 @@ use sha2::{Digest, Sha256};
 
 const SCHEMA_VERSION: i64 = 2;
 
+#[cfg(test)]
+type TestBarrierGate = Arc<Mutex<Option<(Arc<std::sync::Barrier>, Arc<std::sync::Barrier>)>>>;
+
 /// 领域数据入口；实际项目只读，所有产品数据写入 data_root。
 #[derive(Debug, Clone)]
 pub struct DomainStore {
@@ -25,10 +28,13 @@ pub struct DomainStore {
     pub(crate) xls_cache: Arc<Mutex<HashMap<String, Arc<CachedXlsWorkbook>>>>,
     draft_mutation_reservations: Arc<Mutex<HashMap<String, DraftMutationReservationState>>>,
     #[cfg(test)]
-    pub(crate) composite_apply_test_barrier: Arc<Mutex<Option<Arc<std::sync::Barrier>>>>,
+    pub(crate) composite_apply_test_barrier: TestBarrierGate,
     #[cfg(test)]
-    pub(crate) governance_copy_test_gate:
-        Arc<Mutex<Option<(Arc<std::sync::Barrier>, Arc<std::sync::Barrier>)>>>,
+    pub(crate) composite_apply_crash_after_writes: Arc<std::sync::atomic::AtomicIsize>,
+    #[cfg(test)]
+    pub(crate) composite_apply_crash_after_commit: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(test)]
+    pub(crate) governance_copy_test_gate: TestBarrierGate,
     #[cfg(test)]
     pub(crate) trusted_fixture_engine_override: bool,
 }
@@ -62,6 +68,10 @@ impl DomainStore {
             #[cfg(test)]
             composite_apply_test_barrier: Arc::new(Mutex::new(None)),
             #[cfg(test)]
+            composite_apply_crash_after_writes: Arc::new(std::sync::atomic::AtomicIsize::new(-1)),
+            #[cfg(test)]
+            composite_apply_crash_after_commit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(test)]
             governance_copy_test_gate: Arc::new(Mutex::new(None)),
             #[cfg(test)]
             trusted_fixture_engine_override: false,
@@ -77,6 +87,8 @@ impl DomainStore {
             return Ok(store);
         }
         if let Err(error) = store.migrate_existing_projects() {
+            store.read_only_reason = Some(Arc::from(error));
+        } else if let Err(error) = store.recover_composite_apply_journals() {
             store.read_only_reason = Some(Arc::from(error));
         }
         Ok(store)
@@ -419,11 +431,10 @@ impl DomainStore {
         project_id: &str,
         draft_ids: &[String],
     ) -> Result<DraftMutationReservation, String> {
-        let owner = thread::current().id();
         let lock_root = self.project_dir(project_id)?.join("draft-locks");
         fs::create_dir_all(&lock_root)
             .map_err(|error| format!("DRAFT_RESERVATION_DIRECTORY_FAILED: {error}"))?;
-        let mut targets = draft_ids
+        let targets = draft_ids
             .iter()
             .map(|draft_id| {
                 (
@@ -432,6 +443,28 @@ impl DomainStore {
                 )
             })
             .collect::<Vec<_>>();
+        self.reserve_mutation_targets(targets)
+    }
+
+    /// 组合成员绑定、联合 Apply 与恢复共享项目级跨进程锁，避免集合检查后再并发加入 Draft。
+    pub(crate) fn reserve_composite_mutation(
+        &self,
+        project_id: &str,
+    ) -> Result<DraftMutationReservation, String> {
+        let lock_root = self.project_dir(project_id)?.join("draft-locks");
+        fs::create_dir_all(&lock_root)
+            .map_err(|error| format!("COMPOSITE_RESERVATION_DIRECTORY_FAILED: {error}"))?;
+        self.reserve_mutation_targets(vec![(
+            format!("{project_id}:__composite__"),
+            lock_root.join("composite.lock"),
+        )])
+    }
+
+    fn reserve_mutation_targets(
+        &self,
+        mut targets: Vec<(String, PathBuf)>,
+    ) -> Result<DraftMutationReservation, String> {
+        let owner = thread::current().id();
         targets.sort_by(|left, right| left.0.cmp(&right.0));
         targets.dedup_by(|left, right| left.0 == right.0);
         let mut reservations = self

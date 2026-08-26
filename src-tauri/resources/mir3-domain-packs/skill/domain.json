@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "skill",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -120,6 +120,63 @@
     "mappings": [
       "file-projection",
       "skill.field-mapping-v1"
+    ],
+    "fieldMappings": [
+      {
+        "field": "skillId",
+        "aliases": [
+          "skillId",
+          "SkillId",
+          "skill_id",
+          "skill-id",
+          "skill id"
+        ],
+        "valueType": "string"
+      },
+      {
+        "field": "skillLevel",
+        "aliases": [
+          "skillLevel",
+          "SkillLevel",
+          "skill_level",
+          "skill-level",
+          "skill level"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "manaCost",
+        "aliases": [
+          "manaCost",
+          "ManaCost",
+          "mana_cost",
+          "mana-cost",
+          "mana cost"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "cooldownMilliseconds",
+        "aliases": [
+          "cooldownMilliseconds",
+          "CooldownMilliseconds",
+          "cooldown_milliseconds",
+          "cooldown-milliseconds",
+          "cooldown milliseconds"
+        ],
+        "valueType": "integer"
+      },
+      {
+        "field": "appliedBuffId",
+        "aliases": [
+          "appliedBuffId",
+          "AppliedBuffId",
+          "applied_buff_id",
+          "applied-buff-id",
+          "applied buff id"
+        ],
+        "valueType": "string"
+      }
     ],
     "dependencyEdges": [
       {
@@ -636,7 +693,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -731,7 +788,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -839,7 +896,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -917,7 +974,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1018,7 +1075,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.2.0",
+      "version": "1.3.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

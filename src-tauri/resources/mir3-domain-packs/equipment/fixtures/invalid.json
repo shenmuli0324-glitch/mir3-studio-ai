@@ -7,7 +7,7 @@
       "slot": "weapon",
       "baseItemId": "item:missing",
       "requiredLevel": 256,
-      "durability": 2
+      "durability": 0
     },
     {
       "equipmentId": "equipment-equipmentId-1",

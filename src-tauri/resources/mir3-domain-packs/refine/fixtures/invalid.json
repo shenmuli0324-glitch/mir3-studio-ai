@@ -7,7 +7,7 @@
       "equipmentId": "equipment:missing",
       "attributeKey": "attack",
       "weight": 1000001,
-      "minimumValue": -999999,
+      "minimumValue": -999998,
       "maximumValue": -999999
     },
     {

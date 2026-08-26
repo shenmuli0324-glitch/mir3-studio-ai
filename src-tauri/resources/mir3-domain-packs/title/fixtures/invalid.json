@@ -11,9 +11,9 @@
     },
     {
       "titleId": "title-titleId-1",
-      "displayLabel": "title-displayLabel-2",
+      "displayLabel": "permanent",
       "grantedBuffId": "buff:fixture-2",
-      "durationSeconds": 2,
+      "durationSeconds": 1,
       "minimumLevel": 2
     }
   ],

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 - 2026-08-27
+
+- 领域资源契约新增可执行 `fieldMappings`，要求每个规范字段声明唯一别名集合和标量类型。
+- 未声明、重复或非标量映射在领域包加载前失败关闭。
+
 ## 1.2.0 - 2026-08-26
 
 - Validate the complete Kernel API v1 manifest contract, including schema versions, primitives, projections, resources, presentations, operations, validators, and runtime fixture paths.

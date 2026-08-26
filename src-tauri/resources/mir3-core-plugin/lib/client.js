@@ -13,6 +13,8 @@ window.__ModuleLoader__.load({
     const bindingActivity = new Map()
     const returnTargets = new Map()
     const sessionOwners = new Map()
+    const sessionPreparations = new Set()
+    const recoverableSystemSessions = new Set()
     const inboundSequences = new Map()
     const outboundSequences = new Map()
     const parentOrigin = resolveParentOrigin()
@@ -146,15 +148,32 @@ window.__ModuleLoader__.load({
         if (!isSystemSessionId(request.sessionId) || typeof payload.cwd !== 'string')
           throw new Error('SYSTEM_SESSION_INVALID: sessionId and cwd are required')
         requireScopedIdentity(request)
-        claimSessionOwner(request)
-        const created = await ctx.sessions.create({ cwd: payload.cwd, sessionId: request.sessionId })
-        requireResult(created, 'SYSTEM_SESSION_CREATE_FAILED')
-        if (typeof ctx.workspaces?.archiveSession !== 'function')
-          throw new Error('SYSTEM_SESSION_ARCHIVE_UNSUPPORTED: archiveSession is unavailable')
-        await ctx.workspaces.archiveSession(request.sessionId)
-        const session = requireSession(request.sessionId)
-        await session.open()
-        bindSession(request, session, 'mir3/systemSession')
+        if (sessionPreparations.has(request.sessionId))
+          throw new Error('SYSTEM_SESSION_CREATE_IN_PROGRESS: session is already being prepared')
+        sessionPreparations.add(request.sessionId)
+        let session
+        try {
+          claimSessionOwner(request)
+          if (!recoverableSystemSessions.has(request.sessionId)) {
+            const created = await ctx.sessions.create({ cwd: payload.cwd, sessionId: request.sessionId })
+            requireResult(created, 'SYSTEM_SESSION_CREATE_FAILED')
+            recoverableSystemSessions.add(request.sessionId)
+          }
+          session = requireSession(request.sessionId)
+          if (typeof ctx.workspaces?.archiveSession !== 'function')
+            throw new Error('SYSTEM_SESSION_ARCHIVE_UNSUPPORTED: archiveSession is unavailable')
+          await ctx.workspaces.archiveSession(request.sessionId)
+          await session.open()
+          bindSession(request, session, 'mir3/systemSession')
+          recoverableSystemSessions.delete(request.sessionId)
+        }
+        catch (error) {
+          releaseSessionOwner(request)
+          throw error
+        }
+        finally {
+          sessionPreparations.delete(request.sessionId)
+        }
         post('mir3/systemSession.created', request, { archived: true, created: true })
         if (typeof payload.prompt === 'string' && payload.prompt.trim())
           requireResult(await session.prompt(textContent(payload.prompt), 'queue'), 'SYSTEM_SESSION_PROMPT_FAILED')
@@ -162,11 +181,27 @@ window.__ModuleLoader__.load({
 
       async function resumeSystemSession(request) {
         requireScopedIdentity(request)
-        claimSessionOwner(request)
-        const session = requireSystemSession(request.sessionId)
-        await session.open()
-        bindSession(request, session, 'mir3/systemSession')
-        post('mir3/systemSession.resumed', request, projectSnapshot(session.getSnapshot(), request))
+        if (sessionPreparations.has(request.sessionId))
+          throw new Error('SYSTEM_SESSION_PREPARATION_IN_PROGRESS: session is not archived and ready yet')
+        sessionPreparations.add(request.sessionId)
+        try {
+          claimSessionOwner(request)
+          const session = requireSystemSession(request.sessionId)
+          if (typeof ctx.workspaces?.archiveSession !== 'function')
+            throw new Error('SYSTEM_SESSION_ARCHIVE_UNSUPPORTED: archiveSession is unavailable')
+          await ctx.workspaces.archiveSession(request.sessionId)
+          await session.open()
+          bindSession(request, session, 'mir3/systemSession')
+          recoverableSystemSessions.delete(request.sessionId)
+          post('mir3/systemSession.resumed', request, projectSnapshot(session.getSnapshot(), request))
+        }
+        catch (error) {
+          releaseSessionOwner(request)
+          throw error
+        }
+        finally {
+          sessionPreparations.delete(request.sessionId)
+        }
       }
 
       function bindSession(request, session, eventPrefix) {
@@ -270,6 +305,23 @@ window.__ModuleLoader__.load({
           requireResult(await session.prompt(textContent(payload.prompt), 'queue'), 'GLOBAL_SESSION_PROMPT_FAILED')
       }
 
+      async function resumeGlobalSession(request) {
+        if (!isGlobalSessionId(request.sessionId))
+          throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        requireScopedIdentity(request)
+        try {
+          claimSessionOwner(request)
+          const session = requireSession(request.sessionId)
+          await session.open()
+          bindSession(request, session, 'mir3/globalSession')
+          post('mir3/globalSession.resumed', request, projectSnapshot(session.getSnapshot(), request))
+        }
+        catch (error) {
+          releaseSessionOwner(request)
+          throw error
+        }
+      }
+
       async function promptGlobalSession(request) {
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
@@ -329,16 +381,27 @@ window.__ModuleLoader__.load({
       }
 
       function claimSessionOwner(request) {
-        const owner = `${request.projectId}\u241F${request.systemId}\u241F${request.taskId}`
+        const owner = sessionOwner(request)
         const previous = sessionOwners.get(request.sessionId)
         if (previous && previous !== owner)
           throw new Error('SESSION_IDENTITY_MISMATCH: session is bound to another task')
         sessionOwners.set(request.sessionId, owner)
       }
 
+      function releaseSessionOwner(request) {
+        if (sessionOwners.get(request.sessionId) === sessionOwner(request))
+          sessionOwners.delete(request.sessionId)
+      }
+
+      function sessionOwner(request) {
+        return `${request.projectId}\u241F${request.systemId}\u241F${request.taskId}`
+      }
+
       function requireSessionOwner(request) {
         requireScopedIdentity(request)
-        const owner = `${request.projectId}\u241F${request.systemId}\u241F${request.taskId}`
+        if (sessionPreparations.has(request.sessionId))
+          throw new Error('SYSTEM_SESSION_PREPARATION_IN_PROGRESS: session is not archived and ready yet')
+        const owner = sessionOwner(request)
         if (sessionOwners.get(request.sessionId) !== owner)
           throw new Error('SESSION_IDENTITY_MISMATCH: session is not bound to this task')
       }
@@ -362,6 +425,7 @@ window.__ModuleLoader__.load({
           case 'mir3/systemSession.snapshot': return snapshotSystemSession(message)
           case 'mir3/systemSession.complete': return completeSystemSession(message)
           case 'mir3/globalSession.create': return createGlobalSession(message)
+          case 'mir3/globalSession.resume': return resumeGlobalSession(message)
           case 'mir3/globalSession.prompt': return promptGlobalSession(message)
           case 'mir3/globalSession.cancel': return cancelGlobalSession(message)
           case 'mir3/globalSession.complete': return completeGlobalSession(message)
@@ -401,6 +465,8 @@ window.__ModuleLoader__.load({
         bindingActivity.clear()
         returnTargets.clear()
         sessionOwners.clear()
+        sessionPreparations.clear()
+        recoverableSystemSessions.clear()
         inboundSequences.clear()
         outboundSequences.clear()
       }

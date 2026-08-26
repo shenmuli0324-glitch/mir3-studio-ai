@@ -1,5 +1,5 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRelease, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainValidationReport, SafeTextOpen } from './types'
+import type { DomainDependencyGraph, DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRelease, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainSnapshot, DomainValidationReport, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { CircleCheck, CircleExclamation, Magnifier } from '@gravity-ui/icons'
@@ -29,6 +29,8 @@ import {
   queryDomainFiles,
   queryDomainResources,
   queryUnclaimedDomainFiles,
+  resolveDomainDependencies,
+  restoreDomainSnapshot,
   rollbackDomainPack,
   setDomainPackEnabled,
   stageDomainPackUpdate,
@@ -45,10 +47,11 @@ interface DraftScopeState {
   legacyOrUnscoped: boolean
 }
 
-export function DomainSystemView({ tool, project, onBack, target }: {
+export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }: {
   tool: DevToolDefinition
   project: Mir3Project | null
   onBack: () => void
+  onOpenSystem?: (systemId: string) => void
   target?: VerifiedDevtoolsTarget | null
 }) {
   const { t } = useTranslation()
@@ -61,6 +64,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   const [editedContent, setEditedContent] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<DomainDraftConfirmation | null>(null)
   const [validation, setValidation] = useState<DomainValidationReport | null>(null)
+  const [lastSnapshot, setLastSnapshot] = useState<DomainSnapshot | null>(null)
   const [draftScopes, setDraftScopes] = useState<Record<string, DraftScopeState>>({})
   const handledTargetRef = useRef('')
 
@@ -102,6 +106,24 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
+  const restoreSnapshot = useMutation({
+    mutationFn: (snapshotId: string) => restoreDomainSnapshot(project!.id, snapshotId),
+    onSuccess: () => {
+      setLastSnapshot(null)
+      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-files', project?.id, tool.id] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-resources', project?.id, tool.id] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-resource', project?.id, tool.id] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-source', project?.id] })
+      toast(t('studio.devtools.snapshot.restored'), {})
+    },
+    onError: reason => toast(String(reason), { variant: 'danger' }),
+  })
+  function handleRestoreSnapshot(snapshotId: string) {
+    // eslint-disable-next-line no-alert
+    if (window.confirm(t('studio.devtools.snapshot.restore_confirm')))
+      restoreSnapshot.mutate(snapshotId)
+  }
   const checkPackUpdates = useMutation({
     mutationFn: () => checkDomainPackUpdates(tool.id),
     onSuccess: (result) => {
@@ -133,6 +155,11 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     queryKey: ['domain-resources', project?.id, tool.id, search],
     queryFn: () => queryDomainResources(project!.id, tool.id, search, 10_000),
     enabled: project != null && resourceTab === 'resources',
+  })
+  const dependencyGraph = useQuery({
+    queryKey: ['domain-dependencies', tool.id],
+    queryFn: () => resolveDomainDependencies(tool.id),
+    enabled: project != null && resourceTab === 'dependencies',
   })
   const selectedResourceKey = selectedResourceId ?? selectedFile?.resourceId
   const selectedResource = useQuery({
@@ -179,7 +206,8 @@ export function DomainSystemView({ tool, project, onBack, target }: {
         throw new Error('DOMAIN_VALIDATION_FAILED')
       return applyDomainDraft(project!.id, confirmation.preview.draft.id, confirmation.confirmationToken)
     },
-    onSuccess: () => {
+    onSuccess: (snapshot) => {
+      setLastSnapshot(snapshot)
       setDraftPreview(null)
       setEditedContent(null)
       void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
@@ -344,10 +372,12 @@ export function DomainSystemView({ tool, project, onBack, target }: {
           resources={resources.data ?? []}
           unclaimedFiles={unclaimedFiles.data ?? []}
           manifest={manifest}
+          dependencyGraph={dependencyGraph.data}
           selectedPath={selectedFile?.path}
           selectedResourceId={selectedResourceId}
           onSelectFile={selectFile}
           onSelectResource={selectResource}
+          onOpenSystem={onOpenSystem}
           loading={files.isLoading || unclaimedFiles.isLoading || resources.isLoading}
         />
       )}
@@ -423,6 +453,9 @@ export function DomainSystemView({ tool, project, onBack, target }: {
           onCloneLegacy={cloneLegacyPreview}
           cloningLegacy={cloneLegacyDraft.isPending}
           applying={applyDraft.isPending}
+          lastSnapshot={lastSnapshot}
+          restoringSnapshot={restoreSnapshot.isPending}
+          onRestoreSnapshot={handleRestoreSnapshot}
           validation={validation}
         />
       </If>
@@ -430,7 +463,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   )
 }
 
-function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources, unclaimedFiles, manifest, selectedPath, selectedResourceId, onSelectFile, onSelectResource, loading }: {
+function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources, unclaimedFiles, manifest, dependencyGraph, selectedPath, selectedResourceId, onSelectFile, onSelectResource, onOpenSystem, loading }: {
   activeTab: ResourceTab
   onTab: (tab: ResourceTab) => void
   search: string
@@ -439,10 +472,12 @@ function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources,
   resources: DomainResourceRecord[]
   unclaimedFiles: DomainFileRecord[]
   manifest: DomainManifest
+  dependencyGraph?: DomainDependencyGraph
   selectedPath?: string
   selectedResourceId: string | null
   onSelectFile: (file: DomainFileRecord) => void
   onSelectResource: (resource: DomainResourceRecord) => void
+  onOpenSystem?: (systemId: string) => void
   loading: boolean
 }) {
   const { t } = useTranslation()
@@ -461,7 +496,7 @@ function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources,
       </If>
       <div className="min-h-0 flex-1 overflow-auto p-2">
         <If cond={activeTab === 'dependencies'} else={renderResourceOrFileList(activeTab, resources, files, unclaimedFiles, selectedResourceId, selectedPath, onSelectResource, onSelectFile, loading)}>
-          <DependencyList manifest={manifest} files={files.filter(file => file.ownership === 'dependency')} selectedPath={selectedPath} onSelect={onSelectFile} loading={loading} />
+          <DependencyList manifest={manifest} graph={dependencyGraph} files={files.filter(file => file.ownership === 'dependency')} selectedPath={selectedPath} onSelect={onSelectFile} onOpenSystem={onOpenSystem} loading={loading} />
         </If>
       </div>
     </div>
@@ -604,11 +639,13 @@ function directoryPath(segments: string[]) {
   return '.'
 }
 
-function DependencyList({ manifest, files, selectedPath, onSelect, loading }: {
+function DependencyList({ manifest, graph, files, selectedPath, onSelect, onOpenSystem, loading }: {
   manifest: DomainManifest
+  graph?: DomainDependencyGraph
   files: DomainFileRecord[]
   selectedPath?: string
   onSelect: (file: DomainFileRecord) => void
+  onOpenSystem?: (systemId: string) => void
   loading: boolean
 }) {
   const { t } = useTranslation()
@@ -616,14 +653,51 @@ function DependencyList({ manifest, files, selectedPath, onSelect, loading }: {
     <If cond={manifest.dependencies.length > 0} else={<p className="p-4 text-center text-xs text-muted">{t('studio.devtools.dependencies.empty')}</p>}>
       <div className="space-y-2">
         {manifest.dependencies.map(dependency => (
-          <div key={dependency} className="rounded-lg border border-line bg-panel2 p-3">
+          <button key={dependency} type="button" className="block w-full rounded-lg border border-line bg-panel2 p-3 text-left hover:border-accent/40" onClick={() => onOpenSystem?.(dependency)}>
             <strong className="text-xs text-ink">{t(`studio.devtools.tool.${dependency}.title`)}</strong>
             <p className="mt-1 text-[10px] text-muted">{t('studio.devtools.dependencies.readonly')}</p>
-          </div>
+          </button>
         ))}
+        <DependencyGraphSummary graph={graph} onOpenSystem={onOpenSystem} />
         <FileProjectionList files={files} resourceMode={false} selectedPath={selectedPath} onSelect={onSelect} loading={loading} />
       </div>
     </If>
+  )
+}
+
+function DependencyGraphSummary({ graph, onOpenSystem }: { graph?: DomainDependencyGraph, onOpenSystem?: (systemId: string) => void }) {
+  const { t } = useTranslation()
+  if (!graph)
+    return <p className="p-3 text-center text-[10px] text-muted">{t('studio.devtools.dependencies.loading')}</p>
+  return (
+    <section className="rounded-lg border border-line bg-panel2 p-3">
+      <strong className="text-[10px] uppercase tracking-wider text-muted">{t('studio.devtools.dependencies.graph')}</strong>
+      <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <DependencyMetric label={t('studio.devtools.dependencies.direct')} value={graph.direct.length} />
+        <DependencyMetric label={t('studio.devtools.dependencies.transitive')} value={graph.transitive.length} />
+        <DependencyMetric label={t('studio.devtools.dependencies.cycles')} value={graph.cycles.length} />
+      </dl>
+      <If cond={graph.transitive.length > 0}>
+        <div className="mt-3 flex flex-wrap gap-1">
+          {graph.transitive.map(systemId => <button key={systemId} type="button" className="rounded border border-line bg-panel px-2 py-1 text-[9px] text-ink hover:border-accent/40" onClick={() => onOpenSystem?.(systemId)}>{t(`studio.devtools.tool.${systemId}.title`)}</button>)}
+        </div>
+      </If>
+      <If cond={graph.missing.length > 0}>
+        <p className="mt-3 break-words text-[9px] text-danger">{t('studio.devtools.dependencies.missing', { systems: graph.missing.join(', ') })}</p>
+      </If>
+      <If cond={graph.cycles.length > 0}>
+        <div className="mt-2 space-y-1">{graph.cycles.map(cycle => <p key={cycle.join('>')} className="break-words text-[9px] text-warning">{cycle.join(' → ')}</p>)}</div>
+      </If>
+    </section>
+  )
+}
+
+function DependencyMetric({ label, value }: { label: string, value: number }) {
+  return (
+    <div className="rounded border border-line bg-panel px-2 py-1.5">
+      <dt className="text-[8px] text-muted">{label}</dt>
+      <dd className="mt-0.5 text-xs tabular-nums text-ink">{value}</dd>
+    </div>
   )
 }
 
@@ -758,13 +832,16 @@ function CenterWorkspace(props: {
   applying: boolean
   onCloneLegacy: (confirmation: DomainDraftConfirmation) => void
   cloningLegacy: boolean
+  lastSnapshot: DomainSnapshot | null
+  restoringSnapshot: boolean
+  onRestoreSnapshot: (snapshotId: string) => void
   validation: DomainValidationReport | null
 }) {
   return (
     <div className="h-full min-h-0 overflow-auto p-4">
       <If cond={props.activeTab === 'domain'}><DomainRenderer manifest={props.manifest} description={props.description} resource={props.resource} resourceLoading={props.resourceLoading} resourceError={props.resourceError} /></If>
       <If cond={props.activeTab === 'source'}><SourcePanel {...props} /></If>
-      <If cond={props.activeTab === 'diff'}><DiffPanel drafts={props.drafts} draftScopes={props.draftScopes} preview={props.draftPreview} onShow={props.onShowDraft} onApply={props.onApplyDraft} applying={props.applying} onCloneLegacy={props.onCloneLegacy} cloningLegacy={props.cloningLegacy} /></If>
+      <If cond={props.activeTab === 'diff'}><DiffPanel drafts={props.drafts} draftScopes={props.draftScopes} preview={props.draftPreview} onShow={props.onShowDraft} onApply={props.onApplyDraft} applying={props.applying} onCloneLegacy={props.onCloneLegacy} cloningLegacy={props.cloningLegacy} lastSnapshot={props.lastSnapshot} restoringSnapshot={props.restoringSnapshot} onRestoreSnapshot={props.onRestoreSnapshot} /></If>
       <If cond={props.activeTab === 'validation'}><ValidationPanel report={props.validation} /></If>
     </div>
   )
@@ -857,7 +934,7 @@ function SourcePanel(props: {
   )
 }
 
-function DiffPanel({ drafts, draftScopes, preview, onShow, onApply, applying, onCloneLegacy, cloningLegacy }: {
+function DiffPanel({ drafts, draftScopes, preview, onShow, onApply, applying, onCloneLegacy, cloningLegacy, lastSnapshot, restoringSnapshot, onRestoreSnapshot }: {
   drafts: Array<{ id: string, intent: string, revision: number, status: string }>
   draftScopes: Record<string, DraftScopeState>
   preview: DomainDraftConfirmation | null
@@ -866,6 +943,9 @@ function DiffPanel({ drafts, draftScopes, preview, onShow, onApply, applying, on
   applying: boolean
   onCloneLegacy: (confirmation: DomainDraftConfirmation) => void
   cloningLegacy: boolean
+  lastSnapshot: DomainSnapshot | null
+  restoringSnapshot: boolean
+  onRestoreSnapshot: (snapshotId: string) => void
 }) {
   const { t } = useTranslation()
   const previewScope = preview ? draftScopes[preview.preview.draft.id] : undefined
@@ -896,6 +976,15 @@ function DiffPanel({ drafts, draftScopes, preview, onShow, onApply, applying, on
         </div>
       </aside>
       <div className="min-w-0 p-4">
+        <If cond={lastSnapshot != null}>
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 p-3">
+            <span className="min-w-0">
+              <strong className="block text-xs text-success">{t('studio.devtools.snapshot.created')}</strong>
+              <small className="block truncate text-[9px] text-muted">{lastSnapshot?.id}</small>
+            </span>
+            <Button size="sm" variant="outline" isPending={restoringSnapshot} onPress={() => lastSnapshot && onRestoreSnapshot(lastSnapshot.id)}>{t('studio.devtools.snapshot.restore')}</Button>
+          </div>
+        </If>
         <If cond={preview != null} else={<CenteredNotice title={t('studio.devtools.diff.empty')} description={t('studio.devtools.diff.empty_desc')} />}>
           <div>
             <If cond={previewScope?.legacyOrUnscoped === true}>
@@ -1011,7 +1100,7 @@ function fallbackManifest(tool: DevToolDefinition): DomainManifest {
   return {
     kind: 'domain',
     systemId: tool.id,
-    version: '1.2.0',
+    version: '1.3.0',
     kernelApiRange: '^1.0.0',
     supportedEngineRange: '>=1.0.0',
     engineCompatibility: {

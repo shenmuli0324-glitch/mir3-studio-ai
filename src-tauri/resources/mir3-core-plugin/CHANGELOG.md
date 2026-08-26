@@ -1,5 +1,12 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.0.4 - 2026-08-27
+
+- 系统 Session 只有在归档成功后才允许打开、发送 Prompt 或接受并发控制命令，防止失败路径污染普通 Harness 工作区。
+- 创建或归档失败会释放任务所有权；重试复用已创建的残留 Session 并再次归档，避免生成重复 Session。
+- 系统与全局 Session 恢复时会重新归档并恢复事件订阅；Studio 重启后可继续接收 Snapshot、提问、完成和错误事件。
+- 新增 `globalSession.resume`，持久化全局任务、组合 Draft、未完成计划和回到具体系统的深链状态。
+
 ## 1.0.3 - 2026-08-26
 
 - Core 候选升级 canary 通过公共 Runtime 创建、打开并归档一个非 managed 普通 Session，避免仅验证系统会话旁路。

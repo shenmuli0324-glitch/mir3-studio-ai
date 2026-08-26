@@ -1,6 +1,10 @@
 import type {
   CapabilityResolution,
   CapabilityRollbackRequest,
+  CompositeDraftApplyInput,
+  CompositeDraftApplyResult,
+  CompositeDraftReview,
+  DomainDependencyGraph,
   DomainDraft,
   DomainDraftConfirmation,
   DomainFileRecord,
@@ -64,6 +68,10 @@ export function getDomainResource(projectId: string, systemId: string, resourceI
   return invoke<DomainResourceRecord>('domain_resource_get', { projectId, systemId, resourceId })
 }
 
+export function resolveDomainDependencies(systemId: string) {
+  return invoke<DomainDependencyGraph>('domain_dependency_resolve', { systemId })
+}
+
 export function queryDomainResources(projectId: string, systemId: string, text = '', limit = 250, offset = 0) {
   return invoke<DomainResourceRecord[]>('domain_resource_query', {
     projectId,
@@ -111,6 +119,14 @@ export function associateDomainDraftComposite(projectId: string, draftId: string
   return invoke<void>('domain_draft_composite_associate', { projectId, draftId, systemId, pluginVersion, compositeId })
 }
 
+export function disassociateDomainDraftComposite(projectId: string, draftId: string, systemId: string, pluginVersion: string, compositeId: string) {
+  return invoke<void>('domain_draft_composite_disassociate', { projectId, draftId, systemId, pluginVersion, compositeId })
+}
+
+export function discardDomainDraft(projectId: string, draftId: string) {
+  return invoke<DomainDraft>('draft_discard', { projectId, draftId })
+}
+
 export function previewDomainDraft(projectId: string, draftId: string) {
   return invoke<DomainDraftConfirmation>('draft_preview', { projectId, draftId })
 }
@@ -121,6 +137,18 @@ export function cloneLegacyDomainDraft(projectId: string, request: LegacyDraftCl
 
 export function applyDomainDraft(projectId: string, draftId: string, confirmationToken: string) {
   return invoke<DomainSnapshot>('draft_apply', { projectId, draftId, confirmationToken })
+}
+
+export function restoreDomainSnapshot(projectId: string, snapshotId: string) {
+  return invoke<DomainSnapshot>('snapshot_restore', { projectId, snapshotId })
+}
+
+export function previewCompositeDrafts(projectId: string, compositeId: string) {
+  return invoke<CompositeDraftReview>('draft_composite_preview', { projectId, compositeId })
+}
+
+export function applyCompositeDrafts(projectId: string, compositeId: string, drafts: CompositeDraftApplyInput[]) {
+  return invoke<CompositeDraftApplyResult>('draft_composite_apply', { projectId, compositeId, drafts })
 }
 
 export function getSystemSession(projectId: string, taskId: string) {
