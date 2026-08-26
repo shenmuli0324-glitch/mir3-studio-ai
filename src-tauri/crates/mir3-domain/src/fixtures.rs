@@ -541,4 +541,62 @@ mod tests {
         }
         assert_eq!(operations, 194);
     }
+
+    #[test]
+    fn public_sdk_corpus_matches_runtime_manifest_and_fixture_contract() {
+        let sdk_root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../resources/mir3-domain-sdk");
+        let corpus: Value = serde_json::from_str(
+            &fs::read_to_string(sdk_root.join("fixtures/contract-corpus.json")).unwrap(),
+        )
+        .unwrap();
+        for range in corpus["acceptedEngineRanges"].as_array().unwrap() {
+            assert!(
+                semver::VersionReq::parse(range.as_str().unwrap()).is_ok(),
+                "Rust rejected SDK accepted engine range: {range}"
+            );
+        }
+        for range in corpus["rejectedEngineRanges"].as_array().unwrap() {
+            assert!(
+                semver::VersionReq::parse(range.as_str().unwrap()).is_err(),
+                "Rust accepted SDK rejected engine range: {range}"
+            );
+        }
+        for accepted in corpus["accepted"].as_array().unwrap() {
+            let pack_root = sdk_root
+                .join("fixtures")
+                .join(accepted["packRoot"].as_str().unwrap());
+            let system_id = accepted["systemId"].as_str().unwrap();
+            let version = accepted["version"].as_str().unwrap();
+            let report =
+                execute_domain_pack_fixture_canary(&pack_root, system_id, version).unwrap();
+            assert_eq!(report.system_id, system_id);
+            assert_eq!(report.version, version);
+            assert!(report.valid_records >= 2);
+            assert!(report.invalid_records >= 2);
+
+            let source: Value =
+                serde_json::from_str(&fs::read_to_string(pack_root.join("domain.json")).unwrap())
+                    .unwrap();
+            for rejected in corpus["rejected"].as_array().unwrap() {
+                let mut mutated = source.clone();
+                let pointer = rejected["pointer"].as_str().unwrap();
+                *mutated.pointer_mut(pointer).unwrap() = rejected["value"].clone();
+                let temporary = std::env::temp_dir().join(format!(
+                    "mir3-domain-sdk-rejected-{}-{}",
+                    std::process::id(),
+                    crate::now_millis()
+                ));
+                fs::create_dir_all(&temporary).unwrap();
+                let manifest_path = temporary.join("domain.json");
+                fs::write(&manifest_path, serde_json::to_vec_pretty(&mutated).unwrap()).unwrap();
+                assert!(
+                    validate_domain_pack_manifest(&manifest_path, system_id, version).is_err(),
+                    "SDK rejected corpus was accepted by Rust: {}",
+                    rejected["name"].as_str().unwrap()
+                );
+                fs::remove_dir_all(temporary).ok();
+            }
+        }
+    }
 }

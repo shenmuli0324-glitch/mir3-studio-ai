@@ -53,6 +53,8 @@ pub struct DomainManifest {
     pub version: String,
     pub kernel_api_range: String,
     pub supported_engine_range: String,
+    #[serde(default)]
+    pub engine_compatibility: DomainEngineCompatibility,
     pub manifest_schema_version: u32,
     pub resource_schema_version: u32,
     pub capability_schema_version: u32,
@@ -77,6 +79,22 @@ pub struct DomainManifest {
     pub fixtures: DomainFixturesContract,
     pub dependencies: Vec<String>,
     pub capabilities: Vec<OfficialCapability>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainEngineCompatibility {
+    /// 只允许 Kernel 已实现且可审计的版本归一化策略。
+    #[serde(default)]
+    pub strategy: String,
+    #[serde(default)]
+    pub version_aliases: Vec<String>,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+    #[serde(default)]
+    pub unknown_version_policy: String,
+    #[serde(default)]
+    pub incompatible_version_policy: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -750,7 +768,11 @@ impl DomainStore {
             .filter(|file| file.access != "readonly")
             .count();
         let readonly_files = files.len().saturating_sub(writable_files);
+        let engine_compatibility = self.assert_project_engine_compatible(project_id, &manifest);
         let mut diagnostics = Vec::new();
+        if let Err(error) = &engine_compatibility {
+            diagnostics.push(error.clone());
+        }
         if let Some(reason) = self.read_only_reason() {
             diagnostics.push(format!("DOMAIN_KERNEL_READONLY:{reason}"));
         }
@@ -1021,7 +1043,11 @@ impl DomainStore {
                 &missing_dependencies,
             ));
         }
+        let engine_compatibility = self.assert_project_engine_compatible(project_id, manifest);
         let mut diagnostics = Vec::new();
+        if let Err(error) = &engine_compatibility {
+            diagnostics.push(error.clone());
+        }
         if let Some(overlay) = overlay {
             diagnostics.push(format!(
                 "DOMAIN_DRAFT_OVERLAY_VALIDATED:{}:{}",
@@ -1042,7 +1068,9 @@ impl DomainStore {
             .count();
         Ok(DomainValidationReport {
             system_id: manifest.system_id.clone(),
-            valid: missing_dependencies.is_empty() && validators.iter().all(|value| value.valid),
+            valid: engine_compatibility.is_ok()
+                && missing_dependencies.is_empty()
+                && validators.iter().all(|value| value.valid),
             owned_files: files.len(),
             writable_files,
             readonly_files: files.len().saturating_sub(writable_files),
@@ -1509,6 +1537,12 @@ impl DomainStore {
         if declared == "readonly" {
             return declared;
         }
+        if self
+            .assert_project_engine_compatible(project_id, manifest)
+            .is_err()
+        {
+            return "readonly";
+        }
         match extension.unwrap_or_default() {
             value if value.eq_ignore_ascii_case("map") => self
                 .verified_map_header(project_id, path)
@@ -1789,6 +1823,7 @@ impl DomainStore {
             "DRAFT_DOMAIN_VERSION_REQUIRED: draft has no pinned plugin version".to_string()
         })?;
         let manifest = self.runtime_manifest_at_version(&system_id, Some(&plugin_version))?;
+        self.assert_project_engine_compatible(project_id, &manifest)?;
         let extension = std::path::Path::new(path)
             .extension()
             .and_then(|value| value.to_str());
@@ -1823,6 +1858,40 @@ impl DomainStore {
         if self.verified_access_for(project_id, &manifest, path, extension) == "readonly" {
             return Err(format!(
                 "DRAFT_DOMAIN_READONLY: {path} has no verified writer"
+            ));
+        }
+        Ok(())
+    }
+
+    /// 领域写入必须绑定一个可归一化且命中声明范围的真实引擎版本。
+    /// 目录、内容指纹与 Schema 仍由投影及校验门禁分别验证。
+    pub fn assert_project_engine_compatible(
+        &self,
+        project_id: &str,
+        manifest: &DomainManifest,
+    ) -> Result<(), String> {
+        #[cfg(test)]
+        if self.trusted_fixture_engine_override {
+            return Ok(());
+        }
+        let project = self.get_project(project_id)?;
+        let detected = project.engine_version.as_deref().ok_or_else(|| {
+            format!(
+                "DOMAIN_ENGINE_VERSION_UNVERIFIED: {} is read-only until the engine version is detected",
+                manifest.system_id
+            )
+        })?;
+        let engine = normalize_engine_version(detected, &manifest.engine_compatibility)?;
+        let requirement = VersionReq::parse(&manifest.supported_engine_range).map_err(|error| {
+            format!(
+                "DOMAIN_ENGINE_RANGE_INVALID: {}: {error}",
+                manifest.supported_engine_range
+            )
+        })?;
+        if !requirement.matches(&engine) {
+            return Err(format!(
+                "DOMAIN_ENGINE_INCOMPATIBLE: {engine} does not match {} for {}",
+                manifest.supported_engine_range, manifest.system_id
             ));
         }
         Ok(())
@@ -1963,6 +2032,28 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
         if !stable_version || !compatible_kernel || engine_requirement.is_err() {
             return Err(format!(
                 "DOMAIN_MANIFEST_VERSION_INVALID: {}",
+                pack.system_id
+            ));
+        }
+        let requires_evidence_contract = version
+            .as_ref()
+            .is_ok_and(|version| version >= &Version::new(1, 2, 0));
+        if requires_evidence_contract
+            && (pack.supported_engine_range == "*"
+                || pack.engine_compatibility.strategy != "evidence-gated-auto-generalization-v1"
+                || pack.engine_compatibility.version_aliases
+                    != ["semver", "v-prefixed-semver", "major-minor"]
+                || pack.engine_compatibility.required_evidence
+                    != [
+                        "project-directory-layout",
+                        "owned-selector-or-content-fingerprint",
+                        "resource-schema-validation",
+                    ]
+                || pack.engine_compatibility.unknown_version_policy != "readonly"
+                || pack.engine_compatibility.incompatible_version_policy != "readonly")
+        {
+            return Err(format!(
+                "DOMAIN_ENGINE_COMPATIBILITY_CONTRACT_INVALID: {}",
                 pack.system_id
             ));
         }
@@ -2172,6 +2263,45 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// 将清单声明允许的有限别名归一化为 SemVer；不猜测厂商字符串或日期格式。
+pub fn normalize_engine_version(
+    value: &str,
+    compatibility: &DomainEngineCompatibility,
+) -> Result<Version, String> {
+    let aliases = &compatibility.version_aliases;
+    let trimmed = value.trim();
+    // 1.0/1.1 包没有该字段；仅为已安装旧版本提供同等的保守解析，不放宽未知版本。
+    let legacy_contract = aliases.is_empty();
+    if legacy_contract || aliases.iter().any(|alias| alias == "semver") {
+        if let Ok(version) = Version::parse(trimmed) {
+            return Ok(version);
+        }
+    }
+    if legacy_contract || aliases.iter().any(|alias| alias == "v-prefixed-semver") {
+        if let Some(normalized) = trimmed
+            .strip_prefix('v')
+            .or_else(|| trimmed.strip_prefix('V'))
+        {
+            if let Ok(version) = Version::parse(normalized) {
+                return Ok(version);
+            }
+        }
+    }
+    if (legacy_contract || aliases.iter().any(|alias| alias == "major-minor"))
+        && trimmed.matches('.').count() == 1
+        && trimmed
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+    {
+        if let Ok(version) = Version::parse(&format!("{trimmed}.0")) {
+            return Ok(version);
+        }
+    }
+    Err(format!(
+        "DOMAIN_ENGINE_VERSION_UNVERIFIED: {value} does not match a declared version alias"
+    ))
 }
 
 fn matches_projection(
@@ -2576,11 +2706,141 @@ mod tests {
     fn registry_contains_exactly_the_product_systems() {
         let registry = bundled_domain_registry().unwrap();
         assert_eq!(registry.packs.len(), 33);
+        assert!(registry.packs.iter().all(|pack| {
+            pack.version == "1.2.0"
+                && pack.supported_engine_range == ">=1.0.0"
+                && pack.engine_compatibility.strategy == "evidence-gated-auto-generalization-v1"
+                && !pack.engine_compatibility.version_aliases.is_empty()
+        }));
         assert!(registry.packs.iter().any(|pack| pack.system_id == "map"));
         assert!(registry
             .packs
             .iter()
             .any(|pack| pack.system_id == "cross_server"));
+    }
+
+    #[test]
+    fn engine_aliases_are_explicit_and_do_not_guess_vendor_strings() {
+        let compatibility = bundled_domain_registry().unwrap().packs[0]
+            .engine_compatibility
+            .clone();
+        assert_eq!(
+            normalize_engine_version("1.2.3", &compatibility)
+                .unwrap()
+                .to_string(),
+            "1.2.3"
+        );
+        assert_eq!(
+            normalize_engine_version("v2.7.4", &compatibility)
+                .unwrap()
+                .to_string(),
+            "2.7.4"
+        );
+        assert_eq!(
+            normalize_engine_version("3.9", &compatibility)
+                .unwrap()
+                .to_string(),
+            "3.9.0"
+        );
+        assert!(normalize_engine_version("V8M2", &compatibility)
+            .unwrap_err()
+            .starts_with("DOMAIN_ENGINE_VERSION_UNVERIFIED:"));
+    }
+
+    #[test]
+    fn unknown_engine_is_readonly_and_apply_rechecks_compatibility() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-engine-gate-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let root = base.join("木立");
+        let relative = "客户端/dev/Level/Level.txt";
+        std::fs::create_dir_all(root.join("客户端/dev/Level")).unwrap();
+        std::fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
+        std::fs::write(root.join(relative), "level=1\nrequiredExperience=100\n").unwrap();
+
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let files = store
+            .query_domain_files(
+                &project.id,
+                "level",
+                &DomainFileQuery {
+                    text: String::new(),
+                    limit: Some(10),
+                    offset: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(files[0].access, "readonly");
+        let unknown = store.open_draft(&project.id, "unknown engine").unwrap();
+        store
+            .bind_draft_domain(&project.id, &unknown.id, "level", "1.2.0", None)
+            .unwrap();
+        assert!(store
+            .patch_draft(
+                &project.id,
+                &unknown.id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: relative.to_string(),
+                    content: Some("level=1\nrequiredExperience=200\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap_err()
+            .starts_with("DOMAIN_ENGINE_VERSION_UNVERIFIED:"));
+
+        std::fs::write(root.join("引擎/version.txt"), "v2.7.4\n").unwrap();
+        let project = store.validate_project(&project.id).unwrap();
+        let draft = store.open_draft(&project.id, "recognized engine").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
+            .unwrap();
+        let preview = store
+            .patch_draft(
+                &project.id,
+                &draft.id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: relative.to_string(),
+                    content: Some("level=1\nrequiredExperience=200\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+
+        std::fs::write(root.join("引擎/version.txt"), "0.9.0\n").unwrap();
+        store.validate_project(&project.id).unwrap();
+        assert!(store
+            .apply_draft(
+                &project.id,
+                &draft.id,
+                preview.draft.revision,
+                &preview.diff_hash,
+            )
+            .unwrap_err()
+            .starts_with("DOMAIN_ENGINE_INCOMPATIBLE:"));
+
+        std::fs::write(root.join("引擎/version.txt"), "1.0\n").unwrap();
+        store.validate_project(&project.id).unwrap();
+        store
+            .apply_draft(
+                &project.id,
+                &draft.id,
+                preview.draft.revision,
+                &preview.diff_hash,
+            )
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join(relative)).unwrap(),
+            "level=1\nrequiredExperience=200\n"
+        );
+        std::fs::remove_dir_all(base).ok();
     }
 
     #[test]
@@ -2648,7 +2908,7 @@ mod tests {
         std::fs::create_dir_all(root.join("客户端/dev/misc")).unwrap();
         std::fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
         std::fs::write(root.join("客户端/dev/misc/opaque.xyz"), b"opaque").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let files = store
@@ -2717,7 +2977,7 @@ mod tests {
         )
         .unwrap();
 
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         assert!(
@@ -2731,7 +2991,7 @@ mod tests {
             .open_draft(&project.id, "invalid level overlay")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -2810,7 +3070,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "level",
-                "1.1.0",
+                "1.2.0",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -2820,7 +3080,7 @@ mod tests {
                 &project.id,
                 &companion.id,
                 "shop",
-                "1.1.0",
+                "1.2.0",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -2877,7 +3137,7 @@ mod tests {
         copy_test_directory(&bundled, &v1_staging);
         let v1_hash = hash_runtime_release(&v1_staging).unwrap();
         let v1 = RuntimeDomainPackRelease {
-            version: "1.1.0".to_string(),
+            version: "1.2.0".to_string(),
             directory: format!("level-{}", &v1_hash[..12]),
             hash: v1_hash,
         };
@@ -2885,10 +3145,10 @@ mod tests {
 
         let v101_staging = base.join("level-v101");
         copy_test_directory(&bundled, &v101_staging);
-        mutate_test_pack_contract(&v101_staging, "1.1.1", "v101");
+        mutate_test_pack_contract(&v101_staging, "1.2.1", "v101");
         let v101_hash = hash_runtime_release(&v101_staging).unwrap();
         let v101 = RuntimeDomainPackRelease {
-            version: "1.1.1".to_string(),
+            version: "1.2.1".to_string(),
             directory: format!("level-{}", &v101_hash[..12]),
             hash: v101_hash,
         };
@@ -2896,23 +3156,25 @@ mod tests {
 
         let v102_staging = base.join("level-v102");
         copy_test_directory(&bundled, &v102_staging);
-        mutate_test_pack_contract(&v102_staging, "1.1.2", "v102");
+        mutate_test_pack_contract(&v102_staging, "1.2.2", "v102");
         let v102_hash = hash_runtime_release(&v102_staging).unwrap();
         let v102 = RuntimeDomainPackRelease {
-            version: "1.1.2".to_string(),
+            version: "1.2.2".to_string(),
             directory: format!("level-{}", &v102_hash[..12]),
             hash: v102_hash,
         };
         std::fs::rename(&v102_staging, releases_root.join(&v102.directory)).unwrap();
 
         write_test_runtime_state(&system_root, "level", true, Some(&v1), None, Some(&v1));
-        let store = DomainStore::new_with_domain_pack_root(&data_root, &domain_pack_root).unwrap();
+        let store =
+            DomainStore::new_trusted_fixture_with_domain_pack_root(&data_root, &domain_pack_root)
+                .unwrap();
         let project = store.import_project(&project_root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
 
-        let draft = store.open_draft(&project.id, "pinned v1.1.0").unwrap();
+        let draft = store.open_draft(&project.id, "pinned v1.2.0").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
             .unwrap();
         let old_lease = store
             .issue_task_scope(
@@ -2921,7 +3183,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"level":"1.1.0"}),
+                serde_json::json!({"level":"1.2.0"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
@@ -2937,14 +3199,14 @@ mod tests {
                     body: serde_json::json!({"maximumLevel": 80}),
                     status: "active".to_string(),
                     source_task_id: "old-task".to_string(),
-                    plugin_version: "1.1.0".to_string(),
+                    plugin_version: "1.2.0".to_string(),
                     created_at: crate::now_millis(),
                     updated_at: crate::now_millis(),
                 },
             )
             .unwrap();
 
-        // 两次升级后 v1.1.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
+        // 两次升级后 v1.2.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
         write_test_runtime_state(
             &system_root,
             "level",
@@ -2959,7 +3221,7 @@ mod tests {
             .into_iter()
             .find(|manifest| manifest.system_id == "level")
             .unwrap();
-        assert_eq!(active.version, "1.1.2");
+        assert_eq!(active.version, "1.2.2");
         assert_eq!(
             store
                 .list_domain_memories(&project.id, "level", true)
@@ -2972,7 +3234,7 @@ mod tests {
             .iter()
             .any(|operation| operation.id == "scale-experience-v102"));
         let pinned_manifest = store.draft_domain_manifest(&project.id, &draft.id).unwrap();
-        assert_eq!(pinned_manifest.version, "1.1.0");
+        assert_eq!(pinned_manifest.version, "1.2.0");
         assert!(pinned_manifest
             .operations
             .iter()
@@ -2998,7 +3260,7 @@ mod tests {
             )
             .is_ok());
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.2", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.2", None)
             .unwrap();
         assert!(store
             .authorize_task_scope(
@@ -3011,7 +3273,7 @@ mod tests {
             .unwrap_err()
             .starts_with("TASK_SCOPE_DRAFT_VERSION_MISMATCH:"));
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
             .unwrap();
 
         let new_lease = store
@@ -3021,11 +3283,11 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 &[],
-                serde_json::json!({"level":"1.1.2"}),
+                serde_json::json!({"level":"1.2.2"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
-        assert_eq!(new_lease.plugin_versions["level"], "1.1.2");
+        assert_eq!(new_lease.plugin_versions["level"], "1.2.2");
 
         // 保留另一个可用领域，用来证明禁用包从新任务清单消失而非拖垮注册表。
         let shop_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -3034,7 +3296,7 @@ mod tests {
         copy_test_directory(&shop_bundled, &shop_staging);
         let shop_hash = hash_runtime_release(&shop_staging).unwrap();
         let shop_release = RuntimeDomainPackRelease {
-            version: "1.1.0".to_string(),
+            version: "1.2.0".to_string(),
             directory: format!("shop-{}", &shop_hash[..12]),
             hash: shop_hash,
         };
@@ -3094,7 +3356,7 @@ mod tests {
         )
         .unwrap();
         assert!(store
-            .runtime_manifest_at_version("level", Some("1.1.0"))
+            .runtime_manifest_at_version("level", Some("1.2.0"))
             .unwrap_err()
             .starts_with("DOMAIN_PACK_VERSION_UNAVAILABLE:"));
         assert!(store

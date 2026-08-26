@@ -81,6 +81,62 @@ pub struct CapabilityResolution {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CapabilityRollbackRequest {
+    pub capability_id: String,
+    pub scope: String,
+    pub from_version: String,
+    pub to_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeDraftBinding {
+    pub draft_id: String,
+    pub system_id: String,
+    pub plugin_version: String,
+    pub revision: i64,
+}
+
+#[derive(Debug, Clone)]
+struct CompositeDraftCheckpoint {
+    drafts: Vec<DraftCheckpoint>,
+}
+
+#[derive(Debug, Clone)]
+struct DraftCheckpoint {
+    draft_id: String,
+    revision: i64,
+    status: String,
+    updated_at: i64,
+    changes: Vec<DraftChangeCheckpoint>,
+    evidence: Vec<DraftEvidenceCheckpoint>,
+}
+
+#[derive(Debug, Clone)]
+struct DraftChangeCheckpoint {
+    path: String,
+    base_sha256: Option<String>,
+    content: Option<Vec<u8>>,
+    deleted: i64,
+}
+
+#[derive(Debug, Clone)]
+struct DraftEvidenceCheckpoint {
+    sequence: i64,
+    system_id: String,
+    plugin_version: String,
+    operation_id: String,
+    parameters: String,
+    parameter_schema_hash: String,
+    revision_before: i64,
+    revision_after: i64,
+    replay_change_hash: String,
+    replay_evidence_hash: String,
+    created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GovernanceMigrationReport {
     pub id: String,
     pub system_id: String,
@@ -198,6 +254,7 @@ impl DomainStore {
         plugin_version: &str,
         composite_id: Option<&str>,
     ) -> Result<(), String> {
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         if system_id != "__studio_gui__" {
             self.runtime_manifest_at_version(system_id, Some(plugin_version))?;
         }
@@ -221,6 +278,7 @@ impl DomainStore {
         plugin_version: &str,
         composite_id: &str,
     ) -> Result<(), String> {
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         if composite_id.trim().is_empty() {
             return Err("COMPOSITE_DRAFT_ID_REQUIRED: composite id is required".to_string());
         }
@@ -271,6 +329,204 @@ impl DomainStore {
             )
             .map_err(|error| format!("COMPOSITE_DRAFT_ASSOCIATE_FAILED: {error}"))?;
         Ok(())
+    }
+
+    /// 组合能力执行只读取已绑定且仍开放的领域 Draft，避免调用方自行猜测系统映射。
+    pub fn list_composite_draft_bindings(
+        &self,
+        project_id: &str,
+        composite_id: &str,
+    ) -> Result<Vec<CompositeDraftBinding>, String> {
+        if composite_id.trim().is_empty() {
+            return Err("COMPOSITE_DRAFT_ID_REQUIRED: composite id is required".to_string());
+        }
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT d.id,dd.system_id,dd.plugin_version,d.revision
+                 FROM draft_domains dd JOIN drafts d ON d.id=dd.draft_id
+                 WHERE dd.composite_id=?1 AND dd.legacy=0 AND d.status='open'
+                 ORDER BY dd.system_id,d.id",
+            )
+            .map_err(|error| format!("COMPOSITE_DRAFT_BINDING_READ_FAILED: {error}"))?;
+        let bindings = statement
+            .query_map([composite_id], |row| {
+                Ok(CompositeDraftBinding {
+                    draft_id: row.get(0)?,
+                    system_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    plugin_version: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    revision: row.get(3)?,
+                })
+            })
+            .map_err(|error| format!("COMPOSITE_DRAFT_BINDING_READ_FAILED: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("COMPOSITE_DRAFT_BINDING_READ_FAILED: {error}"))?;
+        if bindings.is_empty()
+            || bindings
+                .iter()
+                .any(|binding| binding.system_id.is_empty() || binding.plugin_version.is_empty())
+        {
+            return Err(
+                "COMPOSITE_DRAFT_BINDING_INVALID: no complete open domain bindings".to_string(),
+            );
+        }
+        Ok(bindings)
+    }
+
+    /// 组合能力的多步执行失败时，在一个 SQLite 事务中恢复全部 Draft 内容、revision 与证据。
+    pub fn with_composite_draft_transaction<T, F>(
+        &self,
+        project_id: &str,
+        composite_id: &str,
+        operation: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce(&[CompositeDraftBinding]) -> Result<T, String>,
+    {
+        let bindings = self.list_composite_draft_bindings(project_id, composite_id)?;
+        let draft_ids = bindings
+            .iter()
+            .map(|binding| binding.draft_id.clone())
+            .collect::<Vec<_>>();
+        let _reservation = self.reserve_draft_mutations(project_id, &draft_ids)?;
+        let checkpoint = self.capture_composite_draft_checkpoint(project_id, &bindings)?;
+        match operation(&bindings) {
+            Ok(value) => Ok(value),
+            Err(operation_error) => {
+                self.restore_composite_draft_checkpoint(project_id, &checkpoint)
+                    .map_err(|rollback_error| {
+                        format!(
+                            "COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {operation_error} | {rollback_error}"
+                        )
+                    })?;
+                Err(operation_error)
+            }
+        }
+    }
+
+    fn capture_composite_draft_checkpoint(
+        &self,
+        project_id: &str,
+        bindings: &[CompositeDraftBinding],
+    ) -> Result<CompositeDraftCheckpoint, String> {
+        let connection = self.project_connection(project_id)?;
+        let mut drafts = Vec::with_capacity(bindings.len());
+        for binding in bindings {
+            let (revision, status, updated_at) = connection
+                .query_row(
+                    "SELECT revision,status,updated_at FROM drafts WHERE id=?1",
+                    [&binding.draft_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?;
+            let mut changes_statement = connection
+                .prepare(
+                    "SELECT path,base_sha256,content,deleted FROM draft_changes WHERE draft_id=?1 ORDER BY path",
+                )
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?;
+            let changes = changes_statement
+                .query_map([&binding.draft_id], |row| {
+                    Ok(DraftChangeCheckpoint {
+                        path: row.get(0)?,
+                        base_sha256: row.get(1)?,
+                        content: row.get(2)?,
+                        deleted: row.get(3)?,
+                    })
+                })
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?;
+            let mut evidence_statement = connection
+                .prepare(
+                    "SELECT sequence,system_id,plugin_version,operation_id,parameters,parameter_schema_hash,revision_before,revision_after,replay_change_hash,replay_evidence_hash,created_at
+                     FROM draft_operation_evidence WHERE draft_id=?1 ORDER BY sequence",
+                )
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?;
+            let evidence = evidence_statement
+                .query_map([&binding.draft_id], |row| {
+                    Ok(DraftEvidenceCheckpoint {
+                        sequence: row.get(0)?,
+                        system_id: row.get(1)?,
+                        plugin_version: row.get(2)?,
+                        operation_id: row.get(3)?,
+                        parameters: row.get(4)?,
+                        parameter_schema_hash: row.get(5)?,
+                        revision_before: row.get(6)?,
+                        revision_after: row.get(7)?,
+                        replay_change_hash: row.get(8)?,
+                        replay_evidence_hash: row.get(9)?,
+                        created_at: row.get(10)?,
+                    })
+                })
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_CHECKPOINT_FAILED: {error}"))?;
+            drafts.push(DraftCheckpoint {
+                draft_id: binding.draft_id.clone(),
+                revision,
+                status,
+                updated_at,
+                changes,
+                evidence,
+            });
+        }
+        Ok(CompositeDraftCheckpoint { drafts })
+    }
+
+    fn restore_composite_draft_checkpoint(
+        &self,
+        project_id: &str,
+        checkpoint: &CompositeDraftCheckpoint,
+    ) -> Result<(), String> {
+        let mut connection = self.project_connection(project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        for draft in &checkpoint.drafts {
+            transaction
+                .execute(
+                    "DELETE FROM draft_operation_evidence WHERE draft_id=?1",
+                    [&draft.draft_id],
+                )
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            transaction
+                .execute(
+                    "DELETE FROM draft_changes WHERE draft_id=?1",
+                    [&draft.draft_id],
+                )
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            for change in &draft.changes {
+                transaction
+                    .execute(
+                        "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted) VALUES(?1,?2,?3,?4,?5)",
+                        params![draft.draft_id,change.path,change.base_sha256,change.content,change.deleted],
+                    )
+                    .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            }
+            for evidence in &draft.evidence {
+                transaction
+                    .execute(
+                        "INSERT INTO draft_operation_evidence(draft_id,sequence,system_id,plugin_version,operation_id,parameters,parameter_schema_hash,revision_before,revision_after,replay_change_hash,replay_evidence_hash,created_at)
+                         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                        params![draft.draft_id,evidence.sequence,evidence.system_id,evidence.plugin_version,evidence.operation_id,evidence.parameters,evidence.parameter_schema_hash,evidence.revision_before,evidence.revision_after,evidence.replay_change_hash,evidence.replay_evidence_hash,evidence.created_at],
+                    )
+                    .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            }
+            transaction
+                .execute(
+                    "UPDATE drafts SET revision=?2,status=?3,updated_at=?4 WHERE id=?1",
+                    params![
+                        draft.draft_id,
+                        draft.revision,
+                        draft.status,
+                        draft.updated_at
+                    ],
+                )
+                .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("COMPOSITE_CAPABILITY_ROLLBACK_FAILED: {error}"))
     }
 
     /// 旧 Draft 只有在逐文件复核当前真实源哈希后，才能克隆成新的领域 Draft。
@@ -337,39 +593,53 @@ impl DomainStore {
         drop(statement);
         drop(connection);
         let draft = self.open_draft(project_id, &request.intent)?;
-        self.bind_draft_domain(
-            project_id,
-            &draft.id,
-            &request.system_id,
-            &request.plugin_version,
-            None,
-        )?;
-        for (path, _, _, _) in &changes {
-            self.assert_draft_path_writable(project_id, &draft.id, path)?;
-        }
-        let mut connection = self.project_connection(project_id)?;
-        let transaction = connection
-            .transaction()
-            .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
-        for (path, base_sha256, content, deleted) in changes {
-            transaction
+        let _mutation = self.reserve_draft_mutation(project_id, &draft.id)?;
+        let clone_result = (|| -> Result<DraftPreview, String> {
+            self.bind_draft_domain(
+                project_id,
+                &draft.id,
+                &request.system_id,
+                &request.plugin_version,
+                None,
+            )?;
+            #[cfg(test)]
+            self.wait_governance_copy_test_gate()?;
+            for (path, _, _, _) in &changes {
+                self.assert_draft_path_writable(project_id, &draft.id, path)?;
+            }
+            let mut connection = self.project_connection(project_id)?;
+            let transaction = connection
+                .transaction()
+                .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
+            for (path, base_sha256, content, deleted) in changes {
+                transaction
+                    .execute(
+                        "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted)
+                         VALUES(?1,?2,?3,?4,?5)",
+                        params![draft.id, path, base_sha256, content, deleted],
+                    )
+                    .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
+            }
+            let updated = transaction
                 .execute(
-                    "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted)
-                     VALUES(?1,?2,?3,?4,?5)",
-                    params![draft.id, path, base_sha256, content, deleted],
+                    "UPDATE drafts SET revision=1,updated_at=?2 WHERE id=?1 AND revision=0 AND status='open'",
+                    params![draft.id, now_millis()],
                 )
                 .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
+            if updated != 1 {
+                return Err(
+                    "DRAFT_LEGACY_CLONE_CONFLICT: new Draft changed concurrently".to_string(),
+                );
+            }
+            transaction
+                .commit()
+                .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
+            self.preview_draft(project_id, &draft.id)
+        })();
+        if clone_result.is_err() {
+            self.discard_draft(project_id, &draft.id).ok();
         }
-        transaction
-            .execute(
-                "UPDATE drafts SET revision=1,updated_at=?2 WHERE id=?1",
-                params![draft.id, now_millis()],
-            )
-            .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
-        transaction
-            .commit()
-            .map_err(|error| format!("DRAFT_LEGACY_CLONE_FAILED: {error}"))?;
-        self.preview_draft(project_id, &draft.id)
+        clone_result
     }
 
     pub fn save_task_receipt(
@@ -521,6 +791,7 @@ impl DomainStore {
         revision_before: i64,
         revision_after: i64,
     ) -> Result<DraftOperationEvidence, String> {
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let draft = self.get_draft(project_id, draft_id)?;
         if draft.status != DraftStatus::Open || draft.revision != revision_after {
             return Err("CAPABILITY_EVIDENCE_DRAFT_STATE_INVALID: operation evidence must follow a successful open Draft mutation".to_string());
@@ -640,6 +911,7 @@ impl DomainStore {
         sequence: i64,
         replay_change_hash: &str,
     ) -> Result<DraftOperationEvidence, String> {
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let evidence = self.list_draft_operation_evidence(project_id, draft_id)?;
         let current = evidence
             .last()
@@ -870,7 +1142,7 @@ impl DomainStore {
                 format!("system{receipt_index}"),
                 promoted_parameter_schema(&manifest, &evidence)?,
             );
-            for item in evidence {
+            for (operation_index, item) in evidence.into_iter().enumerate() {
                 let operation = manifest
                     .operations
                     .iter()
@@ -889,6 +1161,8 @@ impl DomainStore {
                     "evidenceHash":hash_json(&item)?,
                     "replayHash":replay_hash,
                     "sourceReceiptId":receipt.id,
+                    "parameterKey":format!("system{receipt_index}"),
+                    "operationIndex":operation_index,
                     "preconditions":operation.preconditions,
                 }));
             }
@@ -950,6 +1224,7 @@ impl DomainStore {
         let source_hash = self.draft_change_evidence_hash(project_id, source_draft_id)?;
         verify_replay_proofs(evidence, &source_hash)?;
         let replay = self.open_draft(project_id, "capability isolated replay")?;
+        let _mutation = self.reserve_draft_mutation(project_id, &replay.id)?;
         self.bind_draft_domain(
             project_id,
             &replay.id,
@@ -957,6 +1232,8 @@ impl DomainStore {
             &manifest.version,
             None,
         )?;
+        #[cfg(test)]
+        self.wait_governance_copy_test_gate()?;
         let copy_result = (|| -> Result<(), String> {
             let source = self.project_connection(project_id)?;
             let mut statement = source
@@ -993,9 +1270,9 @@ impl DomainStore {
                     )
                     .map_err(|error| format!("CAPABILITY_REPLAY_WRITE_FAILED: {error}"))?;
             }
-            transaction
+            let updated = transaction
                 .execute(
-                    "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1 AND status='open'",
+                    "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1 AND revision=0 AND status='open'",
                     params![
                         replay.id,
                         evidence.last().map_or(0, |item| item.revision_after),
@@ -1003,6 +1280,11 @@ impl DomainStore {
                     ],
                 )
                 .map_err(|error| format!("CAPABILITY_REPLAY_WRITE_FAILED: {error}"))?;
+            if updated != 1 {
+                return Err(
+                    "CAPABILITY_REPLAY_WRITE_CONFLICT: new Draft changed concurrently".to_string(),
+                );
+            }
             transaction
                 .commit()
                 .map_err(|error| format!("CAPABILITY_REPLAY_WRITE_FAILED: {error}"))
@@ -1225,7 +1507,17 @@ impl DomainStore {
                 ));
             }
         }
-        self.registry()?
+        let mut connection = self.registry()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("CAPABILITY_PROMOTION_FAILED: {error}"))?;
+        transaction
+            .execute(
+                "UPDATE shared_user_capabilities SET status='disabled',updated_at=?3 WHERE scope=?1 AND id=?2 AND version<>?4 AND status='active'",
+                params![request.target_scope,request.capability_id,capability.updated_at,request.version],
+            )
+            .map_err(|error| format!("CAPABILITY_PROMOTION_FAILED: {error}"))?;
+        transaction
             .execute(
                 "INSERT INTO shared_user_capabilities(scope,id,version,source_project_id,system_id,name,description,parameter_schema,steps,read_systems,write_systems,status,source_task_id,created_at,updated_at)
                  VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?13,?14)
@@ -1247,6 +1539,9 @@ impl DomainStore {
                     capability.updated_at,
                 ],
             )
+            .map_err(|error| format!("CAPABILITY_PROMOTION_FAILED: {error}"))?;
+        transaction
+            .commit()
             .map_err(|error| format!("CAPABILITY_PROMOTION_FAILED: {error}"))?;
         Ok(CapabilityResolution {
             capability,
@@ -1320,6 +1615,178 @@ impl DomainStore {
         Ok(resolved)
     }
 
+    /// 返回项目、个人和团队各层的完整版本记录，供 Studio 展示禁用与回退目标。
+    pub fn list_user_capability_versions(
+        &self,
+        project_id: &str,
+        system_id: Option<&str>,
+    ) -> Result<Vec<CapabilityResolution>, String> {
+        let mut versions = self
+            .list_user_capabilities(project_id, system_id)?
+            .into_iter()
+            .map(|capability| CapabilityResolution {
+                capability,
+                resolved_scope: "project".to_string(),
+                source_project_id: project_id.to_string(),
+                shadowed_scopes: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        versions.extend(self.list_shared_capabilities(system_id)?.into_iter().map(
+            |(source_project_id, capability)| CapabilityResolution {
+                resolved_scope: capability.scope.clone(),
+                source_project_id,
+                capability,
+                shadowed_scopes: Vec::new(),
+            },
+        ));
+        versions.sort_by(|left, right| {
+            left.capability
+                .id
+                .cmp(&right.capability.id)
+                .then_with(|| left.resolved_scope.cmp(&right.resolved_scope))
+                .then_with(|| compare_semver(&right.capability.version, &left.capability.version))
+        });
+        Ok(versions)
+    }
+
+    /// 在同一作用域内禁用当前活动版本并恢复一个已禁用旧版本，两个状态必须原子切换。
+    pub fn rollback_user_capability(
+        &self,
+        project_id: &str,
+        request: &CapabilityRollbackRequest,
+    ) -> Result<UserCapability, String> {
+        if request.from_version == request.to_version {
+            return Err("CAPABILITY_ROLLBACK_VERSION_INVALID: versions must differ".to_string());
+        }
+        if request.scope == "project" {
+            let current = self.get_project_capability(
+                project_id,
+                &request.capability_id,
+                Some(&request.from_version),
+            )?;
+            let target = self.get_project_capability(
+                project_id,
+                &request.capability_id,
+                Some(&request.to_version),
+            )?;
+            if current.status != "active" || target.status != "disabled" {
+                return Err(
+                    "CAPABILITY_ROLLBACK_STATE_INVALID: source must be active and target disabled"
+                        .to_string(),
+                );
+            }
+            if target.system_id == "__global__" {
+                self.verify_global_capability_activation(project_id, &target)?;
+            } else {
+                self.verify_capability_activation(project_id, &target)?;
+            }
+            let mut connection = self.project_connection(project_id)?;
+            let transaction = connection
+                .transaction()
+                .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            let now = now_millis();
+            let disabled = transaction
+                .execute(
+                    "UPDATE user_capabilities SET status='disabled',updated_at=?3 WHERE id=?1 AND version=?2 AND status='active'",
+                    params![request.capability_id, request.from_version, now],
+                )
+                .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            transaction
+                .execute(
+                    "UPDATE user_capabilities SET status='disabled',updated_at=?2 WHERE id=?1 AND version<>?3 AND status='active'",
+                    params![request.capability_id,now,request.to_version],
+                )
+                .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            let restored = transaction
+                .execute(
+                    "UPDATE user_capabilities SET status='active',updated_at=?3 WHERE id=?1 AND version=?2 AND status='disabled'",
+                    params![request.capability_id, request.to_version, now],
+                )
+                .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            if disabled != 1 || restored != 1 {
+                return Err("CAPABILITY_ROLLBACK_CONFLICT: capability versions changed".to_string());
+            }
+            transaction
+                .commit()
+                .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+            return self.get_project_capability(
+                project_id,
+                &request.capability_id,
+                Some(&request.to_version),
+            );
+        }
+        if !matches!(request.scope.as_str(), "personal" | "team") {
+            return Err("CAPABILITY_ROLLBACK_SCOPE_INVALID: invalid scope".to_string());
+        }
+        let (_, current) = self
+            .shared_capability(
+                &request.scope,
+                &request.capability_id,
+                Some(&request.from_version),
+            )?
+            .ok_or_else(|| {
+                format!(
+                    "CAPABILITY_NOT_FOUND: {}:{}@{}",
+                    request.scope, request.capability_id, request.from_version
+                )
+            })?;
+        let (_, target) = self
+            .shared_capability(
+                &request.scope,
+                &request.capability_id,
+                Some(&request.to_version),
+            )?
+            .ok_or_else(|| {
+                format!(
+                    "CAPABILITY_NOT_FOUND: {}:{}@{}",
+                    request.scope, request.capability_id, request.to_version
+                )
+            })?;
+        if current.status != "active" || target.status != "disabled" {
+            return Err(
+                "CAPABILITY_ROLLBACK_STATE_INVALID: source must be active and target disabled"
+                    .to_string(),
+            );
+        }
+        self.verify_capability_runtime_contract(&target)?;
+        let mut connection = self.registry()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        let now = now_millis();
+        let disabled = transaction
+            .execute(
+                "UPDATE shared_user_capabilities SET status='disabled',updated_at=?4 WHERE scope=?1 AND id=?2 AND version=?3 AND status='active'",
+                params![request.scope,request.capability_id,request.from_version,now],
+            )
+            .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        transaction
+            .execute(
+                "UPDATE shared_user_capabilities SET status='disabled',updated_at=?3 WHERE scope=?1 AND id=?2 AND version<>?4 AND status='active'",
+                params![request.scope,request.capability_id,now,request.to_version],
+            )
+            .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        let restored = transaction
+            .execute(
+                "UPDATE shared_user_capabilities SET status='active',updated_at=?4 WHERE scope=?1 AND id=?2 AND version=?3 AND status='disabled'",
+                params![request.scope,request.capability_id,request.to_version,now],
+            )
+            .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        if disabled != 1 || restored != 1 {
+            return Err("CAPABILITY_ROLLBACK_CONFLICT: capability versions changed".to_string());
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("CAPABILITY_ROLLBACK_FAILED: {error}"))?;
+        self.shared_capability(
+            &request.scope,
+            &request.capability_id,
+            Some(&request.to_version),
+        )?
+        .map(|(_, capability)| capability)
+        .ok_or_else(|| "CAPABILITY_ROLLBACK_FAILED: restored version disappeared".to_string())
+    }
+
     pub fn set_shared_capability_status(
         &self,
         scope: &str,
@@ -1338,11 +1805,32 @@ impl DomainStore {
         if status == "active" {
             self.verify_capability_runtime_contract(&capability)?;
         }
-        self.registry()?
+        let mut connection = self.registry()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("CAPABILITY_SHARED_STATUS_FAILED: {error}"))?;
+        let now = now_millis();
+        if status == "active" {
+            transaction
+                .execute(
+                    "UPDATE shared_user_capabilities SET status='disabled',updated_at=?3 WHERE scope=?1 AND id=?2 AND version<>?4 AND status='active'",
+                    params![scope,capability_id,now,version],
+                )
+                .map_err(|error| format!("CAPABILITY_SHARED_STATUS_FAILED: {error}"))?;
+        }
+        let changed = transaction
             .execute(
                 "UPDATE shared_user_capabilities SET status=?4,updated_at=?5 WHERE scope=?1 AND id=?2 AND version=?3",
-                params![scope,capability_id,version,status,now_millis()],
+                params![scope,capability_id,version,status,now],
             )
+            .map_err(|error| format!("CAPABILITY_SHARED_STATUS_FAILED: {error}"))?;
+        if changed != 1 {
+            return Err(format!(
+                "CAPABILITY_NOT_FOUND: {scope}:{capability_id}@{version}"
+            ));
+        }
+        transaction
+            .commit()
             .map_err(|error| format!("CAPABILITY_SHARED_STATUS_FAILED: {error}"))?;
         self.shared_capability(scope, capability_id, Some(version))?
             .map(|(_, capability)| capability)
@@ -1355,17 +1843,49 @@ impl DomainStore {
         capability_id: &str,
         version: Option<&str>,
     ) -> Result<UserCapability, String> {
-        if let Ok(capability) = self.get_project_capability(project_id, capability_id, version) {
-            return Ok(capability);
-        }
-        for scope in ["personal", "team"] {
-            if let Some((_, capability)) = self.shared_capability(scope, capability_id, version)? {
-                if capability.status == "active" {
-                    return Ok(capability);
-                }
-            }
-        }
-        Err(match version {
+        self.resolve_user_capability(project_id, capability_id, version)
+            .map(|resolution| resolution.capability)
+    }
+
+    /// 对单个能力使用与列表、描述和调用相同的活动作用域优先级。
+    pub fn resolve_user_capability(
+        &self,
+        project_id: &str,
+        capability_id: &str,
+        version: Option<&str>,
+    ) -> Result<CapabilityResolution, String> {
+        let mut candidates = self
+            .list_user_capabilities(project_id, None)?
+            .into_iter()
+            .filter(|capability| {
+                capability.scope == "project"
+                    && capability.status == "active"
+                    && capability.id == capability_id
+                    && version.is_none_or(|expected| capability.version == expected)
+            })
+            .map(|capability| CapabilityResolution {
+                capability,
+                resolved_scope: "project".to_string(),
+                source_project_id: project_id.to_string(),
+                shadowed_scopes: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        candidates.extend(
+            self.list_shared_capabilities(None)?
+                .into_iter()
+                .filter(|(_, capability)| {
+                    capability.status == "active"
+                        && capability.id == capability_id
+                        && version.is_none_or(|expected| capability.version == expected)
+                })
+                .map(|(source_project_id, capability)| CapabilityResolution {
+                    resolved_scope: capability.scope.clone(),
+                    source_project_id,
+                    capability,
+                    shadowed_scopes: Vec::new(),
+                }),
+        );
+        select_capability_resolution(candidates).ok_or_else(|| match version {
             Some(version) => format!("CAPABILITY_NOT_FOUND: {capability_id}@{version}"),
             None => format!("CAPABILITY_NOT_FOUND: {capability_id}"),
         })
@@ -1560,16 +2080,31 @@ impl DomainStore {
                 self.verify_capability_activation(project_id, &capability)?;
             }
         }
-        let changed = self
-            .project_connection(project_id)?
+        let mut connection = self.project_connection(project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("CAPABILITY_STATUS_FAILED: {error}"))?;
+        let now = now_millis();
+        if status == "active" {
+            transaction
+                .execute(
+                    "UPDATE user_capabilities SET status='disabled',updated_at=?2 WHERE id=?1 AND version<>?3 AND status='active'",
+                    params![capability_id,now,version],
+                )
+                .map_err(|error| format!("CAPABILITY_STATUS_FAILED: {error}"))?;
+        }
+        let changed = transaction
             .execute(
                 "UPDATE user_capabilities SET status=?3,updated_at=?4 WHERE id=?1 AND version=?2",
-                params![capability_id, version, status, now_millis()],
+                params![capability_id, version, status, now],
             )
             .map_err(|error| format!("CAPABILITY_STATUS_FAILED: {error}"))?;
         if changed == 0 {
             return Err(format!("CAPABILITY_NOT_FOUND: {capability_id}@{version}"));
         }
+        transaction
+            .commit()
+            .map_err(|error| format!("CAPABILITY_STATUS_FAILED: {error}"))?;
         self.get_project_capability(project_id, capability_id, Some(version))
     }
 
@@ -2830,6 +3365,25 @@ fn capability_scope_priority(scope: &str) -> u8 {
     }
 }
 
+fn select_capability_resolution(
+    mut candidates: Vec<CapabilityResolution>,
+) -> Option<CapabilityResolution> {
+    candidates.sort_by(|left, right| {
+        capability_scope_priority(&right.resolved_scope)
+            .cmp(&capability_scope_priority(&left.resolved_scope))
+            .then_with(|| compare_semver(&right.capability.version, &left.capability.version))
+    });
+    let mut winner = candidates.first()?.clone();
+    winner.shadowed_scopes = candidates
+        .iter()
+        .filter(|candidate| candidate.resolved_scope != winner.resolved_scope)
+        .map(|candidate| candidate.resolved_scope.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    Some(winner)
+}
+
 fn capability_material_hash(capability: &UserCapability) -> Result<String, String> {
     hash_json(&serde_json::json!({
         "id":capability.id,
@@ -3227,8 +3781,13 @@ mod tests {
     use super::*;
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
 
     static CAPABILITY_TEST_NONCE: AtomicU64 = AtomicU64::new(0);
+
+    fn governance_test_store(base: &Path) -> DomainStore {
+        DomainStore::new_trusted_fixture(base.join("data")).unwrap()
+    }
 
     #[test]
     fn capabilities_reject_shell_steps() {
@@ -3257,7 +3816,7 @@ mod tests {
         let root = base.join("木立");
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         let now = now_millis();
         let capability = UserCapability {
@@ -3290,7 +3849,7 @@ mod tests {
             body: serde_json::json!({"minimum":1}),
             status: "candidate".to_string(),
             source_task_id: "task-1".to_string(),
-            plugin_version: "1.1.0".to_string(),
+            plugin_version: "1.2.0".to_string(),
             created_at: now,
             updated_at: now,
         };
@@ -3321,7 +3880,7 @@ mod tests {
             summary: "批量价格规则".to_string(),
             status: "applied".to_string(),
             draft_id: None,
-            plugin_versions: serde_json::json!({"domain":"1.1.0"}),
+            plugin_versions: serde_json::json!({"domain":"1.2.0"}),
             evidence: serde_json::json!({"diffHash":"abc"}),
             created_at: now,
         };
@@ -3373,7 +3932,7 @@ mod tests {
             .project_connection(&project.id)
             .unwrap()
             .execute(
-                "UPDATE domain_memories SET plugin_version='1.1.0' WHERE id=?1",
+                "UPDATE domain_memories SET plugin_version='1.2.0' WHERE id=?1",
                 [&proposed_id],
             )
             .unwrap();
@@ -3385,7 +3944,7 @@ mod tests {
                 &["shop".to_string(), "item".to_string()],
                 &["shop".to_string()],
                 &[],
-                serde_json::json!({"shop":"1.1.0","item":"1.1.0"}),
+                serde_json::json!({"shop":"1.2.0","item":"1.2.0"}),
                 now + 60_000,
             )
             .unwrap();
@@ -3412,7 +3971,7 @@ mod tests {
         let root = base.join("木立");
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         let now = now_millis();
 
@@ -3422,7 +3981,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             &[],
-            serde_json::json!({"shop":"1.1.0"}),
+            serde_json::json!({"shop":"1.2.0"}),
             now + TASK_SCOPE_MAX_TTL_MILLIS + 60_000,
         );
         assert!(too_long
@@ -3436,7 +3995,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             std::slice::from_ref(&unscoped.id),
-            serde_json::json!({"shop":"1.1.0"}),
+            serde_json::json!({"shop":"1.2.0"}),
             now + 60_000,
         );
         assert!(unscoped_lease
@@ -3445,7 +4004,7 @@ mod tests {
 
         let foreign = store.open_draft(&project.id, "foreign").unwrap();
         store
-            .bind_draft_domain(&project.id, &foreign.id, "item", "1.1.0", None)
+            .bind_draft_domain(&project.id, &foreign.id, "item", "1.2.0", None)
             .unwrap();
         let foreign_lease = store.issue_task_scope(
             &project.id,
@@ -3453,7 +4012,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             std::slice::from_ref(&foreign.id),
-            serde_json::json!({"shop":"1.1.0"}),
+            serde_json::json!({"shop":"1.2.0"}),
             now + 60_000,
         );
         assert!(foreign_lease
@@ -3476,12 +4035,12 @@ mod tests {
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
         fs::write(root.join(relative), "shopId=1\nprice=1\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "shop operations").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.2.0", None)
             .unwrap();
         for (index, operation_id) in operation_ids.iter().enumerate() {
             let revision_before = index as i64;
@@ -3556,7 +4115,7 @@ mod tests {
         fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
         fs::write(root.join(shop_path), "shopId=1\nprice=1\n").unwrap();
         fs::write(root.join(item_path), "cfg_item=1\nitemId=1\nstackLimit=1\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let composite_id = "global-pricing-and-items";
@@ -3591,7 +4150,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.1.0",
+                    "1.2.0",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -3696,6 +4255,140 @@ mod tests {
     }
 
     #[test]
+    fn capability_rollback_atomically_restores_a_disabled_project_version() {
+        let (base, store, project_id, receipt) = applied_shop_source(&["batch-price-shop"]);
+        let current = store
+            .compile_user_capability(
+                &project_id,
+                &CapabilityCompileRequest {
+                    receipt_id: receipt.id,
+                    id: "rollback-shop-pricing".to_string(),
+                    name: "Rollback shop pricing".to_string(),
+                    description: String::new(),
+                },
+            )
+            .unwrap();
+        let mut previous = current.clone();
+        previous.version = "0.0.9".to_string();
+        previous.status = "disabled".to_string();
+        let mut oldest = current.clone();
+        oldest.version = "0.0.8".to_string();
+        oldest.status = "active".to_string();
+        let mut connection = store.project_connection(&project_id).unwrap();
+        let transaction = connection.transaction().unwrap();
+        insert_project_capability(&transaction, &previous).unwrap();
+        insert_project_capability(&transaction, &oldest).unwrap();
+        transaction.commit().unwrap();
+        store
+            .set_user_capability_status(&project_id, &current.id, &current.version, "active")
+            .unwrap();
+        let active_after_activation = store
+            .list_user_capabilities(&project_id, Some("shop"))
+            .unwrap()
+            .into_iter()
+            .filter(|capability| capability.id == current.id && capability.status == "active")
+            .collect::<Vec<_>>();
+        assert_eq!(active_after_activation.len(), 1);
+        assert_eq!(active_after_activation[0].version, current.version);
+        let restored = store
+            .rollback_user_capability(
+                &project_id,
+                &CapabilityRollbackRequest {
+                    capability_id: current.id.clone(),
+                    scope: "project".to_string(),
+                    from_version: current.version.clone(),
+                    to_version: previous.version.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(restored.version, "0.0.9");
+        assert_eq!(restored.status, "active");
+        let active_after_rollback = store
+            .list_user_capabilities(&project_id, Some("shop"))
+            .unwrap()
+            .into_iter()
+            .filter(|capability| capability.id == current.id && capability.status == "active")
+            .collect::<Vec<_>>();
+        assert_eq!(active_after_rollback.len(), 1);
+        assert_eq!(active_after_rollback[0].version, previous.version);
+        assert_eq!(
+            store
+                .get_project_capability(&project_id, &current.id, Some(&current.version))
+                .unwrap()
+                .status,
+            "disabled"
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn shared_capability_activation_and_rollback_keep_one_active_of_three_versions() {
+        let (base, store, project_id, receipt) = applied_shop_source(&["batch-price-shop"]);
+        let compiled = store
+            .compile_user_capability(
+                &project_id,
+                &CapabilityCompileRequest {
+                    receipt_id: receipt.id,
+                    id: "shared-three-version-pricing".to_string(),
+                    name: "Shared three version pricing".to_string(),
+                    description: String::new(),
+                },
+            )
+            .unwrap();
+        let mut latest = compiled.clone();
+        latest.scope = "personal".to_string();
+        latest.status = "disabled".to_string();
+        let mut middle = latest.clone();
+        middle.version = "0.0.9".to_string();
+        middle.status = "active".to_string();
+        let mut oldest = latest.clone();
+        oldest.version = "0.0.8".to_string();
+
+        let mut connection = store.registry().unwrap();
+        let transaction = connection.transaction().unwrap();
+        insert_shared_capability(&transaction, &project_id, &latest).unwrap();
+        insert_shared_capability(&transaction, &project_id, &middle).unwrap();
+        insert_shared_capability(&transaction, &project_id, &oldest).unwrap();
+        transaction.commit().unwrap();
+
+        store
+            .set_shared_capability_status("personal", &latest.id, &latest.version, "active")
+            .unwrap();
+        let active_after_activation = store
+            .list_shared_capabilities(Some("shop"))
+            .unwrap()
+            .into_iter()
+            .map(|(_, capability)| capability)
+            .filter(|capability| capability.id == latest.id && capability.status == "active")
+            .collect::<Vec<_>>();
+        assert_eq!(active_after_activation.len(), 1);
+        assert_eq!(active_after_activation[0].version, latest.version);
+
+        let restored = store
+            .rollback_user_capability(
+                &project_id,
+                &CapabilityRollbackRequest {
+                    capability_id: latest.id.clone(),
+                    scope: "personal".to_string(),
+                    from_version: latest.version.clone(),
+                    to_version: middle.version.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(restored.version, middle.version);
+        let active_after_rollback = store
+            .list_shared_capabilities(Some("shop"))
+            .unwrap()
+            .into_iter()
+            .map(|(_, capability)| capability)
+            .filter(|capability| capability.id == latest.id && capability.status == "active")
+            .collect::<Vec<_>>();
+        assert_eq!(active_after_rollback.len(), 1);
+        assert_eq!(active_after_rollback[0].version, middle.version);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn capability_promotion_reuses_across_projects_and_resolves_scope_priority() {
         let (base, store, project_id, receipt) = applied_shop_source(&["batch-price-shop"]);
         let capability = store
@@ -3738,11 +4431,30 @@ mod tests {
 
         let mut local = capability.clone();
         local.scope = "project".to_string();
-        local.status = "active".to_string();
+        local.status = "disabled".to_string();
         let mut connection = store.project_connection(&second.id).unwrap();
         let transaction = connection.transaction().unwrap();
         insert_project_capability(&transaction, &local).unwrap();
         transaction.commit().unwrap();
+        let disabled_local_resolution = store
+            .resolve_user_capability(&second.id, &capability.id, Some(&capability.version))
+            .unwrap();
+        assert_eq!(disabled_local_resolution.resolved_scope, "personal");
+        assert_eq!(
+            store
+                .get_user_capability(&second.id, &capability.id, Some(&capability.version))
+                .unwrap()
+                .scope,
+            "personal"
+        );
+        store
+            .project_connection(&second.id)
+            .unwrap()
+            .execute(
+                "UPDATE user_capabilities SET status='active' WHERE id=?1 AND version=?2",
+                params![local.id, local.version],
+            )
+            .unwrap();
         let resolved = store
             .resolve_user_capabilities(&second.id, Some("shop"))
             .unwrap();
@@ -3797,7 +4509,15 @@ mod tests {
                 && step
                     .get("pluginVersion")
                     .and_then(serde_json::Value::as_str)
-                    == Some("1.1.0")
+                    == Some("1.2.0")
+                && step
+                    .get("parameterKey")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| value.starts_with("system"))
+                && step
+                    .get("operationIndex")
+                    .and_then(serde_json::Value::as_u64)
+                    .is_some()
         }));
         let active = store
             .set_user_capability_status(&project_id, &capability.id, &capability.version, "active")
@@ -3813,7 +4533,7 @@ mod tests {
                     &project_id,
                     &draft.id,
                     system_id,
-                    "1.1.0",
+                    "1.2.0",
                     Some(invocation_composite),
                 )
                 .unwrap();
@@ -3852,6 +4572,456 @@ mod tests {
     }
 
     #[test]
+    fn composite_transaction_restores_same_system_first_step_after_second_step_failure() {
+        let (base, store, project_id, composite_id, bindings) = checkpoint_failure_fixture();
+        let shop = bindings
+            .iter()
+            .find(|binding| binding.system_id == "shop")
+            .unwrap();
+        let result = store.with_composite_draft_transaction(
+            &project_id,
+            &composite_id,
+            |_| -> Result<(), String> {
+                store.patch_draft(
+                    &project_id,
+                    &shop.draft_id,
+                    0,
+                    &[crate::DraftChangeInput {
+                        path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                        content: Some("shopId=1\nprice=2\n".to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )?;
+                store.record_draft_operation_evidence(
+                    &project_id,
+                    &shop.draft_id,
+                    "batch-price-shop",
+                    &serde_json::json!({
+                        "operation":"batch-price-shop",
+                        "resourceIds":["shop:1"],
+                        "changes":{"price":2},
+                        "expectedRevision":0
+                    }),
+                    0,
+                    1,
+                )?;
+                Err("CAPABILITY_RUNTIME_FAILURE: second shop step".to_string())
+            },
+        );
+        assert!(result
+            .unwrap_err()
+            .starts_with("CAPABILITY_RUNTIME_FAILURE:"));
+        assert_composite_checkpoint_restored(&store, &project_id, &bindings);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_transaction_restores_cross_system_mid_run_failure() {
+        let (base, store, project_id, composite_id, bindings) = checkpoint_failure_fixture();
+        let shop = bindings
+            .iter()
+            .find(|binding| binding.system_id == "shop")
+            .unwrap();
+        let result = store.with_composite_draft_transaction(
+            &project_id,
+            &composite_id,
+            |_| -> Result<(), String> {
+                store.patch_draft(
+                    &project_id,
+                    &shop.draft_id,
+                    0,
+                    &[crate::DraftChangeInput {
+                        path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                        content: Some("shopId=1\nprice=2\n".to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )?;
+                store.record_draft_operation_evidence(
+                    &project_id,
+                    &shop.draft_id,
+                    "batch-price-shop",
+                    &serde_json::json!({
+                        "operation":"batch-price-shop",
+                        "resourceIds":["shop:1"],
+                        "changes":{"price":2},
+                        "expectedRevision":0
+                    }),
+                    0,
+                    1,
+                )?;
+                Err("CAPABILITY_RUNTIME_FAILURE: item step".to_string())
+            },
+        );
+        assert!(result
+            .unwrap_err()
+            .starts_with("CAPABILITY_RUNTIME_FAILURE:"));
+        assert_composite_checkpoint_restored(&store, &project_id, &bindings);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_transaction_reservation_preserves_a_concurrent_writer_after_rollback() {
+        let (base, store, project_id, composite_id, bindings) = checkpoint_failure_fixture();
+        let shop = bindings
+            .iter()
+            .find(|binding| binding.system_id == "shop")
+            .unwrap()
+            .clone();
+        let (reserved_tx, reserved_rx) = std::sync::mpsc::channel();
+        let (retry_tx, retry_rx) = std::sync::mpsc::channel();
+        let (completed_tx, completed_rx) = std::sync::mpsc::channel();
+        let writer_store = store.clone();
+        let writer_project_id = project_id.clone();
+        let writer_draft_id = shop.draft_id.clone();
+        let mut writer = None;
+        let result = store.with_composite_draft_transaction(
+            &project_id,
+            &composite_id,
+            |_| -> Result<(), String> {
+                writer = Some(std::thread::spawn(move || {
+                    let first = writer_store.patch_draft(
+                        &writer_project_id,
+                        &writer_draft_id,
+                        0,
+                        &[crate::DraftChangeInput {
+                            path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                            content: Some("shopId=1\nprice=9\n".to_string()),
+                            deleted: false,
+                            expected_sha256: None,
+                        }],
+                    );
+                    reserved_tx.send(first.unwrap_err()).unwrap();
+                    retry_rx.recv().unwrap();
+                    let revision = writer_store
+                        .patch_draft(
+                            &writer_project_id,
+                            &writer_draft_id,
+                            0,
+                            &[crate::DraftChangeInput {
+                                path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                                content: Some("shopId=1\nprice=9\n".to_string()),
+                                deleted: false,
+                                expected_sha256: None,
+                            }],
+                        )
+                        .map(|preview| preview.draft.revision);
+                    completed_tx.send(revision).unwrap();
+                }));
+                assert!(reserved_rx
+                    .recv()
+                    .unwrap()
+                    .starts_with("DRAFT_MUTATION_RESERVED:"));
+                store.patch_draft(
+                    &project_id,
+                    &shop.draft_id,
+                    0,
+                    &[crate::DraftChangeInput {
+                        path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                        content: Some("shopId=1\nprice=2\n".to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )?;
+                Err("CAPABILITY_RUNTIME_FAILURE: rollback before writer retry".to_string())
+            },
+        );
+        assert!(result
+            .unwrap_err()
+            .starts_with("CAPABILITY_RUNTIME_FAILURE:"));
+        retry_tx.send(()).unwrap();
+        assert_eq!(completed_rx.recv().unwrap().unwrap(), 1);
+        writer.take().unwrap().join().unwrap();
+        let preview = store.preview_draft(&project_id, &shop.draft_id).unwrap();
+        assert_eq!(preview.draft.revision, 1);
+        assert_eq!(preview.changes.len(), 1);
+        assert_eq!(
+            String::from_utf8(
+                store
+                    .draft_change_bytes(&project_id, &shop.draft_id, "引擎/Mir200/Envir/shop.txt",)
+                    .unwrap()
+                    .unwrap()
+            )
+            .unwrap(),
+            "shopId=1\nprice=9\n"
+        );
+        assert!(store
+            .list_draft_operation_evidence(&project_id, &shop.draft_id)
+            .unwrap()
+            .is_empty());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_transaction_os_lock_blocks_an_independent_store() {
+        let (base, store, project_id, composite_id, bindings) = checkpoint_failure_fixture();
+        let independent = governance_test_store(&base);
+        let shop = bindings
+            .iter()
+            .find(|binding| binding.system_id == "shop")
+            .unwrap();
+        let result = store.with_composite_draft_transaction(
+            &project_id,
+            &composite_id,
+            |_| -> Result<(), String> {
+                let competing = independent
+                    .patch_draft(
+                        &project_id,
+                        &shop.draft_id,
+                        0,
+                        &[crate::DraftChangeInput {
+                            path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                            content: Some("shopId=1\nprice=8\n".to_string()),
+                            deleted: false,
+                            expected_sha256: None,
+                        }],
+                    )
+                    .unwrap_err();
+                assert!(competing.starts_with("DRAFT_MUTATION_RESERVED:"));
+                store.patch_draft(
+                    &project_id,
+                    &shop.draft_id,
+                    0,
+                    &[crate::DraftChangeInput {
+                        path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                        content: Some("shopId=1\nprice=2\n".to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )?;
+                Err("CAPABILITY_RUNTIME_FAILURE: independent store remained isolated".to_string())
+            },
+        );
+        assert!(result
+            .unwrap_err()
+            .starts_with("CAPABILITY_RUNTIME_FAILURE:"));
+        let retried = independent
+            .patch_draft(
+                &project_id,
+                &shop.draft_id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                    content: Some("shopId=1\nprice=8\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+        assert_eq!(retried.draft.revision, 1);
+        assert_eq!(retried.changes.len(), 1);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn legacy_clone_holds_cross_process_lock_until_copy_finishes() {
+        let (base, store, project_id, _, bindings) = checkpoint_failure_fixture();
+        let source = bindings
+            .iter()
+            .find(|binding| binding.system_id == "shop")
+            .unwrap();
+        store
+            .patch_draft(
+                &project_id,
+                &source.draft_id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                    content: Some("shopId=1\nprice=2\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+        store
+            .project_connection(&project_id)
+            .unwrap()
+            .execute(
+                "UPDATE draft_domains SET legacy=1 WHERE draft_id=?1",
+                [&source.draft_id],
+            )
+            .unwrap();
+        let current = fs::read(base.join("项目/引擎/Mir200/Envir/shop.txt")).unwrap();
+        let (entered, release) = governance_copy_gate(&store);
+        let worker_store = store.clone();
+        let worker_project_id = project_id.clone();
+        let legacy_draft_id = source.draft_id.clone();
+        let worker = std::thread::spawn(move || {
+            worker_store.clone_legacy_draft(
+                &worker_project_id,
+                &LegacyDraftCloneRequest {
+                    legacy_draft_id,
+                    system_id: "shop".to_string(),
+                    plugin_version: "1.2.0".to_string(),
+                    expected_sources: BTreeMap::from([(
+                        "引擎/Mir200/Envir/shop.txt".to_string(),
+                        hash_bytes(&current),
+                    )]),
+                    intent: "legacy locked clone".to_string(),
+                },
+            )
+        });
+        entered.wait();
+        let independent = governance_test_store(&base);
+        let clone = independent
+            .list_drafts(&project_id)
+            .unwrap()
+            .into_iter()
+            .find(|draft| draft.intent == "legacy locked clone")
+            .unwrap();
+        let competing = independent
+            .patch_draft(
+                &project_id,
+                &clone.id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                    content: Some("shopId=1\nprice=9\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap_err();
+        assert!(competing.starts_with("DRAFT_MUTATION_RESERVED:"));
+        release.wait();
+        assert_eq!(worker.join().unwrap().unwrap().draft.revision, 1);
+        *store.governance_copy_test_gate.lock().unwrap() = None;
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn capability_replay_holds_cross_process_lock_until_cleanup_finishes() {
+        let (base, store, project_id, receipt) = applied_shop_source(&["batch-price-shop"]);
+        let (entered, release) = governance_copy_gate(&store);
+        let worker_store = store.clone();
+        let worker_project_id = project_id.clone();
+        let worker = std::thread::spawn(move || {
+            worker_store.compile_user_capability(
+                &worker_project_id,
+                &CapabilityCompileRequest {
+                    receipt_id: receipt.id,
+                    id: "locked-capability-replay".to_string(),
+                    name: "Locked replay".to_string(),
+                    description: String::new(),
+                },
+            )
+        });
+        entered.wait();
+        let independent = governance_test_store(&base);
+        let replay = independent
+            .list_drafts(&project_id)
+            .unwrap()
+            .into_iter()
+            .find(|draft| draft.intent == "capability isolated replay")
+            .unwrap();
+        let competing = independent
+            .patch_draft(
+                &project_id,
+                &replay.id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: "引擎/Mir200/Envir/shop.txt".to_string(),
+                    content: Some("shopId=1\nprice=9\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap_err();
+        assert!(competing.starts_with("DRAFT_MUTATION_RESERVED:"));
+        release.wait();
+        assert_eq!(
+            worker.join().unwrap().unwrap().id,
+            "locked-capability-replay"
+        );
+        *store.governance_copy_test_gate.lock().unwrap() = None;
+        assert_eq!(
+            independent
+                .get_draft(&project_id, &replay.id)
+                .unwrap()
+                .status,
+            DraftStatus::Discarded
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    fn governance_copy_gate(
+        store: &DomainStore,
+    ) -> (Arc<std::sync::Barrier>, Arc<std::sync::Barrier>) {
+        let entered = Arc::new(std::sync::Barrier::new(2));
+        let release = Arc::new(std::sync::Barrier::new(2));
+        *store.governance_copy_test_gate.lock().unwrap() = Some((entered.clone(), release.clone()));
+        (entered, release)
+    }
+
+    fn checkpoint_failure_fixture() -> (
+        std::path::PathBuf,
+        DomainStore,
+        String,
+        String,
+        Vec<CompositeDraftBinding>,
+    ) {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-capability-rollback-{}-{}",
+            std::process::id(),
+            CAPABILITY_TEST_NONCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let root = base.join("项目");
+        fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/shop.txt"),
+            "shopId=1\nprice=1\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/cfg_item.txt"),
+            "itemId=1\nstackLimit=1\n",
+        )
+        .unwrap();
+        let store = governance_test_store(&base);
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let composite_id = "checkpoint-failure".to_string();
+        for system_id in ["shop", "item"] {
+            let draft = store.open_draft(&project.id, system_id).unwrap();
+            store
+                .bind_draft_domain(
+                    &project.id,
+                    &draft.id,
+                    system_id,
+                    "1.2.0",
+                    Some(&composite_id),
+                )
+                .unwrap();
+        }
+        let bindings = store
+            .list_composite_draft_bindings(&project.id, &composite_id)
+            .unwrap();
+        (base, store, project.id, composite_id, bindings)
+    }
+
+    fn assert_composite_checkpoint_restored(
+        store: &DomainStore,
+        project_id: &str,
+        bindings: &[CompositeDraftBinding],
+    ) {
+        for binding in bindings {
+            let draft = store.get_draft(project_id, &binding.draft_id).unwrap();
+            assert_eq!(draft.revision, 0);
+            assert!(store
+                .preview_draft(project_id, &binding.draft_id)
+                .unwrap()
+                .changes
+                .is_empty());
+            assert!(store
+                .list_draft_operation_evidence(project_id, &binding.draft_id)
+                .unwrap()
+                .is_empty());
+        }
+    }
+
+    #[test]
     fn governance_migration_versions_capabilities_and_snapshot_restores_capability_and_memory() {
         let (base, store, project_id, receipt) = applied_shop_source(&["batch-price-shop"]);
         let capability = store
@@ -3887,7 +5057,7 @@ mod tests {
             .id;
         let snapshot = store.snapshot_domain_governance("shop").unwrap();
         let report = store
-            .migrate_domain_governance("shop", "1.1.0", "1.1.0")
+            .migrate_domain_governance("shop", "1.2.0", "1.2.0")
             .unwrap();
         assert!(report.compatible);
         assert_eq!(report.status, "applied");
@@ -3926,7 +5096,7 @@ mod tests {
                 .get_domain_memory(&project_id, &memory_id)
                 .unwrap()
                 .plugin_version,
-            "1.1.0"
+            "1.2.0"
         );
         let shared = store
             .shared_capability("personal", &capability.id, Some("0.1.0"))
@@ -4066,7 +5236,7 @@ mod tests {
         );
         let invocation = store.open_draft(&project_id, "invoke").unwrap();
         store
-            .bind_draft_domain(&project_id, &invocation.id, "shop", "1.1.0", None)
+            .bind_draft_domain(&project_id, &invocation.id, "shop", "1.2.0", None)
             .unwrap();
         connection
             .execute(
@@ -4096,7 +5266,7 @@ mod tests {
         let root = base.join("项目");
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = governance_test_store(&base);
         let project = store.import_project(&root).unwrap();
         store
             .project_connection(&project.id)
@@ -4113,7 +5283,7 @@ mod tests {
             summary: "atomic".to_string(),
             status: "applied".to_string(),
             draft_id: None,
-            plugin_versions: serde_json::json!({"shop":"1.1.0"}),
+            plugin_versions: serde_json::json!({"shop":"1.2.0"}),
             evidence: serde_json::json!({"diffHash":"x"}),
             created_at: now_millis(),
         };

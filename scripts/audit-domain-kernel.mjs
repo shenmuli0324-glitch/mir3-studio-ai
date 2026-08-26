@@ -2,9 +2,11 @@ import { Buffer } from 'node:buffer'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
+import { validateDomainFixtureContract, validateDomainManifestContract } from '../src-tauri/resources/mir3-domain-sdk/contract.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const packRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-packs')
+const sdkRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-sdk')
 const registryPath = join(packRoot, 'registry.json')
 const failures = []
 const safePrimitives = new Set(['text', 'xls', 'map', 'graph', 'timeline'])
@@ -19,6 +21,91 @@ const operationFamilies = {
 const evidenceRows = []
 const en = JSON.parse(readFileSync(join(root, 'src', 'i18n', 'locales', 'en-US.json'), 'utf8'))
 const zh = JSON.parse(readFileSync(join(root, 'src', 'i18n', 'locales', 'zh-CN.json'), 'utf8'))
+
+for (const file of [
+  'package.json',
+  'index.mjs',
+  'contract.mjs',
+  'README.md',
+  'CHANGELOG.md',
+  'fixtures/contract-corpus.json',
+  'fixtures/example-pack/package.json',
+  'fixtures/example-pack/domain.json',
+  'fixtures/example-pack/schemas/resource.schema.json',
+  'fixtures/example-pack/fixtures/valid.json',
+  'fixtures/example-pack/fixtures/invalid.json',
+  'fixtures/example-pack/fixtures/expected-diagnostics.json',
+]) {
+  if (!existsSync(join(sdkRoot, file)))
+    failures.push(`Domain Plugin SDK is missing ${file}`)
+}
+if (existsSync(join(sdkRoot, 'package.json'))) {
+  const sdkPackage = JSON.parse(readFileSync(join(sdkRoot, 'package.json'), 'utf8'))
+  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.2.0')
+    failures.push('Domain Plugin SDK package identity or SemVer is invalid')
+  if (sdkPackage.exports?.['./contract'] !== './contract.mjs')
+    failures.push('Domain Plugin SDK contract export is missing')
+}
+try {
+  const corpus = JSON.parse(readFileSync(join(sdkRoot, 'fixtures/contract-corpus.json'), 'utf8'))
+  for (const accepted of corpus.accepted) {
+    const packRoot = join(sdkRoot, 'fixtures', accepted.packRoot)
+    const manifest = JSON.parse(readFileSync(join(packRoot, 'domain.json'), 'utf8'))
+    validateDomainManifestContract(manifest)
+    validateDomainFixtureContract({
+      valid: JSON.parse(readFileSync(join(packRoot, manifest.fixtures.valid), 'utf8')),
+      invalid: JSON.parse(readFileSync(join(packRoot, manifest.fixtures.invalid), 'utf8')),
+      expectedDiagnostics: JSON.parse(readFileSync(join(packRoot, manifest.fixtures.expectedDiagnostics), 'utf8')),
+    })
+    if (manifest.systemId !== accepted.systemId || manifest.version !== accepted.version)
+      throw new Error(`DOMAIN_SDK_CORPUS_IDENTITY_INVALID: ${accepted.name}`)
+    for (const range of corpus.acceptedEngineRanges) {
+      const mutated = structuredClone(manifest)
+      mutated.supportedEngineRange = range
+      validateDomainManifestContract(mutated)
+    }
+    for (const range of corpus.rejectedEngineRanges) {
+      const mutated = structuredClone(manifest)
+      mutated.supportedEngineRange = range
+      let rejectedBySdk = false
+      try {
+        validateDomainManifestContract(mutated)
+      }
+      catch {
+        rejectedBySdk = true
+      }
+      if (!rejectedBySdk)
+        throw new Error(`DOMAIN_SDK_REJECTED_ENGINE_RANGE_ACCEPTED: ${range}`)
+    }
+    for (const rejected of corpus.rejected) {
+      const mutated = structuredClone(manifest)
+      setJsonPointer(mutated, rejected.pointer, rejected.value)
+      let rejectedBySdk = false
+      try {
+        validateDomainManifestContract(mutated)
+      }
+      catch {
+        rejectedBySdk = true
+      }
+      if (!rejectedBySdk)
+        throw new Error(`DOMAIN_SDK_REJECTED_CORPUS_ACCEPTED: ${rejected.name}`)
+    }
+  }
+}
+catch (error) {
+  failures.push(`Domain Plugin SDK example contract failed: ${error.message}`)
+}
+const generatorSource = readFileSync(join(root, 'scripts', 'generate-domain-packs.mjs'), 'utf8')
+if (!generatorSource.includes('defineDomainManifest(createPack(definition))') || !generatorSource.includes('defineDomainFixtures(fixtures('))
+  failures.push('Domain pack generator does not consume the public SDK entrypoints')
+
+function setJsonPointer(target, pointer, value) {
+  const segments = pointer.split('/').slice(1).map(segment => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+  let parent = target
+  for (const segment of segments.slice(0, -1))
+    parent = parent[segment]
+  parent[segments.at(-1)] = structuredClone(value)
+}
 
 if (!existsSync(registryPath)) {
   failures.push('Domain registry is missing')
@@ -96,6 +183,14 @@ for (const pack of registry.packs) {
   }
   if (pack.kind !== 'domain' || !/^\d+\.\d+\.\d+$/.test(pack.version || '') || pack.kernelApiRange !== '^1.0.0')
     failures.push(`${pack.systemId}: invalid kind/version/kernelApiRange`)
+  if (pack.supportedEngineRange === '*'
+    || pack.engineCompatibility?.strategy !== 'evidence-gated-auto-generalization-v1'
+    || JSON.stringify(pack.engineCompatibility?.versionAliases) !== JSON.stringify(['semver', 'v-prefixed-semver', 'major-minor'])
+    || JSON.stringify(pack.engineCompatibility?.requiredEvidence) !== JSON.stringify(['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'])
+    || pack.engineCompatibility?.unknownVersionPolicy !== 'readonly'
+    || pack.engineCompatibility?.incompatibleVersionPolicy !== 'readonly') {
+    failures.push(`${pack.systemId}: engine compatibility must be evidence-gated and fail read-only`)
+  }
   if (!pack.renderer || !Array.isArray(pack.dependencies) || !Array.isArray(pack.capabilities))
     failures.push(`${pack.systemId}: renderer, dependencies, and capabilities are required`)
   if (!supportedRenderers.has(pack.renderer))
@@ -198,6 +293,12 @@ for (const pack of registry.packs) {
   }
   if (existsSync(join(directory, 'domain.json'))) {
     const local = JSON.parse(readFileSync(join(directory, 'domain.json'), 'utf8'))
+    try {
+      validateDomainManifestContract(local)
+    }
+    catch (error) {
+      failures.push(`${pack.systemId}: public SDK contract failed (${error.message})`)
+    }
     if (JSON.stringify(local) !== JSON.stringify(pack))
       failures.push(`${pack.systemId}: domain.json differs from registry.json`)
   }
@@ -218,7 +319,8 @@ for (const pack of registry.packs) {
     if (manifest.mir3Domain?.resourceSchema !== 'schemas/resource.schema.json')
       failures.push(`${pack.systemId}: package metadata does not expose the resource schema`)
     if (manifest.mir3Domain?.kernelApiRange !== pack.kernelApiRange
-      || manifest.mir3Domain?.supportedEngineRange !== pack.supportedEngineRange) {
+      || manifest.mir3Domain?.supportedEngineRange !== pack.supportedEngineRange
+      || JSON.stringify(manifest.mir3Domain?.engineCompatibility) !== JSON.stringify(pack.engineCompatibility)) {
       failures.push(`${pack.systemId}: package compatibility declaration differs from domain.json`)
     }
   }

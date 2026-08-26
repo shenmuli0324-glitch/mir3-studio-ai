@@ -336,9 +336,10 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         .collect::<Vec<_>>();
                     capabilities.extend(
                         store
-                            .list_user_capabilities(project_id, system_id)?
+                            .resolve_user_capabilities(project_id, system_id)?
                             .into_iter()
-                            .map(|capability| {
+                            .map(|resolution| {
+                                let capability = resolution.capability;
                                 json!({
                                     "source":"user",
                                     "systemId":capability.system_id,
@@ -346,6 +347,9 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                                     "version":capability.version,
                                     "name":capability.name,
                                     "scope":capability.scope,
+                                    "resolvedScope":resolution.resolved_scope,
+                                    "sourceProjectId":resolution.source_project_id,
+                                    "shadowedScopes":resolution.shadowed_scopes,
                                     "status":capability.status,
                                     "readSystems":capability.read_systems,
                                     "writeSystems":capability.write_systems,
@@ -365,12 +369,22 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         .find(|capability| capability.id == capability_id)
                         .map(|capability| (system.system_id, capability))
                 }) {
+                    validate_requested_version(&args, &found.1.version)?;
                     return Ok(
                         json!({"source":"official","systemId":found.0,"capability":found.1}),
                     );
                 }
-                let capability = store.get_user_capability(project_id, &capability_id, None)?;
-                Ok(json!({"source":"user","systemId":capability.system_id,"capability":capability}))
+                let requested_version = args.get("version").and_then(Value::as_str);
+                let resolution =
+                    store.resolve_user_capability(project_id, &capability_id, requested_version)?;
+                Ok(json!({
+                    "source":"user",
+                    "systemId":resolution.capability.system_id,
+                    "capability":resolution.capability,
+                    "resolvedScope":resolution.resolved_scope,
+                    "sourceProjectId":resolution.source_project_id,
+                    "shadowedScopes":resolution.shadowed_scopes
+                }))
             })
         }
         "mir3_capability_invoke" => {
@@ -483,7 +497,6 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         params,
                     );
                 }
-                let draft_id = required_string(&args, "draftId")?;
                 let requested_version = required_string(&args, "version")?;
                 let user = store.get_user_capability(project_id, &capability_id, Some(&requested_version))?;
                 if user.status != "active" {
@@ -492,6 +505,18 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         capability_id, user.version
                     ));
                 }
+                if user.system_id == "__global__" {
+                    return invoke_global_user_capability(
+                        store,
+                        project_id,
+                        scope_token,
+                        &capability_id,
+                        &requested_version,
+                        &user,
+                        &args,
+                    );
+                }
+                let draft_id = required_string(&args, "draftId")?;
                 let scoped = store.validate_user_capability_version_for_draft(
                     project_id,
                     &draft_id,
@@ -653,6 +678,167 @@ fn find_official_capability(
     Ok(matches.into_iter().next())
 }
 
+fn invoke_global_user_capability(
+    store: &DomainStore,
+    project_id: &str,
+    scope_token: &str,
+    capability_id: &str,
+    requested_version: &str,
+    capability: &mir3_domain::UserCapability,
+    args: &Value,
+) -> Result<Value, String> {
+    if args.get("draftId").is_some() {
+        return Err(
+            "GLOBAL_CAPABILITY_COMPOSITE_REQUIRED: global workflows do not accept draftId"
+                .to_string(),
+        );
+    }
+    let composite_id = required_string(args, "compositeId")?;
+    let scoped = store.validate_global_capability_for_composite(
+        project_id,
+        &composite_id,
+        capability_id,
+        Some(requested_version),
+    )?;
+    let params = args
+        .get("params")
+        .ok_or_else(|| "MCP_ARGUMENT_INVALID: params is required".to_string())?;
+    validate_json_schema(&scoped.parameter_schema, params, "params")?;
+    let bindings = store.list_composite_draft_bindings(project_id, &composite_id)?;
+    let semantic_steps = scoped
+        .steps
+        .as_array()
+        .ok_or_else(|| "CAPABILITY_STEP_INVALID: steps must be an array".to_string())?;
+    let mut parameter_counts = std::collections::BTreeMap::<String, usize>::new();
+    for step in semantic_steps {
+        let key = step
+            .get("parameterKey")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                "GLOBAL_CAPABILITY_PARAMETER_KEY_REQUIRED: recompile this workflow".to_string()
+            })?;
+        *parameter_counts.entry(key.to_string()).or_default() += 1;
+    }
+    let mut prepared = Vec::with_capacity(semantic_steps.len());
+    for step in semantic_steps {
+        let system_id = step
+            .get("systemId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                "GLOBAL_CAPABILITY_STEP_SYSTEM_REQUIRED: systemId missing".to_string()
+            })?;
+        let binding = bindings
+            .iter()
+            .find(|binding| binding.system_id == system_id)
+            .ok_or_else(|| format!("GLOBAL_CAPABILITY_DRAFT_MISSING: {system_id}"))?;
+        store.authorize_task_scope(
+            project_id,
+            scope_token,
+            Some(system_id),
+            Some(system_id),
+            Some(&binding.draft_id),
+        )?;
+        let operation_id = step
+            .get("operation")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "CAPABILITY_STEP_INVALID: operation missing".to_string())?;
+        let manifest = store.draft_domain_manifest(project_id, &binding.draft_id)?;
+        let operation = manifest
+            .operations
+            .iter()
+            .find(|operation| operation.id == operation_id)
+            .ok_or_else(|| format!("CAPABILITY_OPERATION_NOT_REGISTERED: {operation_id}"))?;
+        let parameter_key = step
+            .get("parameterKey")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "GLOBAL_CAPABILITY_PARAMETER_KEY_REQUIRED: missing key".to_string())?;
+        let operation_index = step
+            .get("operationIndex")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                "GLOBAL_CAPABILITY_OPERATION_INDEX_REQUIRED: missing index".to_string()
+            })?;
+        let system_params = params
+            .get(parameter_key)
+            .ok_or_else(|| format!("CAPABILITY_PARAMETER_REQUIRED: {parameter_key}"))?;
+        let supplied = if parameter_counts
+            .get(parameter_key)
+            .copied()
+            .unwrap_or_default()
+            == 1
+        {
+            system_params.clone()
+        } else {
+            system_params
+                .get(format!("step{operation_index}"))
+                .cloned()
+                .ok_or_else(|| {
+                    format!("CAPABILITY_PARAMETER_REQUIRED: {parameter_key}.step{operation_index}")
+                })?
+        };
+        let mut operation_params = supplied.as_object().cloned().ok_or_else(|| {
+            format!("CAPABILITY_PARAMETER_INVALID: {parameter_key} must be an object")
+        })?;
+        operation_params.insert(
+            "operation".to_string(),
+            Value::String(operation_id.to_string()),
+        );
+        operation_params.insert(
+            "expectedRevision".to_string(),
+            Value::from(store.get_draft(project_id, &binding.draft_id)?.revision),
+        );
+        let operation_params = Value::Object(operation_params);
+        validate_json_schema(&operation.parameter_schema, &operation_params, "params")?;
+        prepared.push((
+            binding.draft_id.clone(),
+            system_id.to_string(),
+            operation_id.to_string(),
+            operation.steps.clone(),
+            operation_params,
+        ));
+    }
+    let (results, drafts) =
+        store.with_composite_draft_transaction(project_id, &composite_id, |_| {
+            let mut results = Vec::with_capacity(prepared.len());
+            for (draft_id, system_id, operation_id, steps, mut operation_params) in prepared {
+                operation_params["expectedRevision"] =
+                    Value::from(store.get_draft(project_id, &draft_id)?.revision);
+                results.push(execute_manifest_operation(
+                    store,
+                    project_id,
+                    &draft_id,
+                    &operation_id,
+                    &system_id,
+                    &steps,
+                    &operation_params,
+                )?);
+            }
+            let drafts = store
+                .list_composite_draft_bindings(project_id, &composite_id)?
+                .into_iter()
+                .map(|binding| {
+                    let validation = store.validate_domain_draft(project_id, &binding.draft_id)?;
+                    Ok(json!({
+                        "draftId":binding.draft_id,
+                        "systemId":binding.system_id,
+                        "pluginVersion":binding.plugin_version,
+                        "revision":binding.revision,
+                        "validation":validation,
+                    }))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            Ok((results, drafts))
+        })?;
+    Ok(json!({
+        "capabilityId":capability_id,
+        "version":requested_version,
+        "compositeId":composite_id,
+        "writeSystems":capability.write_systems,
+        "drafts":drafts,
+        "results":results,
+    }))
+}
+
 fn system_list_payload(systems: Vec<DomainManifest>) -> Value {
     json!({"systems": systems.into_iter().map(|system| json!({
         "systemId": system.system_id,
@@ -725,14 +911,14 @@ fn tool_definitions() -> Vec<Value> {
             "mir3_capability_describe",
             "读取一个能力的版本和安全策略。",
             with_scope(
-                json!({"type":"object","properties":{"capabilityId":{"type":"string"}},"required":["capabilityId"],"additionalProperties":false}),
+                json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"}},"required":["capabilityId"],"additionalProperties":false}),
             ),
         ),
         tool(
             "mir3_capability_invoke",
             "在外置 Draft 中调用一个安全领域能力。",
             with_scope(
-                json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"},"systemId":{"type":"string"},"draftId":{"type":"string"},"params":{"type":"object"}},"required":["capabilityId","params"],"additionalProperties":false}),
+                json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"},"systemId":{"type":"string"},"draftId":{"type":"string"},"compositeId":{"type":"string"},"params":{"type":"object"}},"required":["capabilityId","params"],"additionalProperties":false}),
             ),
         ),
         tool(
@@ -2930,6 +3116,7 @@ mod tests {
         let root = base.join("项目/参数编译矩阵");
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir/domains")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
         let pack_root =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../resources/mir3-domain-packs");
         let bootstrap = DomainStore::new(base.join("bootstrap")).unwrap();
@@ -3181,7 +3368,7 @@ mod tests {
                 &["quest".to_string()],
                 &["quest".to_string()],
                 &[],
-                json!({"quest":"1.1.0"}),
+                json!({"quest":"1.2.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3218,13 +3405,14 @@ mod tests {
         let quest_path = "引擎/Mir200/Envir/QuestDiary/quest.txt";
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Envir/QuestDiary")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
         fs::write(root.join(quest_path), "quest=0\n").unwrap();
         let store = DomainStore::new(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "检查 Draft Diff").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.2.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -3246,7 +3434,7 @@ mod tests {
                 &["quest".to_string()],
                 &["quest".to_string()],
                 std::slice::from_ref(&draft.id),
-                json!({"quest":"1.1.0"}),
+                json!({"quest":"1.2.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3272,7 +3460,7 @@ mod tests {
 
         let unrelated = store.open_draft(&project.id, "另一个 Draft").unwrap();
         store
-            .bind_draft_domain(&project.id, &unrelated.id, "quest", "1.1.0", None)
+            .bind_draft_domain(&project.id, &unrelated.id, "quest", "1.2.0", None)
             .unwrap();
         let denied = call_tool(
             &store,
@@ -3327,6 +3515,7 @@ mod tests {
         let level_path = "客户端/dev/Level/Level.txt";
         fs::create_dir_all(root.join("客户端/dev/Level")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200/Monster")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
         fs::write(
             root.join(level_path),
             "level=1\nrequiredExperience=100\nrecommendedMonsterId=M1\n",
@@ -3344,7 +3533,7 @@ mod tests {
             .open_draft(&project.id, "MCP overlay validation")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.2.0", None)
             .unwrap();
         store
             .patch_draft(
@@ -3369,7 +3558,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                json!({"level":"1.1.0"}),
+                json!({"level":"1.2.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3416,6 +3605,7 @@ mod tests {
         let map_path = root.join("引擎/Mir200/Envir/MapInfo.txt");
         fs::create_dir_all(map_path.parent().unwrap()).unwrap();
         fs::create_dir_all(root.join("客户端/dev/Lua")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
         fs::write(
             &map_path,
             "mapinfo\ndisplayName=Old\nwidth=10\nheight=10\nsafeZoneMode=none\nspawnNpcId=npc1\n",
@@ -3426,7 +3616,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "安全能力调用").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.2.0", None)
             .unwrap();
         let lease = store
             .issue_task_scope(
@@ -3435,7 +3625,7 @@ mod tests {
                 &["map".to_string()],
                 &["map".to_string()],
                 &[],
-                json!({"map":"1.1.0"}),
+                json!({"map":"1.2.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3543,11 +3733,15 @@ mod tests {
             None,
             multiline_injection_params,
         );
-        assert!(tool_error(&multiline_injection).starts_with("DOMAIN_FIELD_VALUE_INVALID:"));
+        assert!(
+            tool_error(&multiline_injection).starts_with("DOMAIN_FIELD_VALUE_INVALID:"),
+            "{}",
+            tool_error(&multiline_injection)
+        );
 
         let shop_draft = store.open_draft(&project.id, "越权商城能力").unwrap();
         store
-            .bind_draft_domain(&project.id, &shop_draft.id, "shop", "1.1.0", None)
+            .bind_draft_domain(&project.id, &shop_draft.id, "shop", "1.2.0", None)
             .unwrap();
         let scope_escalation = call_tool(
             &store,
@@ -3568,7 +3762,7 @@ mod tests {
             &project.id,
             &lease.token,
             &draft.id,
-            Some("1.1.0"),
+            Some("1.2.0"),
             valid_params,
         );
         assert_eq!(applied.get("isError"), Some(&Value::Bool(false)));
@@ -3591,13 +3785,14 @@ mod tests {
         let shop_path = root.join("引擎/Mir200/Envir/shop.txt");
         fs::create_dir_all(shop_path.parent().unwrap()).unwrap();
         fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
         fs::write(&shop_path, "shopId=1\nprice=1\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = test_store(&base);
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let source = store.open_draft(&project.id, "source task").unwrap();
         store
-            .bind_draft_domain(&project.id, &source.id, "shop", "1.1.0", None)
+            .bind_draft_domain(&project.id, &source.id, "shop", "1.2.0", None)
             .unwrap();
         store
             .patch_draft(
@@ -3665,6 +3860,53 @@ mod tests {
         store
             .set_user_capability_status(&project.id, &capability.id, &capability.version, "active")
             .unwrap();
+        store
+            .promote_user_capability(
+                &project.id,
+                &mir3_domain::CapabilityPromotionRequest {
+                    capability_id: capability.id.clone(),
+                    version: capability.version.clone(),
+                    target_scope: "personal".to_string(),
+                },
+            )
+            .unwrap();
+        store
+            .set_user_capability_status(
+                &project.id,
+                &capability.id,
+                &capability.version,
+                "disabled",
+            )
+            .unwrap();
+        let reuse_root = base.join("项目/共享能力新项目");
+        fs::create_dir_all(reuse_root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(reuse_root.join("引擎/Mir200")).unwrap();
+        let reuse_project = store.import_project(&reuse_root).unwrap();
+        let reuse_lease = store
+            .issue_task_scope(
+                &reuse_project.id,
+                "shared-capability-list",
+                &["shop".to_string()],
+                &["shop".to_string()],
+                &[],
+                json!({"shop":"1.2.0"}),
+                mir3_domain::now_millis() + 60_000,
+            )
+            .unwrap();
+        let shared_list = call_tool(
+            &store,
+            &reuse_project.id,
+            "mir3_capability_list",
+            json!({"scopeToken":reuse_lease.token,"systemId":"shop"}),
+        );
+        let shared = shared_list
+            .pointer("/structuredContent/capabilities")
+            .and_then(Value::as_array)
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == capability.id)
+            .unwrap();
+        assert_eq!(shared["resolvedScope"], "personal");
 
         let xls_path = root.join("引擎/Mir200/Envir/Shop/cfg_store.xls");
         fs::create_dir_all(xls_path.parent().unwrap()).unwrap();
@@ -3709,7 +3951,7 @@ mod tests {
 
         let target = store.open_draft(&project.id, "new session").unwrap();
         store
-            .bind_draft_domain(&project.id, &target.id, "shop", "1.1.0", None)
+            .bind_draft_domain(&project.id, &target.id, "shop", "1.2.0", None)
             .unwrap();
         let target_lease = store
             .issue_task_scope(
@@ -3718,10 +3960,24 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 std::slice::from_ref(&target.id),
-                json!({"shop":"1.1.0"}),
+                json!({"shop":"1.2.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
+        let described = call_tool(
+            &store,
+            &project.id,
+            "mir3_capability_describe",
+            json!({
+                "scopeToken":target_lease.token.clone(),
+                "capabilityId":capability.id,
+                "version":capability.version
+            }),
+        );
+        assert_eq!(
+            described.pointer("/structuredContent/resolvedScope"),
+            Some(&Value::String("personal".to_string()))
+        );
         let missing_version = call_tool(
             &store,
             &project.id,
@@ -3752,6 +4008,405 @@ mod tests {
             1
         );
         fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn global_workflow_invokes_all_scoped_composite_drafts() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-mcp-global-capability-{}-{}",
+            std::process::id(),
+            mir3_domain::now_millis()
+        ));
+        let root = base.join("项目/全局能力");
+        fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Envir/Shop")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Envir/Item")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/shop.txt"),
+            "shopId=1\nprice=1\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/cfg_item.txt"),
+            "itemId=1\nstackLimit=1\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("引擎/Mir200/Envir/shop-extra.txt"),
+            "shopId=2\nprice=1\n",
+        )
+        .unwrap();
+        let store = test_store(&base);
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let source_composite = "source-global-workflow";
+        let source_cases = [
+            (
+                "shop",
+                "batch-price-shop",
+                "引擎/Mir200/Envir/shop.txt",
+                "shopId=1\nprice=2\n",
+                json!({"operation":"batch-price-shop","resourceIds":["shop:source"],"changes":{"price":2},"expectedRevision":0}),
+            ),
+            (
+                "item",
+                "batch-edit-item",
+                "引擎/Mir200/Envir/cfg_item.txt",
+                "itemId=1\nstackLimit=2\n",
+                json!({"operation":"batch-edit-item","resourceIds":["item:source"],"changes":{"stackLimit":2},"expectedRevision":0}),
+            ),
+            (
+                "shop",
+                "batch-price-shop",
+                "引擎/Mir200/Envir/shop-extra.txt",
+                "shopId=2\nprice=3\n",
+                json!({"operation":"batch-price-shop","resourceIds":["shop:source-2"],"changes":{"price":3},"expectedRevision":0}),
+            ),
+        ];
+        let mut confirmations = Vec::new();
+        for (system_id, operation_id, path, content, parameters) in source_cases {
+            let draft = store.open_draft(&project.id, operation_id).unwrap();
+            store
+                .bind_draft_domain(
+                    &project.id,
+                    &draft.id,
+                    system_id,
+                    "1.2.0",
+                    Some(source_composite),
+                )
+                .unwrap();
+            store
+                .patch_draft(
+                    &project.id,
+                    &draft.id,
+                    0,
+                    &[DraftChangeInput {
+                        path: path.to_string(),
+                        content: Some(content.to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )
+                .unwrap();
+            let evidence = store
+                .record_draft_operation_evidence(
+                    &project.id,
+                    &draft.id,
+                    operation_id,
+                    &parameters,
+                    0,
+                    1,
+                )
+                .unwrap();
+            let change_hash = store
+                .draft_change_evidence_hash(&project.id, &draft.id)
+                .unwrap();
+            store
+                .seal_draft_operation_replay(
+                    &project.id,
+                    &draft.id,
+                    evidence.sequence,
+                    &change_hash,
+                )
+                .unwrap();
+            let preview = store.preview_draft(&project.id, &draft.id).unwrap();
+            confirmations.push(mir3_domain::CompositeDraftConfirmation {
+                draft_id: draft.id,
+                expected_revision: preview.draft.revision,
+                expected_diff_hash: preview.diff_hash,
+            });
+        }
+        let applied = store
+            .apply_composite_drafts(&project.id, source_composite, &confirmations)
+            .unwrap();
+        let receipts = confirmations
+            .iter()
+            .map(|confirmation| {
+                store
+                    .record_applied_draft_receipt(
+                        &project.id,
+                        &confirmation.draft_id,
+                        &confirmation.expected_diff_hash,
+                        &applied.snapshot,
+                    )
+                    .unwrap()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let capability = store
+            .compile_global_workflow_capability(
+                &project.id,
+                &mir3_domain::GlobalCapabilityCompileRequest {
+                    receipt_ids: receipts.iter().map(|receipt| receipt.id.clone()).collect(),
+                    id: "global-shop-item-replay".to_string(),
+                    name: "Global shop item replay".to_string(),
+                    description: String::new(),
+                },
+            )
+            .unwrap();
+        store
+            .set_user_capability_status(&project.id, &capability.id, &capability.version, "active")
+            .unwrap();
+        write_contract_xls_rows(
+            &root.join("引擎/Mir200/Envir/Shop/cfg_store.xls"),
+            "商品",
+            &[
+                "offerId",
+                "shopId",
+                "itemId",
+                "currencyItemId",
+                "price",
+                "startEpochSeconds",
+                "endEpochSeconds",
+            ],
+            &[
+                &[
+                    "OFFER_A",
+                    "SHOP_A",
+                    "ITEM_A",
+                    "ITEM_A",
+                    "10",
+                    "0",
+                    "4102444800",
+                ],
+                &[
+                    "OFFER_B",
+                    "SHOP_A",
+                    "ITEM_A",
+                    "ITEM_A",
+                    "11",
+                    "0",
+                    "4102444800",
+                ],
+            ],
+        );
+        write_contract_xls(
+            &root.join("引擎/Mir200/Envir/Item/cfg_item.xls"),
+            "物品",
+            &[
+                "itemId",
+                "itemType",
+                "stackLimit",
+                "clientIcon",
+                "engineStdMode",
+                "linkedBuffId",
+            ],
+            &[
+                "ITEM_A",
+                "material",
+                "10",
+                "item-a.png",
+                "1",
+                "buff:fixture-1",
+            ],
+        );
+        store.scan_project(&project.id, || false).unwrap();
+        let shop_resource = find_resource_id(&store, &project.id, "shop", "OFFER_A");
+        let second_shop_resource = find_resource_id(&store, &project.id, "shop", "OFFER_B");
+        let item_resource = find_resource_id(&store, &project.id, "item", "ITEM_A");
+        let target_composite = "target-global-workflow";
+        let mut target_drafts = Vec::new();
+        for system_id in ["shop", "item"] {
+            let draft = store.open_draft(&project.id, system_id).unwrap();
+            store
+                .bind_draft_domain(
+                    &project.id,
+                    &draft.id,
+                    system_id,
+                    "1.2.0",
+                    Some(target_composite),
+                )
+                .unwrap();
+            target_drafts.push(draft.id);
+        }
+        let lease = store
+            .issue_task_scope(
+                &project.id,
+                "global-workflow-task",
+                &["shop".to_string(), "item".to_string()],
+                &["shop".to_string(), "item".to_string()],
+                &target_drafts,
+                json!({"shop":"1.2.0","item":"1.2.0"}),
+                mir3_domain::now_millis() + 60_000,
+            )
+            .unwrap();
+        let mut parameters = serde_json::Map::new();
+        let mut shop_step_index = 0;
+        for step in capability.steps.as_array().unwrap() {
+            let key = step["parameterKey"].as_str().unwrap();
+            let system_id = step["systemId"].as_str().unwrap();
+            let value = if system_id == "shop" {
+                let resource_id = if shop_step_index == 0 {
+                    shop_resource.clone()
+                } else {
+                    second_shop_resource.clone()
+                };
+                shop_step_index += 1;
+                json!({"resourceIds":[resource_id],"changes":{"price":20 + shop_step_index}})
+            } else {
+                json!({"resourceIds":[item_resource.clone()],"changes":{"stackLimit":20}})
+            };
+            parameters.insert(key.to_string(), value);
+        }
+        fs::remove_file(root.join("引擎/Mir200/Envir/Item/cfg_item.xls")).unwrap();
+        let failed = call_tool(
+            &store,
+            &project.id,
+            "mir3_capability_invoke",
+            json!({
+                "scopeToken":lease.token,
+                "capabilityId":capability.id,
+                "version":capability.version,
+                "compositeId":target_composite,
+                "params":parameters.clone(),
+            }),
+        );
+        assert_eq!(
+            failed.get("isError"),
+            Some(&Value::Bool(true)),
+            "{failed:#}"
+        );
+        for draft_id in &target_drafts {
+            assert_eq!(store.get_draft(&project.id, draft_id).unwrap().revision, 0);
+            assert!(store
+                .list_draft_operation_evidence(&project.id, draft_id)
+                .unwrap()
+                .is_empty());
+        }
+        write_contract_xls(
+            &root.join("引擎/Mir200/Envir/Item/cfg_item.xls"),
+            "物品",
+            &[
+                "itemId",
+                "itemType",
+                "stackLimit",
+                "clientIcon",
+                "engineStdMode",
+                "linkedBuffId",
+            ],
+            &[
+                "ITEM_A",
+                "material",
+                "10",
+                "item-a.png",
+                "1",
+                "buff:fixture-1",
+            ],
+        );
+        let invoked = call_tool(
+            &store,
+            &project.id,
+            "mir3_capability_invoke",
+            json!({
+                "scopeToken":lease.token,
+                "capabilityId":capability.id,
+                "version":capability.version,
+                "compositeId":target_composite,
+                "params":parameters,
+            }),
+        );
+        assert_eq!(
+            invoked.get("isError"),
+            Some(&Value::Bool(false)),
+            "{invoked:#}"
+        );
+        assert_eq!(
+            invoked
+                .pointer("/structuredContent/drafts")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
+        let bindings = store
+            .list_composite_draft_bindings(&project.id, target_composite)
+            .unwrap();
+        assert_eq!(
+            bindings
+                .iter()
+                .find(|binding| binding.system_id == "shop")
+                .unwrap()
+                .revision,
+            2
+        );
+        assert_eq!(
+            bindings
+                .iter()
+                .find(|binding| binding.system_id == "item")
+                .unwrap()
+                .revision,
+            1
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    fn write_contract_xls(
+        path: &std::path::Path,
+        sheet_name: &str,
+        headers: &[&str],
+        row: &[&str],
+    ) {
+        write_contract_xls_rows(path, sheet_name, headers, &[row]);
+    }
+
+    fn write_contract_xls_rows(
+        path: &std::path::Path,
+        sheet_name: &str,
+        headers: &[&str],
+        rows: &[&[&str]],
+    ) {
+        let mut sheet = Biff8Sheet::new(sheet_name);
+        for (column, value) in headers.iter().enumerate() {
+            sheet
+                .set(
+                    0,
+                    column,
+                    Biff8Cell::general(Biff8Value::Text((*value).to_string())),
+                )
+                .unwrap();
+        }
+        for (row_index, row) in rows.iter().enumerate() {
+            for (column, value) in row.iter().enumerate() {
+                sheet
+                    .set(
+                        u32::try_from(row_index + 1).unwrap(),
+                        column,
+                        Biff8Cell::general(Biff8Value::Text((*value).to_string())),
+                    )
+                    .unwrap();
+            }
+        }
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        fs::write(path, book.to_cfb_bytes().unwrap()).unwrap();
+    }
+
+    fn test_store(base: &std::path::Path) -> DomainStore {
+        DomainStore::new(base.join("data")).unwrap()
+    }
+
+    fn find_resource_id(
+        store: &DomainStore,
+        project_id: &str,
+        system_id: &str,
+        label: &str,
+    ) -> String {
+        store
+            .query_domain_resources(
+                project_id,
+                system_id,
+                &DomainResourceQuery {
+                    text: label.to_string(),
+                    resource_type: None,
+                    limit: Some(10),
+                    offset: None,
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|resource| resource.label == label)
+            .unwrap()
+            .id
     }
 
     fn invoke_map_capability(

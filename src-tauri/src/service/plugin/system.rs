@@ -8,10 +8,11 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
 
 pub const PACKAGE_NAME: &str = "@mir3-studio/dsh-mir3-core";
@@ -21,6 +22,8 @@ const MARK_START: &str = "# >>> MIR3 Studio AI system plugin >>>";
 const MARK_END: &str = "# <<< MIR3 Studio AI system plugin <<<";
 pub(super) const DOMAIN_KERNEL_VERSION: &str = "1.0.0";
 const DOMAIN_PACK_STATE_SCHEMA: u32 = 1;
+static DOMAIN_PACK_LIFECYCLE_LOCKS: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<()>>>>> =
+    OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +62,8 @@ struct DomainPackDescriptor {
     version: String,
     kernel_api_range: String,
     supported_engine_range: String,
+    #[serde(default)]
+    engine_compatibility: Value,
     manifest_schema_version: u32,
     resource_schema_version: u32,
     capability_schema_version: u32,
@@ -148,7 +153,16 @@ pub(crate) fn ensure_domain_pack_root(
             ));
         }
         if state.current.is_none() {
-            activate_domain_pack_candidate(destination_root, system_id)?;
+            let candidate = state
+                .candidate
+                .as_ref()
+                .ok_or_else(|| format!("DOMAIN_PACK_CANDIDATE_MISSING: {system_id}"))?;
+            activate_domain_pack_candidate(
+                destination_root,
+                system_id,
+                &candidate.version,
+                &candidate.hash,
+            )?;
             mark_domain_pack_lkg(destination_root, system_id)?;
         }
     }
@@ -157,6 +171,16 @@ pub(crate) fn ensure_domain_pack_root(
 
 /// 校验并暂存一个候选包。此阶段不会改变当前版本，进程中断后仍可安全重试。
 pub fn stage_domain_pack_candidate(
+    destination_root: &Path,
+    source: &Path,
+) -> Result<DomainPackState, String> {
+    let descriptor = validate_domain_pack(source)?;
+    with_domain_pack_lifecycle_lock(destination_root, &descriptor.system_id, || {
+        stage_domain_pack_candidate_unlocked(destination_root, source)
+    })
+}
+
+fn stage_domain_pack_candidate_unlocked(
     destination_root: &Path,
     source: &Path,
 ) -> Result<DomainPackState, String> {
@@ -227,14 +251,38 @@ pub fn stage_domain_pack_candidate(
 pub fn activate_domain_pack_candidate(
     destination_root: &Path,
     system_id: &str,
+    expected_version: &str,
+    expected_hash: &str,
 ) -> Result<DomainPackState, String> {
     validate_system_id(system_id)?;
+    with_domain_pack_lifecycle_lock(destination_root, system_id, || {
+        activate_domain_pack_candidate_unlocked(
+            destination_root,
+            system_id,
+            expected_version,
+            expected_hash,
+        )
+    })
+}
+
+fn activate_domain_pack_candidate_unlocked(
+    destination_root: &Path,
+    system_id: &str,
+    expected_version: &str,
+    expected_hash: &str,
+) -> Result<DomainPackState, String> {
     let system_root = destination_root.join(system_id);
     let mut state = read_domain_pack_state(&system_root, system_id)?;
     let candidate = state
         .candidate
         .clone()
         .ok_or_else(|| format!("DOMAIN_PACK_CANDIDATE_MISSING: {system_id}"))?;
+    if candidate.version != expected_version || candidate.hash != expected_hash {
+        return Err(format!(
+            "DOMAIN_PACK_CANDIDATE_CHANGED: reviewed {system_id}@{expected_version}#{expected_hash}, current candidate is {}#{}",
+            candidate.version, candidate.hash
+        ));
+    }
     validate_installed_release(&system_root, system_id, &candidate)?;
     if state.current.as_ref() != Some(&candidate) {
         state.previous = state.current.clone();
@@ -251,33 +299,43 @@ pub fn activate_domain_pack_candidate(
 pub fn activate_domain_pack_with_canary<F>(
     destination_root: &Path,
     system_id: &str,
+    expected_version: &str,
+    expected_hash: &str,
     canary: F,
 ) -> Result<DomainPackState, String>
 where
     F: FnOnce(&DomainPackState) -> Result<(), String>,
 {
-    let activated = activate_domain_pack_candidate(destination_root, system_id)?;
-    if let Err(error) = canary(&activated) {
-        let rollback = rollback_domain_pack(destination_root, system_id);
-        return Err(format!(
-            "DOMAIN_PACK_RUNTIME_CANARY_FAILED: {error}; rollback={}",
-            rollback
-                .map(|_| "ok".to_string())
-                .unwrap_or_else(|rollback_error| rollback_error)
-        ));
-    }
-    match mark_domain_pack_lkg(destination_root, system_id) {
-        Ok(stable) => Ok(stable),
-        Err(error) => {
-            let rollback = rollback_domain_pack(destination_root, system_id);
-            Err(format!(
-                "DOMAIN_PACK_LKG_COMMIT_FAILED: {error}; rollback={}",
+    validate_system_id(system_id)?;
+    with_domain_pack_lifecycle_lock(destination_root, system_id, || {
+        let activated = activate_domain_pack_candidate_unlocked(
+            destination_root,
+            system_id,
+            expected_version,
+            expected_hash,
+        )?;
+        if let Err(error) = canary(&activated) {
+            let rollback = rollback_domain_pack_unlocked(destination_root, system_id);
+            return Err(format!(
+                "DOMAIN_PACK_RUNTIME_CANARY_FAILED: {error}; rollback={}",
                 rollback
                     .map(|_| "ok".to_string())
                     .unwrap_or_else(|rollback_error| rollback_error)
-            ))
+            ));
         }
-    }
+        match mark_domain_pack_lkg_unlocked(destination_root, system_id) {
+            Ok(stable) => Ok(stable),
+            Err(error) => {
+                let rollback = rollback_domain_pack_unlocked(destination_root, system_id);
+                Err(format!(
+                    "DOMAIN_PACK_LKG_COMMIT_FAILED: {error}; rollback={}",
+                    rollback
+                        .map(|_| "ok".to_string())
+                        .unwrap_or_else(|rollback_error| rollback_error)
+                ))
+            }
+        }
+    })
 }
 
 /// 将当前版本标记为已通过 canary 的最后已知可用版本。
@@ -286,6 +344,15 @@ pub fn mark_domain_pack_lkg(
     system_id: &str,
 ) -> Result<DomainPackState, String> {
     validate_system_id(system_id)?;
+    with_domain_pack_lifecycle_lock(destination_root, system_id, || {
+        mark_domain_pack_lkg_unlocked(destination_root, system_id)
+    })
+}
+
+fn mark_domain_pack_lkg_unlocked(
+    destination_root: &Path,
+    system_id: &str,
+) -> Result<DomainPackState, String> {
     let system_root = destination_root.join(system_id);
     let mut state = read_domain_pack_state(&system_root, system_id)?;
     let current = state
@@ -304,6 +371,15 @@ pub fn rollback_domain_pack(
     system_id: &str,
 ) -> Result<DomainPackState, String> {
     validate_system_id(system_id)?;
+    with_domain_pack_lifecycle_lock(destination_root, system_id, || {
+        rollback_domain_pack_unlocked(destination_root, system_id)
+    })
+}
+
+fn rollback_domain_pack_unlocked(
+    destination_root: &Path,
+    system_id: &str,
+) -> Result<DomainPackState, String> {
     let system_root = destination_root.join(system_id);
     let mut state = read_domain_pack_state(&system_root, system_id)?;
     let target = state
@@ -329,6 +405,16 @@ pub fn set_domain_pack_enabled(
     enabled: bool,
 ) -> Result<DomainPackState, String> {
     validate_system_id(system_id)?;
+    with_domain_pack_lifecycle_lock(destination_root, system_id, || {
+        set_domain_pack_enabled_unlocked(destination_root, system_id, enabled)
+    })
+}
+
+fn set_domain_pack_enabled_unlocked(
+    destination_root: &Path,
+    system_id: &str,
+    enabled: bool,
+) -> Result<DomainPackState, String> {
     let system_root = destination_root.join(system_id);
     let mut state = read_domain_pack_state(&system_root, system_id)?;
     if enabled {
@@ -341,6 +427,28 @@ pub fn set_domain_pack_enabled(
     state.enabled = enabled;
     persist_domain_pack_state(&system_root, &state)?;
     Ok(state)
+}
+
+fn with_domain_pack_lifecycle_lock<T>(
+    destination_root: &Path,
+    system_id: &str,
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let key = format!("{}::{system_id}", destination_root.to_string_lossy());
+    let lifecycle_lock = {
+        let mut locks = DOMAIN_PACK_LIFECYCLE_LOCKS
+            .get_or_init(|| Mutex::new(BTreeMap::new()))
+            .lock()
+            .map_err(|_| "DOMAIN_PACK_LIFECYCLE_LOCK_POISONED: registry".to_string())?;
+        locks
+            .entry(key)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    };
+    let _guard = lifecycle_lock
+        .lock()
+        .map_err(|_| format!("DOMAIN_PACK_LIFECYCLE_LOCK_POISONED: {system_id}"))?;
+    operation()
 }
 
 pub fn list_domain_pack_states(
@@ -432,6 +540,15 @@ fn validate_domain_pack(source: &Path) -> Result<DomainPackDescriptor, String> {
     }
     VersionReq::parse(&descriptor.supported_engine_range)
         .map_err(|error| format!("DOMAIN_PACK_ENGINE_RANGE_INVALID: {error}"))?;
+    if version >= Version::new(1, 2, 0)
+        && (descriptor.supported_engine_range == "*"
+            || !descriptor.engine_compatibility.is_object())
+    {
+        return Err(
+            "DOMAIN_PACK_ENGINE_CONTRACT_INVALID: evidence-gated compatibility is required"
+                .to_string(),
+        );
+    }
     if [
         descriptor.manifest_schema_version,
         descriptor.resource_schema_version,
@@ -476,6 +593,9 @@ fn validate_domain_pack(source: &Path) -> Result<DomainPackDescriptor, String> {
             .and_then(|value| value.get("supportedEngineRange"))
             .and_then(Value::as_str)
             != Some(descriptor.supported_engine_range.as_str())
+        || (version >= Version::new(1, 2, 0)
+            && package_domain.and_then(|value| value.get("engineCompatibility"))
+                != Some(&descriptor.engine_compatibility))
         || !includes_all_files
     {
         return Err(
@@ -979,7 +1099,7 @@ mod tests {
         let first = stage_domain_pack_candidate(&root, &source).unwrap();
         assert!(first.current.is_none());
         assert_eq!(first.candidate.as_ref().unwrap().version, original_version);
-        let active = activate_domain_pack_candidate(&root, "level").unwrap();
+        let active = activate_staged_candidate(&root, "level").unwrap();
         assert_eq!(active.current.as_ref().unwrap().version, original_version);
         assert!(active.candidate.is_none());
         let stable = mark_domain_pack_lkg(&root, "level").unwrap();
@@ -996,7 +1116,7 @@ mod tests {
         let staged = stage_domain_pack_candidate(&root, &next_source).unwrap();
         assert_eq!(staged.current.as_ref().unwrap().version, original_version);
         assert_eq!(staged.candidate.as_ref().unwrap().version, next_version);
-        let upgraded = activate_domain_pack_candidate(&root, "level").unwrap();
+        let upgraded = activate_staged_candidate(&root, "level").unwrap();
         assert_eq!(upgraded.current.as_ref().unwrap().version, next_version);
         assert_eq!(
             upgraded.previous.as_ref().unwrap().version,
@@ -1011,6 +1131,91 @@ mod tests {
     }
 
     #[test]
+    fn domain_pack_activation_rejects_when_reviewed_candidate_was_replaced() {
+        let root = test_directory("domain-pack-candidate-cas");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let first_source = root.join("candidate-a");
+        copy_directory(&source, &first_source).unwrap();
+        set_test_pack_version(&first_source, "1.2.1");
+        let first = stage_domain_pack_candidate(&root, &first_source).unwrap();
+        let reviewed = first.candidate.unwrap();
+
+        let second_source = root.join("candidate-b");
+        copy_directory(&source, &second_source).unwrap();
+        set_test_pack_version(&second_source, "1.2.2");
+        let second = stage_domain_pack_candidate(&root, &second_source).unwrap();
+        assert_eq!(second.candidate.as_ref().unwrap().version, "1.2.2");
+
+        let error =
+            activate_domain_pack_candidate(&root, "level", &reviewed.version, &reviewed.hash)
+                .unwrap_err();
+        assert!(error.starts_with("DOMAIN_PACK_CANDIDATE_CHANGED:"));
+        let unchanged = read_domain_pack_state(&root.join("level"), "level").unwrap();
+        assert!(unchanged.current.is_none());
+        assert_eq!(unchanged.candidate.unwrap().version, "1.2.2");
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn domain_pack_stage_waits_for_same_system_activation_lifecycle() {
+        let root = test_directory("domain-pack-lifecycle-lock");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let first_source = root.join("candidate-a");
+        copy_directory(&source, &first_source).unwrap();
+        set_test_pack_version(&first_source, "1.2.1");
+        let staged = stage_domain_pack_candidate(&root, &first_source).unwrap();
+        let reviewed = staged.candidate.unwrap();
+
+        let (canary_entered_tx, canary_entered_rx) = std::sync::mpsc::channel();
+        let (release_canary_tx, release_canary_rx) = std::sync::mpsc::channel();
+        let activation_root = root.clone();
+        let activation = std::thread::spawn(move || {
+            activate_domain_pack_with_canary(
+                &activation_root,
+                "level",
+                &reviewed.version,
+                &reviewed.hash,
+                |_| {
+                    canary_entered_tx.send(()).unwrap();
+                    release_canary_rx.recv().unwrap();
+                    Ok(())
+                },
+            )
+        });
+        canary_entered_rx.recv().unwrap();
+
+        let second_source = root.join("candidate-b");
+        copy_directory(&source, &second_source).unwrap();
+        set_test_pack_version(&second_source, "1.2.2");
+        let (stage_started_tx, stage_started_rx) = std::sync::mpsc::channel();
+        let (stage_done_tx, stage_done_rx) = std::sync::mpsc::channel();
+        let stage_root = root.clone();
+        let stage_thread = std::thread::spawn(move || {
+            stage_started_tx.send(()).unwrap();
+            let result = stage_domain_pack_candidate(&stage_root, &second_source);
+            stage_done_tx.send(result).unwrap();
+        });
+        stage_started_rx.recv().unwrap();
+        assert!(stage_done_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_err());
+
+        release_canary_tx.send(()).unwrap();
+        activation.join().unwrap().unwrap();
+        let after_stage = stage_done_rx.recv().unwrap().unwrap();
+        stage_thread.join().unwrap();
+        assert_eq!(after_stage.current.unwrap().version, "1.2.1");
+        assert_eq!(after_stage.candidate.unwrap().version, "1.2.2");
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
     fn domain_pack_canary_failure_rolls_back_and_success_advances_lkg() {
         let base = test_directory("domain-pack-canary");
         let installed = base.join("installed");
@@ -1021,16 +1226,21 @@ mod tests {
         let (original_version, next_version) = test_pack_versions(&source);
         let initial = stage_domain_pack_candidate(&installed, &source).unwrap();
         assert!(initial.current.is_none());
-        activate_domain_pack_candidate(&installed, "level").unwrap();
+        activate_staged_candidate(&installed, "level").unwrap();
         mark_domain_pack_lkg(&installed, "level").unwrap();
 
         let candidate = base.join("candidate");
         copy_directory(&source, &candidate).unwrap();
         set_test_pack_version(&candidate, &next_version);
-        stage_domain_pack_candidate(&installed, &candidate).unwrap();
-        let error = activate_domain_pack_with_canary(&installed, "level", |_| {
-            Err("fixture canary rejected".to_string())
-        })
+        let staged = stage_domain_pack_candidate(&installed, &candidate).unwrap();
+        let reviewed = staged.candidate.as_ref().unwrap();
+        let error = activate_domain_pack_with_canary(
+            &installed,
+            "level",
+            &reviewed.version,
+            &reviewed.hash,
+            |_| Err("fixture canary rejected".to_string()),
+        )
         .unwrap_err();
         assert!(error.starts_with("DOMAIN_PACK_RUNTIME_CANARY_FAILED:"));
         assert!(error.ends_with("rollback=ok"));
@@ -1038,11 +1248,18 @@ mod tests {
         assert_eq!(restored.current.as_ref().unwrap().version, original_version);
         assert_eq!(restored.lkg.as_ref().unwrap().version, original_version);
 
-        stage_domain_pack_candidate(&installed, &candidate).unwrap();
-        let stable = activate_domain_pack_with_canary(&installed, "level", |state| {
-            assert_eq!(state.current.as_ref().unwrap().version, next_version);
-            Ok(())
-        })
+        let staged = stage_domain_pack_candidate(&installed, &candidate).unwrap();
+        let reviewed = staged.candidate.as_ref().unwrap();
+        let stable = activate_domain_pack_with_canary(
+            &installed,
+            "level",
+            &reviewed.version,
+            &reviewed.hash,
+            |state| {
+                assert_eq!(state.current.as_ref().unwrap().version, next_version);
+                Ok(())
+            },
+        )
         .unwrap();
         assert_eq!(stable.current.as_ref().unwrap().version, next_version);
         assert_eq!(stable.lkg, stable.current);
@@ -1067,7 +1284,9 @@ mod tests {
             "tampered",
         )
         .unwrap();
-        let error = activate_domain_pack_candidate(&root, "shop").unwrap_err();
+        let error =
+            activate_domain_pack_candidate(&root, "shop", &candidate.version, &candidate.hash)
+                .unwrap_err();
         assert!(error.starts_with("DOMAIN_PACK_RELEASE_HASH_MISMATCH:"));
         let state = read_domain_pack_state(&root.join("shop"), "shop").unwrap();
         assert!(state.current.is_none());
@@ -1097,7 +1316,7 @@ mod tests {
         )
         .to_string();
         stage_domain_pack_candidate(&installed, &source).unwrap();
-        activate_domain_pack_candidate(&installed, "level").unwrap();
+        activate_staged_candidate(&installed, "level").unwrap();
         mark_domain_pack_lkg(&installed, "level").unwrap();
 
         let candidate = base.join("candidate");
@@ -1217,7 +1436,7 @@ mod tests {
             set_test_pack_version(&candidate, &next_version);
             let staged = stage_domain_pack_candidate(&installed, &candidate).unwrap();
             assert_eq!(staged.candidate.as_ref().unwrap().version, next_version);
-            let upgraded = activate_domain_pack_candidate(&installed, system_id).unwrap();
+            let upgraded = activate_staged_candidate(&installed, system_id).unwrap();
             assert_eq!(upgraded.current.as_ref().unwrap().version, next_version);
             assert_eq!(
                 upgraded.previous.as_ref().unwrap().version,
@@ -1314,6 +1533,22 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("mir3-{label}-{}-{suffix}", std::process::id()))
+    }
+
+    fn activate_staged_candidate(
+        destination_root: &Path,
+        system_id: &str,
+    ) -> Result<DomainPackState, String> {
+        let state = read_domain_pack_state(&destination_root.join(system_id), system_id)?;
+        let candidate = state
+            .candidate
+            .ok_or_else(|| format!("DOMAIN_PACK_CANDIDATE_MISSING: {system_id}"))?;
+        activate_domain_pack_candidate(
+            destination_root,
+            system_id,
+            &candidate.version,
+            &candidate.hash,
+        )
     }
 
     fn test_pack_versions(root: &Path) -> (String, String) {

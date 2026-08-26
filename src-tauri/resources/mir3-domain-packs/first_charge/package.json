@@ -1,7 +1,7 @@
 {
   "name": "@mir3-studio/domain-first_charge",
   "kind": "domain",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "files": [
     "CHANGELOG.md",
@@ -14,7 +14,22 @@
     "kind": "domain",
     "systemId": "first_charge",
     "kernelApiRange": "^1.0.0",
-    "supportedEngineRange": "*",
+    "supportedEngineRange": ">=1.0.0",
+    "engineCompatibility": {
+      "strategy": "evidence-gated-auto-generalization-v1",
+      "versionAliases": [
+        "semver",
+        "v-prefixed-semver",
+        "major-minor"
+      ],
+      "requiredEvidence": [
+        "project-directory-layout",
+        "owned-selector-or-content-fingerprint",
+        "resource-schema-validation"
+      ],
+      "unknownVersionPolicy": "readonly",
+      "incompatibleVersionPolicy": "readonly"
+    },
     "resourceSchema": "schemas/resource.schema.json",
     "fixtures": {
       "valid": "fixtures/valid.json",

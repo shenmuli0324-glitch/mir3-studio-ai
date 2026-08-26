@@ -8,7 +8,7 @@
 
 <p align="center"><samp><strong>English</strong> · <a href="./README.md">中文</a></samp></p>
 
-> Version `0.9.2` develops projects created by 996 Project Manager through one system kernel, 33 domain packs, archived system sessions, and a safe Draft workflow.
+> Version `0.9.3` develops projects created by 996 Project Manager through one system kernel, 33 domain packs, archived system sessions, and a safe Draft workflow.
 
 MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastructure foundations. On top of its plugin architecture, we independently develop the project model, knowledge system, development toolchain, and AI workflows for the 996 MIR3 ecosystem.
 
@@ -32,7 +32,7 @@ MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastruct
 | --- | --- |
 | App | MIR3 Studio AI |
 | Core display name | MIR3 AI Core |
-| Version | 0.9.2 |
+| Version | 0.9.3 |
 | Tauri identifier | `ai.mir3.studio` |
 | Data directory | `~/.mir3-studio-ai` |
 | Development data directory | `~/.mir3-studio-ai.dev` |
@@ -51,7 +51,9 @@ corepack pnpm tauri dev
 
 Use `pnpm package:mac` for the fixed Apple Silicon macOS delivery flow. It builds the `.app` and `.dmg`, verifies the app signature and disk image, and prints the SHA-256 digest. Without a Developer ID, it defaults to an ad-hoc signature suitable for local device testing.
 
-Production builds that enable remote domain-pack candidates must inject both the HTTPS index URL through `MIR3_DOMAIN_PACK_INDEX_URL` and a Base64-encoded 32-byte Ed25519 public key through `MIR3_DOMAIN_PACK_ED25519_PUBLIC_KEY` at compile time. Without them, remote checks fail closed with `DOMAIN_PACK_UPDATE_NOT_CONFIGURED`, while bundled/local candidates, confirmed activation, and rollback remain available. The repository intentionally contains no placeholder official source or key.
+Production builds that enable remote domain-pack candidates must inject both the HTTPS index URL through `MIR3_DOMAIN_PACK_INDEX_URL` and a Base64-encoded 32-byte Ed25519 public key through `MIR3_DOMAIN_PACK_ED25519_PUBLIC_KEY` at compile time. The build rejects one-sided configuration, non-HTTPS or credential-bearing URLs, and clearly invalid keys. When configured, Studio checks after 60 seconds and every six hours, verifies signatures, and stages candidates in the background, but never activates them without user confirmation. Without configuration the background job stays disabled and manual remote checks fail closed with `DOMAIN_PACK_UPDATE_NOT_CONFIGURED`; bundled/local candidates, confirmed activation, and rollback remain available. The repository intentionally contains no placeholder official source or key.
+
+All 33 domain packs use evidence-gated engine generalization. Only SemVer, v-prefixed SemVer, and major.minor aliases are normalized, and write access also requires the real 996 project layout, a domain selector/content fingerprint, and resource-schema validation. Unknown or incompatible engines remain viewable for diagnostics but are refused by both Draft writes and final Apply.
 
 See [Development](./docs/DEVELOPMENT.md), the [runtime baseline policy](./docs/runtime-baseline-policy.md), and the product [CHANGELOG](./CHANGELOG.md).
 

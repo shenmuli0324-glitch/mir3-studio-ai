@@ -237,8 +237,19 @@ else {
       failures.push(`${label}: package/domain version must be matching stable SemVer`)
     if (domain.kernelApiRange !== '^1.0.0' || packageManifest.mir3Domain?.kernelApiRange !== domain.kernelApiRange)
       failures.push(`${label}: kernelApiRange must be ^1.0.0`)
-    if (typeof domain.supportedEngineRange !== 'string' || !domain.supportedEngineRange.trim())
-      failures.push(`${label}: supportedEngineRange is required`)
+    if (typeof domain.supportedEngineRange !== 'string' || !domain.supportedEngineRange.trim() || domain.supportedEngineRange === '*')
+      failures.push(`${label}: supportedEngineRange must be explicit and non-wildcard`)
+    if (domain.engineCompatibility?.strategy !== 'evidence-gated-auto-generalization-v1'
+      || !Array.isArray(domain.engineCompatibility?.versionAliases)
+      || domain.engineCompatibility.versionAliases.length === 0
+      || !Array.isArray(domain.engineCompatibility?.requiredEvidence)
+      || domain.engineCompatibility.requiredEvidence.length < 3
+      || domain.engineCompatibility?.unknownVersionPolicy !== 'readonly'
+      || domain.engineCompatibility?.incompatibleVersionPolicy !== 'readonly') {
+      failures.push(`${label}: engine compatibility must declare aliases, evidence, and read-only failure policies`)
+    }
+    if (JSON.stringify(packageManifest.mir3Domain?.engineCompatibility) !== JSON.stringify(domain.engineCompatibility))
+      failures.push(`${label}: package engine compatibility differs from domain manifest`)
     for (const key of ['manifestSchemaVersion', 'resourceSchemaVersion', 'capabilitySchemaVersion', 'memorySchemaVersion']) {
       if (domain[key] !== 1)
         failures.push(`${label}: ${key} must be 1`)

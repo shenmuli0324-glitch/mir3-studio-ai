@@ -12,6 +12,7 @@ use std::collections::HashMap;
 #[cfg(windows)]
 use std::ffi::OsString;
 use std::fs;
+use std::io::Write;
 use std::process::{Command, Stdio};
 #[cfg(windows)]
 use std::sync::atomic::AtomicUsize;
@@ -967,7 +968,7 @@ fn core_update_backup_path(app_handle: &tauri::AppHandle) -> std::path::PathBuf 
         .join(format!(".{}.backup", config::DSH_CORE_DIR))
 }
 
-/// MIR3 Core Plugin 已成功 apply 后提交更新：清理旧目录并把当前版本推进为 LKG。
+/// Studio 已完成 Bridge、普通/归档 Session、MCP 与领域能力 canary 后提交更新。
 pub async fn finalize_core_update(app_handle: &tauri::AppHandle) -> Result<bool, String> {
     let backup = core_update_backup_path(app_handle);
     let had_backup = backup.exists();
@@ -980,8 +981,77 @@ pub async fn finalize_core_update(app_handle: &tauri::AppHandle) -> Result<bool,
     let mut setting = config::get_store_dat_setting(app_handle);
     setting.last_known_good_core_tag = setting.dsh_pkg_tag.clone();
     setting.last_known_good_core_commit = setting.dsh_pkg_commit.clone();
-    config::set_store_dat_setting(app_handle, setting);
+    config::set_store_dat_setting(app_handle, setting.clone());
+    if let Err(error) = persist_core_canary_state(app_handle, &setting) {
+        // canary 本身已经通过且 LKG 已持久化；证据文件失败不能把已删除 backup
+        // 的正常 Core 误判为需要回滚，但原生 smoke 会因缺少该文件而失败。
+        log::error!("Core canary evidence persistence failed: {error}");
+    }
     Ok(had_backup)
+}
+
+fn persist_core_canary_state(
+    app_handle: &tauri::AppHandle,
+    setting: &config::Setting,
+) -> Result<(), String> {
+    let root = config::get_dsh_data_path(app_handle);
+    fs::create_dir_all(&root)
+        .map_err(|error| format!("CORE_CANARY_STATE_ROOT_CREATE_FAILED: {error}"))?;
+    let path = root.join(".mir3-core-canary.json");
+    let temporary = root.join(format!(".mir3-core-canary.{}.tmp", std::process::id()));
+    let passed_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| format!("CORE_CANARY_STATE_CLOCK_FAILED: {error}"))?
+        .as_millis()
+        .min(i64::MAX as u128) as i64;
+    let value = core_canary_state_value(
+        setting,
+        &app_handle.package_info().version.to_string(),
+        passed_at,
+    );
+    let bytes = serde_json::to_vec_pretty(&value)
+        .map_err(|error| format!("CORE_CANARY_STATE_SERIALIZE_FAILED: {error}"))?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temporary)
+        .map_err(|error| format!("CORE_CANARY_STATE_OPEN_FAILED: {error}"))?;
+    file.write_all(&bytes)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("CORE_CANARY_STATE_WRITE_FAILED: {error}"))?;
+    drop(file);
+    if path.exists() {
+        fs::remove_file(&path)
+            .map_err(|error| format!("CORE_CANARY_STATE_REPLACE_FAILED: {error}"))?;
+    }
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("CORE_CANARY_STATE_COMMIT_FAILED: {error}"))?;
+    Ok(())
+}
+
+fn core_canary_state_value(
+    setting: &config::Setting,
+    app_version: &str,
+    passed_at: i64,
+) -> serde_json::Value {
+    serde_json::json!({
+        "schemaVersion": 1,
+        "status": "passed",
+        "protocolVersion": 2,
+        "appVersion": app_version,
+        "coreTag": setting.dsh_pkg_tag,
+        "coreCommit": setting.dsh_pkg_commit,
+        "passedAt": passed_at,
+        "checks": [
+            "bridge-v2",
+            "ordinary-session",
+            "archived-system-session",
+            "mcp-sidecar",
+            "domain-capability"
+        ]
+    })
 }
 
 /// 新 Core 在插件 ready 前失败时恢复更新前目录与最后已知可用版本记录。
@@ -1075,6 +1145,30 @@ mod tests {
         let selected = find_available_port(occupied).expect("find next free port");
         assert!(selected > occupied);
         assert!(!is_port_in_use(selected));
+    }
+
+    #[test]
+    fn core_canary_evidence_names_every_public_runtime_gate() {
+        let mut setting = config::Setting::default();
+        setting.dsh_pkg_tag = Some("dsh-test".to_string());
+        setting.dsh_pkg_commit = Some("commit-test".to_string());
+        let value = core_canary_state_value(&setting, "test-version", 1234);
+        assert_eq!(value["status"], "passed");
+        assert_eq!(value["protocolVersion"], 2);
+        assert_eq!(value["coreTag"], "dsh-test");
+        assert_eq!(value["coreCommit"], "commit-test");
+        assert_eq!(value["passedAt"], 1234);
+        assert_eq!(value["checks"].as_array().unwrap().len(), 5);
+        assert!(value["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item == "archived-system-session"));
+        assert!(value["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item == "domain-capability"));
     }
 
     #[tokio::test]

@@ -1,0 +1,71 @@
+{
+  "accepted": [
+    {
+      "name": "runtime-installable-level",
+      "packRoot": "example-pack",
+      "systemId": "level",
+      "version": "1.2.0"
+    }
+  ],
+  "acceptedEngineRanges": [
+    ">=1.0.0",
+    "^1.2",
+    "~1.2.3",
+    ">=1.0.0, <2.0.0",
+    " >=1.0.0 ",
+    ">= 1.0.0",
+    ">=1.2.3+build.01",
+    ">=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1",
+    "1.2.*",
+    ">=1.*",
+    ">=1.2.3-alpha.1"
+  ],
+  "rejectedEngineRanges": [
+    "",
+    "garbage",
+    "=>1.0.0",
+    ">=1..0",
+    ">=18446744073709551616.0.0",
+    ">=1.0.0\t",
+    ">=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1, >=1",
+    "=x",
+    "<*",
+    ">*",
+    "^*",
+    "~*",
+    ">=01.0.0",
+    ">=1.2.3-01"
+  ],
+  "rejected": [
+    {
+      "name": "schema-version",
+      "pointer": "/manifestSchemaVersion",
+      "value": 2
+    },
+    {
+      "name": "missing-kernel-primitives",
+      "pointer": "/requiredKernelPrimitives",
+      "value": []
+    },
+    {
+      "name": "writable-foreign-system",
+      "pointer": "/operations/1/writeSystems",
+      "value": ["item"]
+    },
+    {
+      "name": "unsafe-step-action",
+      "pointer": "/operations/0/steps/1/action",
+      "value": "shell-exec"
+    },
+    {
+      "name": "empty-validators",
+      "pointer": "/validators",
+      "value": []
+    },
+    {
+      "name": "unknown-presentation-primitive",
+      "pointer": "/presentation/safePrimitive",
+      "value": "text"
+    }
+  ]
+}

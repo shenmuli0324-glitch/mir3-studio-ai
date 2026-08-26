@@ -1101,7 +1101,7 @@ mod tests {
         book.sheets.push(sheet);
         fs::write(&target, book.to_cfb_bytes().unwrap()).unwrap();
 
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&project_root).unwrap();
         let workbook = store.safe_xls_open(&project.id, relative).unwrap();
         assert_eq!(workbook.sheets[0].row_count, ROWS);
@@ -1131,14 +1131,14 @@ mod tests {
         let original = encoded.into_owned();
         fs::write(&target, &original).unwrap();
 
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&project_root).unwrap();
         let opened = store
             .safe_text_open(&project.id, "客户端/dev/Quest/任务配置.txt", None)
             .unwrap();
         let draft = store.open_draft(&project.id, "安全编辑任务配置").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.2.0", None)
             .unwrap();
         let result = store
             .safe_text_patch(
@@ -1183,7 +1183,7 @@ mod tests {
         let relative_path = "客户端/dev/Quest/任务配置.txt";
         fs::write(project_root.join(relative_path), "等级=1\r\n").unwrap();
 
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&project_root).unwrap();
         let opened = store
             .safe_text_open(&project.id, relative_path, None)
@@ -1232,14 +1232,14 @@ mod tests {
         let original = book.to_cfb_bytes().unwrap();
         fs::write(&target, &original).unwrap();
 
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&project_root).unwrap();
         let opened = store
             .safe_xls_open(&project.id, "引擎/Mir200/Envir/Shop/商品表.xls")
             .unwrap();
         let draft = store.open_draft(&project.id, "修改商品价格").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.2.0", None)
             .unwrap();
         let result = store
             .safe_xls_patch(

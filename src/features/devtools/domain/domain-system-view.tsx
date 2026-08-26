@@ -1,10 +1,11 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainValidationReport, SafeTextOpen } from './types'
+import type { DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRelease, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainValidationReport, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { CircleCheck, CircleExclamation, Magnifier } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { listen } from '@tauri-apps/api/event'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
@@ -80,7 +81,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     enabled: project != null,
   })
   const activatePack = useMutation({
-    mutationFn: () => activateDomainPack(tool.id),
+    mutationFn: (candidate: DomainPackRelease) => activateDomainPack(tool.id, candidate.version, candidate.hash),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
       void queryClient.invalidateQueries({ queryKey: ['domain-systems'] })
@@ -218,6 +219,16 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
+
+  useEffect(() => {
+    const unlisten = listen<string[]>('domain-pack-candidates-updated', (event) => {
+      if (event.payload.includes(tool.id))
+        void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
+    })
+    return () => {
+      void unlisten.then(dispose => dispose())
+    }
+  }, [queryClient, tool.id])
 
   useEffect(() => {
     let cancelled = false
@@ -361,9 +372,10 @@ export function DomainSystemView({ tool, project, onBack, target }: {
               stagePackUpdate.mutate(remoteCandidate.version)
           }}
           onActivate={() => {
+            const candidate = packState.data?.candidate
             // eslint-disable-next-line no-alert
-            if (window.confirm(t('studio.devtools.pack.activate_confirm', { version: packState.data?.candidate?.version })))
-              activatePack.mutate()
+            if (candidate && window.confirm(t('studio.devtools.pack.activate_confirm', { version: candidate.version })))
+              activatePack.mutate(candidate)
           }}
           onRollback={() => {
             // eslint-disable-next-line no-alert
@@ -999,9 +1011,16 @@ function fallbackManifest(tool: DevToolDefinition): DomainManifest {
   return {
     kind: 'domain',
     systemId: tool.id,
-    version: '1.0.0',
+    version: '1.2.0',
     kernelApiRange: '^1.0.0',
-    supportedEngineRange: '*',
+    supportedEngineRange: '>=1.0.0',
+    engineCompatibility: {
+      strategy: 'evidence-gated-auto-generalization-v1',
+      versionAliases: ['semver', 'v-prefixed-semver', 'major-minor'],
+      requiredEvidence: ['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'],
+      unknownVersionPolicy: 'readonly',
+      incompatibleVersionPolicy: 'readonly',
+    },
     manifestSchemaVersion: 1,
     resourceSchemaVersion: 1,
     capabilitySchemaVersion: 1,

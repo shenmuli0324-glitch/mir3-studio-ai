@@ -1,0 +1,24 @@
+{
+  "systemId": "level",
+  "fixture": "valid",
+  "records": [
+    {
+      "level": 2,
+      "requiredExperience": 1,
+      "statPoints": 1,
+      "recommendedMonsterId": "monster:fixture-1"
+    },
+    {
+      "level": 3,
+      "requiredExperience": 2,
+      "statPoints": 2,
+      "recommendedMonsterId": "monster:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "monster": [
+      "monster:fixture-1",
+      "monster:fixture-2"
+    ]
+  }
+}

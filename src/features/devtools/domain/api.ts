@@ -1,4 +1,6 @@
 import type {
+  CapabilityResolution,
+  CapabilityRollbackRequest,
   DomainDraft,
   DomainDraftConfirmation,
   DomainFileRecord,
@@ -10,6 +12,7 @@ import type {
   DomainSnapshot,
   DomainSystemDescription,
   DomainValidationReport,
+  GlobalCapabilityCompileRequest,
   LegacyDraftCloneRequest,
   SafeTextOpen,
   SafeTextPatchResult,
@@ -156,6 +159,38 @@ export function compileUserCapability(projectId: string, request: { receiptId: s
   return invoke<UserCapability>('user_capability_compile', { projectId, request })
 }
 
+export function compileGlobalUserCapability(projectId: string, request: GlobalCapabilityCompileRequest) {
+  return invoke<UserCapability>('user_capability_compile_global', { projectId, request })
+}
+
+export function listUserCapabilityVersions(projectId: string, systemId?: string | null) {
+  return invoke<CapabilityResolution[]>('user_capability_versions', { projectId, systemId })
+}
+
+export function resolveUserCapabilities(projectId: string, systemId?: string | null) {
+  return invoke<CapabilityResolution[]>('user_capability_resolve', { projectId, systemId })
+}
+
+export function promoteUserCapability(projectId: string, capabilityId: string, version: string, targetScope: 'personal' | 'team') {
+  return invoke<CapabilityResolution>('user_capability_promote', {
+    projectId,
+    request: { capabilityId, version, targetScope },
+    confirmed: true,
+  })
+}
+
+export function setSharedUserCapabilityStatus(scope: 'personal' | 'team', capabilityId: string, version: string, status: UserCapability['status'], confirmed: boolean) {
+  return invoke<UserCapability>('user_capability_set_shared_status', { scope, capabilityId, version, status, confirmed })
+}
+
+export function rollbackUserCapability(projectId: string, request: CapabilityRollbackRequest) {
+  return invoke<UserCapability>('user_capability_rollback', { projectId, request, confirmed: true })
+}
+
+export function validateGlobalUserCapability(projectId: string, compositeId: string, capabilityId: string, version?: string | null) {
+  return invoke<UserCapability>('user_capability_validate_global', { projectId, compositeId, capabilityId, version })
+}
+
 export function setUserCapabilityStatus(projectId: string, capabilityId: string, version: string, status: UserCapability['status'], confirmed: boolean) {
   return invoke<UserCapability>('user_capability_set_status', { projectId, capabilityId, version, status, confirmed })
 }
@@ -188,8 +223,13 @@ export function stageDomainPackUpdate(systemId: string, version: string) {
   return invoke<DomainPackState>('domain_pack_update_stage', { systemId, version })
 }
 
-export function activateDomainPack(systemId: string) {
-  return invoke<DomainPackState>('domain_pack_activate', { systemId, confirmed: true })
+export function activateDomainPack(systemId: string, expectedCandidateVersion: string, expectedCandidateHash: string) {
+  return invoke<DomainPackState>('domain_pack_activate', {
+    systemId,
+    expectedCandidateVersion,
+    expectedCandidateHash,
+    confirmed: true,
+  })
 }
 
 export function rollbackDomainPack(systemId: string) {

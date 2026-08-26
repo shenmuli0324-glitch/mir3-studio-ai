@@ -156,12 +156,12 @@ mod tests {
         bytes[22..24].copy_from_slice(&4_u16.to_le_bytes());
         bytes[24..26].copy_from_slice(&4_u16.to_le_bytes());
         fs::write(root.join(relative), &bytes).unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "编辑地图碰撞").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.1.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.2.0", None)
             .unwrap();
         let opened = store
             .map_resource_open(&project.id, relative, None, Some((0, 0, 4)))

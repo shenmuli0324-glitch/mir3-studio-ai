@@ -16,6 +16,7 @@ use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::{Cursor, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 const INDEX_SCHEMA_VERSION: u32 = 1;
@@ -27,6 +28,7 @@ const MAX_UNPACKED_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_ARCHIVE_FILES: usize = 4096;
 const COMPILED_INDEX_URL: Option<&str> = option_env!("MIR3_DOMAIN_PACK_INDEX_URL");
 const COMPILED_PUBLIC_KEY: Option<&str> = option_env!("MIR3_DOMAIN_PACK_ED25519_PUBLIC_KEY");
+static UPDATE_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 struct RemoteConfig {
@@ -131,6 +133,11 @@ impl RemoteConfig {
     }
 }
 
+/// 后台调度器据此安静地跳过未配置的发行版，不把“功能关闭”当作运行错误。
+pub fn is_configured() -> bool {
+    COMPILED_INDEX_URL.is_some() && COMPILED_PUBLIC_KEY.is_some()
+}
+
 /// 查询已签名索引中比本地 current 更新的候选，不写入任何文件。
 pub async fn check(
     destination_root: &Path,
@@ -169,6 +176,8 @@ pub async fn check(
                 .cmp(&Version::parse(&left.version).ok())
         })
     });
+    // 每个系统只暴露最新候选，避免后台依次暂存后被较旧但仍高于 current 的版本覆盖。
+    updates.dedup_by(|left, right| left.system_id == right.system_id);
     Ok(DomainPackUpdateCheck {
         schema_version: INDEX_SCHEMA_VERSION,
         updates,
@@ -181,6 +190,10 @@ pub async fn stage(
     system_id: &str,
     version: &str,
 ) -> Result<system::DomainPackStateView, String> {
+    let _guard = UPDATE_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
     validate_system_id(system_id)?;
     validate_stable_version(version)?;
     let config = RemoteConfig::compiled()?;
@@ -801,7 +814,7 @@ mod tests {
             system_id: system_id.to_string(),
             version: version.to_string(),
             kernel_api_range: "^1.0.0".to_string(),
-            supported_engine_range: "*".to_string(),
+            supported_engine_range: ">=1.0.0".to_string(),
             manifest_schema_version: 1,
             resource_schema_version: 1,
             capability_schema_version: 1,

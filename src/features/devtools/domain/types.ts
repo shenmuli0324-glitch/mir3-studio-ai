@@ -4,6 +4,13 @@ export interface DomainManifest {
   version: string
   kernelApiRange: string
   supportedEngineRange: string
+  engineCompatibility: {
+    strategy: string
+    versionAliases: string[]
+    requiredEvidence: string[]
+    unknownVersionPolicy: 'readonly'
+    incompatibleVersionPolicy: 'readonly'
+  }
   manifestSchemaVersion: number
   resourceSchemaVersion: number
   capabilitySchemaVersion: number
@@ -276,6 +283,27 @@ export interface UserCapability {
   updatedAt: number
 }
 
+export interface CapabilityResolution {
+  capability: UserCapability
+  resolvedScope: UserCapability['scope']
+  sourceProjectId: string
+  shadowedScopes: Array<UserCapability['scope']>
+}
+
+export interface GlobalCapabilityCompileRequest {
+  receiptIds: string[]
+  id: string
+  name: string
+  description: string
+}
+
+export interface CapabilityRollbackRequest {
+  capabilityId: string
+  scope: UserCapability['scope']
+  fromVersion: string
+  toVersion: string
+}
+
 export interface DomainMemory {
   id: string
   systemId: string
@@ -290,7 +318,7 @@ export interface DomainMemory {
   updatedAt: number
 }
 
-interface DomainPackRelease {
+export interface DomainPackRelease {
   version: string
   hash: string
   directory: string

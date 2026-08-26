@@ -1,9 +1,24 @@
 {
   "kind": "domain",
   "systemId": "limited_event",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "kernelApiRange": "^1.0.0",
-  "supportedEngineRange": "*",
+  "supportedEngineRange": ">=1.0.0",
+  "engineCompatibility": {
+    "strategy": "evidence-gated-auto-generalization-v1",
+    "versionAliases": [
+      "semver",
+      "v-prefixed-semver",
+      "major-minor"
+    ],
+    "requiredEvidence": [
+      "project-directory-layout",
+      "owned-selector-or-content-fingerprint",
+      "resource-schema-validation"
+    ],
+    "unknownVersionPolicy": "readonly",
+    "incompatibleVersionPolicy": "readonly"
+  },
   "manifestSchemaVersion": 1,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
@@ -722,7 +737,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -819,7 +834,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -900,7 +915,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1002,7 +1017,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1105,7 +1120,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1193,7 +1208,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.1.0",
+      "version": "1.2.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

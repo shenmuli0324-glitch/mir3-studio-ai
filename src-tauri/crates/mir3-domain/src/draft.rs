@@ -159,6 +159,7 @@ impl DomainStore {
         changes: &[DraftChangeInput],
     ) -> Result<DraftPreview, String> {
         self.ensure_writable()?;
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let draft = self.get_draft(project_id, draft_id)?;
         if draft.status != DraftStatus::Open {
             return Err("DRAFT_NOT_OPEN: only open drafts can be patched".to_string());
@@ -235,6 +236,7 @@ impl DomainStore {
         changes: &[DraftBinaryChangeInput],
     ) -> Result<DraftPreview, String> {
         self.ensure_writable()?;
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let draft = self.get_draft(project_id, draft_id)?;
         if draft.status != DraftStatus::Open {
             return Err("DRAFT_NOT_OPEN: only open drafts can be patched".to_string());
@@ -392,6 +394,7 @@ impl DomainStore {
         expected_diff_hash: &str,
     ) -> Result<Snapshot, String> {
         self.ensure_writable()?;
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let preview = self.preview_draft(project_id, draft_id)?;
         if preview.draft.status != DraftStatus::Open {
             return Err("DRAFT_NOT_OPEN: draft is no longer open".to_string());
@@ -402,6 +405,7 @@ impl DomainStore {
         let project = self.get_project(project_id)?;
         let root = PathBuf::from(&project.root);
         for change in &preview.changes {
+            self.assert_draft_path_writable(project_id, draft_id, &change.path)?;
             let target = safe_project_target(&root, &change.path)?;
             let current = fs::read(&target).ok().as_deref().map(hash_bytes);
             if current != change.base_sha256 {
@@ -527,6 +531,11 @@ impl DomainStore {
                     .to_string(),
             );
         }
+        let mutation_ids = confirmations
+            .iter()
+            .map(|confirmation| confirmation.draft_id.clone())
+            .collect::<Vec<_>>();
+        let _mutations = self.reserve_draft_mutations(project_id, &mutation_ids)?;
         let project = self.get_project(project_id)?;
         let root = PathBuf::from(&project.root);
         let mut all_paths = Vec::new();
@@ -566,6 +575,7 @@ impl DomainStore {
                 ));
             }
             for change in &preview.changes {
+                self.assert_draft_path_writable(project_id, &confirmation.draft_id, &change.path)?;
                 if all_paths.contains(&change.path) {
                     return Err(format!("COMPOSITE_PATH_CONFLICT: {}", change.path));
                 }
@@ -809,6 +819,7 @@ impl DomainStore {
     }
 
     pub fn discard_draft(&self, project_id: &str, draft_id: &str) -> Result<Draft, String> {
+        let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let draft = self.get_draft(project_id, draft_id)?;
         if draft.status != DraftStatus::Open {
             return Err("DRAFT_NOT_OPEN: only open drafts can be discarded".to_string());
@@ -1080,11 +1091,11 @@ mod tests {
         let target = project.join("客户端/dev/Quest/Main.lua");
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, "return 1\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let imported = store.import_project(&project).unwrap();
         let draft = store.open_draft(&imported.id, "修改入口").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.1.0", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.2.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -1125,13 +1136,13 @@ mod tests {
         fs::create_dir_all(project.join("引擎/Mir200/Envir/Shop")).unwrap();
         fs::write(project.join(quest_path), "quest=1\n").unwrap();
         fs::write(project.join(shop_path), "shop=1\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let imported = store.import_project(&project).unwrap();
         store.scan_project(&imported.id, || false).unwrap();
 
         let quest = store.open_draft(&imported.id, "更新任务").unwrap();
         store
-            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.1.0", Some("release-1"))
+            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.2.0", Some("release-1"))
             .unwrap();
         let denied = store.patch_draft(
             &imported.id,
@@ -1163,7 +1174,7 @@ mod tests {
 
         let shop = store.open_draft(&imported.id, "更新商城").unwrap();
         store
-            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.1.0", Some("release-1"))
+            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.2.0", Some("release-1"))
             .unwrap();
         let shop_preview = store
             .patch_draft(
@@ -1302,7 +1313,7 @@ mod tests {
         let project = base.join("全领域项目");
         fs::create_dir_all(project.join("客户端/dev")).unwrap();
         fs::create_dir_all(project.join("引擎/Mir200/Envir")).unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let manifests = store.list_domain_systems().unwrap();
         assert_eq!(manifests.len(), 33);
         let mut relative_by_system = std::collections::BTreeMap::new();
@@ -1414,12 +1425,12 @@ mod tests {
         fs::create_dir_all(project.join("客户端/dev")).unwrap();
         fs::create_dir_all(project.join("引擎/Mir200/Envir/Quest")).unwrap();
         fs::write(project.join(relative), "quest=0\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let imported = store.import_project(&project).unwrap();
         store.scan_project(&imported.id, || false).unwrap();
         let draft = store.open_draft(&imported.id, "并发修改").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.1.0", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.2.0", None)
             .unwrap();
 
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
@@ -1455,7 +1466,8 @@ mod tests {
             .find_map(|outcome| outcome.as_ref().err())
             .unwrap();
         assert!(
-            rejected.starts_with("DRAFT_REVISION_CONFLICT:"),
+            rejected.starts_with("DRAFT_REVISION_CONFLICT:")
+                || rejected.starts_with("DRAFT_MUTATION_RESERVED:"),
             "unexpected concurrent rejection: {rejected}"
         );
         assert_eq!(
@@ -1484,7 +1496,7 @@ mod tests {
         fs::create_dir_all(project.join("引擎/Mir200/Envir/Shop")).unwrap();
         fs::write(project.join(quest_path), "quest=0\n").unwrap();
         fs::write(project.join(shop_path), "shop=0\n").unwrap();
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let imported = store.import_project(&project).unwrap();
         store.scan_project(&imported.id, || false).unwrap();
         let composite_id = "concurrent-release";
@@ -1502,7 +1514,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.1.0",
+                    "1.2.0",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -1526,8 +1538,6 @@ mod tests {
             });
         }
 
-        let preflight_barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
-        *store.composite_apply_test_barrier.lock().unwrap() = Some(preflight_barrier);
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
         let mut workers = Vec::new();
         for _ in 0..2 {
@@ -1549,14 +1559,14 @@ mod tests {
             .into_iter()
             .map(|worker| worker.join().unwrap())
             .collect::<Vec<_>>();
-        *store.composite_apply_test_barrier.lock().unwrap() = None;
         assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
         let rejected = outcomes
             .iter()
             .find_map(|outcome| outcome.as_ref().err())
             .unwrap();
         assert!(
-            rejected.starts_with("COMPOSITE_RESERVATION_CONFLICT:"),
+            rejected.starts_with("COMPOSITE_RESERVATION_CONFLICT:")
+                || rejected.starts_with("DRAFT_MUTATION_RESERVED:"),
             "unexpected concurrent rejection: {rejected}"
         );
         assert_eq!(

@@ -3,13 +3,14 @@
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
     CapabilityCompileRequest, CapabilityPromotionRequest, CapabilityResolution,
-    CompositeApplyResult, CompositeDraftConfirmation, DomainDependencyGraph, DomainFileQuery,
-    DomainFileRecord, DomainManifest, DomainMemory, DomainResourceQuery, DomainResourceRecord,
-    DomainSystemDescription, DomainValidationReport, Draft, GlobalCapabilityCompileRequest,
-    IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
-    LegacyDraftCloneRequest, Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult,
-    SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet, SafeXlsWorkbook, Snapshot,
-    SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability, WorkspaceDirectory,
+    CapabilityRollbackRequest, CompositeApplyResult, CompositeDraftConfirmation,
+    DomainDependencyGraph, DomainFileQuery, DomainFileRecord, DomainManifest, DomainMemory,
+    DomainResourceQuery, DomainResourceRecord, DomainSystemDescription, DomainValidationReport,
+    Draft, GlobalCapabilityCompileRequest, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
+    KnowledgeRecord, KnowledgeStatus, LegacyDraftCloneRequest, Mir3Project, SafeTextOpen,
+    SafeTextPatch, SafeTextPatchResult, SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet,
+    SafeXlsWorkbook, Snapshot, SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability,
+    WorkspaceDirectory,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -336,6 +337,35 @@ pub fn user_capability_resolve(
     service
         .store()
         .resolve_user_capabilities(&project_id, system_id.as_deref())
+}
+
+#[tauri::command]
+pub fn user_capability_versions(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: Option<String>,
+) -> Result<Vec<CapabilityResolution>, String> {
+    service
+        .store()
+        .list_user_capability_versions(&project_id, system_id.as_deref())
+}
+
+#[tauri::command]
+pub fn user_capability_rollback(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    request: CapabilityRollbackRequest,
+    confirmed: bool,
+) -> Result<UserCapability, String> {
+    if !confirmed {
+        return Err(
+            "CAPABILITY_ROLLBACK_CONFIRMATION_REQUIRED: review both versions before rollback"
+                .to_string(),
+        );
+    }
+    service
+        .store()
+        .rollback_user_capability(&project_id, &request)
 }
 
 #[tauri::command]

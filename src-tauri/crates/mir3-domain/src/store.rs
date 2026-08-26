@@ -8,8 +8,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::thread::{self, ThreadId};
 
 use crate::safe_files::CachedXlsWorkbook;
+use fs2::FileExt;
+use sha2::{Digest, Sha256};
 
 const SCHEMA_VERSION: i64 = 2;
 
@@ -20,8 +23,14 @@ pub struct DomainStore {
     domain_pack_root: PathBuf,
     read_only_reason: Option<Arc<str>>,
     pub(crate) xls_cache: Arc<Mutex<HashMap<String, Arc<CachedXlsWorkbook>>>>,
+    draft_mutation_reservations: Arc<Mutex<HashMap<String, DraftMutationReservationState>>>,
     #[cfg(test)]
     pub(crate) composite_apply_test_barrier: Arc<Mutex<Option<Arc<std::sync::Barrier>>>>,
+    #[cfg(test)]
+    pub(crate) governance_copy_test_gate:
+        Arc<Mutex<Option<(Arc<std::sync::Barrier>, Arc<std::sync::Barrier>)>>>,
+    #[cfg(test)]
+    pub(crate) trusted_fixture_engine_override: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -49,8 +58,13 @@ impl DomainStore {
             domain_pack_root: domain_pack_root.into(),
             read_only_reason: None,
             xls_cache: Arc::new(Mutex::new(HashMap::new())),
+            draft_mutation_reservations: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(test)]
             composite_apply_test_barrier: Arc::new(Mutex::new(None)),
+            #[cfg(test)]
+            governance_copy_test_gate: Arc::new(Mutex::new(None)),
+            #[cfg(test)]
+            trusted_fixture_engine_override: false,
         };
         fs::create_dir_all(&store.data_root)
             .map_err(|e| format!("PROJECT_DATA_CREATE_FAILED: {e}"))?;
@@ -65,6 +79,25 @@ impl DomainStore {
         if let Err(error) = store.migrate_existing_projects() {
             store.read_only_reason = Some(Arc::from(error));
         }
+        Ok(store)
+    }
+
+    /// 仅单元测试可显式声明其临时项目是受信 fixture；生产构建不存在此入口和字段。
+    #[cfg(test)]
+    pub(crate) fn new_trusted_fixture(data_root: impl Into<PathBuf>) -> Result<Self, String> {
+        let data_root = data_root.into();
+        let domain_pack_root = data_root.join("domain-packs");
+        Self::new_trusted_fixture_with_domain_pack_root(data_root, domain_pack_root)
+    }
+
+    /// 带独立领域包根的受信测试 fixture 构造器。
+    #[cfg(test)]
+    pub(crate) fn new_trusted_fixture_with_domain_pack_root(
+        data_root: impl Into<PathBuf>,
+        domain_pack_root: impl Into<PathBuf>,
+    ) -> Result<Self, String> {
+        let mut store = Self::new_with_domain_pack_root(data_root, domain_pack_root)?;
+        store.trusted_fixture_engine_override = true;
         Ok(store)
     }
 
@@ -379,6 +412,159 @@ impl DomainStore {
             self.prepare_project_storage(&project.id)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn reserve_draft_mutations(
+        &self,
+        project_id: &str,
+        draft_ids: &[String],
+    ) -> Result<DraftMutationReservation, String> {
+        let owner = thread::current().id();
+        let lock_root = self.project_dir(project_id)?.join("draft-locks");
+        fs::create_dir_all(&lock_root)
+            .map_err(|error| format!("DRAFT_RESERVATION_DIRECTORY_FAILED: {error}"))?;
+        let mut targets = draft_ids
+            .iter()
+            .map(|draft_id| {
+                (
+                    draft_reservation_key(project_id, draft_id),
+                    draft_lock_path(&lock_root, draft_id),
+                )
+            })
+            .collect::<Vec<_>>();
+        targets.sort_by(|left, right| left.0.cmp(&right.0));
+        targets.dedup_by(|left, right| left.0 == right.0);
+        let mut reservations = self
+            .draft_mutation_reservations
+            .lock()
+            .map_err(|_| "DRAFT_RESERVATION_LOCK_FAILED: reservation lock poisoned".to_string())?;
+        let mut keys = Vec::with_capacity(targets.len());
+        for (key, path) in targets {
+            if let Some(reservation) = reservations.get_mut(&key) {
+                if reservation.owner != owner {
+                    release_draft_reservations(&mut reservations, &keys, owner);
+                    return Err(format!("DRAFT_MUTATION_RESERVED: {key}"));
+                }
+                reservation.depth += 1;
+                keys.push(key);
+                continue;
+            }
+            let file = match fs::OpenOptions::new()
+                .create(true)
+                .read(true)
+                .write(true)
+                .truncate(false)
+                .open(&path)
+            {
+                Ok(file) => file,
+                Err(error) => {
+                    release_draft_reservations(&mut reservations, &keys, owner);
+                    return Err(format!("DRAFT_RESERVATION_OPEN_FAILED: {error}"));
+                }
+            };
+            if let Err(error) = file.try_lock_exclusive() {
+                release_draft_reservations(&mut reservations, &keys, owner);
+                return Err(format!("DRAFT_MUTATION_RESERVED: {key}: {error}"));
+            }
+            reservations.insert(
+                key.clone(),
+                DraftMutationReservationState {
+                    owner,
+                    depth: 1,
+                    _file: file,
+                },
+            );
+            keys.push(key);
+        }
+        drop(reservations);
+        Ok(DraftMutationReservation {
+            reservations: self.draft_mutation_reservations.clone(),
+            keys,
+            owner,
+        })
+    }
+
+    pub(crate) fn reserve_draft_mutation(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+    ) -> Result<DraftMutationReservation, String> {
+        self.reserve_draft_mutations(project_id, &[draft_id.to_string()])
+    }
+
+    #[cfg(test)]
+    pub(crate) fn wait_governance_copy_test_gate(&self) -> Result<(), String> {
+        let gate = self
+            .governance_copy_test_gate
+            .lock()
+            .map_err(|_| "GOVERNANCE_COPY_TEST_GATE_FAILED: gate lock poisoned".to_string())?
+            .clone();
+        if let Some((entered, release)) = gate {
+            entered.wait();
+            release.wait();
+        }
+        Ok(())
+    }
+}
+
+pub(crate) struct DraftMutationReservation {
+    reservations: Arc<Mutex<HashMap<String, DraftMutationReservationState>>>,
+    keys: Vec<String>,
+    owner: ThreadId,
+}
+
+#[derive(Debug)]
+struct DraftMutationReservationState {
+    owner: ThreadId,
+    depth: usize,
+    _file: fs::File,
+}
+
+impl Drop for DraftMutationReservation {
+    fn drop(&mut self) {
+        if let Ok(mut reservations) = self.reservations.lock() {
+            for key in &self.keys {
+                let remove = reservations.get_mut(key).is_some_and(|reservation| {
+                    if reservation.owner != self.owner {
+                        return false;
+                    }
+                    reservation.depth -= 1;
+                    reservation.depth == 0
+                });
+                if remove {
+                    reservations.remove(key);
+                }
+            }
+        }
+    }
+}
+
+fn draft_reservation_key(project_id: &str, draft_id: &str) -> String {
+    format!("{project_id}:{draft_id}")
+}
+
+fn draft_lock_path(root: &Path, draft_id: &str) -> PathBuf {
+    let mut digest = Sha256::new();
+    digest.update(draft_id.as_bytes());
+    root.join(format!("{:x}.lock", digest.finalize()))
+}
+
+fn release_draft_reservations(
+    reservations: &mut HashMap<String, DraftMutationReservationState>,
+    keys: &[String],
+    owner: ThreadId,
+) {
+    for key in keys.iter().rev() {
+        let remove = reservations.get_mut(key).is_some_and(|reservation| {
+            if reservation.owner != owner {
+                return false;
+            }
+            reservation.depth -= 1;
+            reservation.depth == 0
+        });
+        if remove {
+            reservations.remove(key);
+        }
     }
 }
 

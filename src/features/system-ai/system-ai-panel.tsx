@@ -1,5 +1,5 @@
 import type { DomainDraftHandoff } from './ai-handoff'
-import type { DomainManifest, DomainMemory, TaskScopeLease, UserCapability } from '@/features/devtools/domain/types'
+import type { CapabilityResolution, DomainManifest, DomainMemory, TaskReceipt, TaskScopeLease, UserCapability } from '@/features/devtools/domain/types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
 import { ArrowUp, CircleStop, MagicWand, Plus, Sparkles } from '@gravity-ui/icons'
@@ -8,9 +8,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
-import { activateMemoryCandidate, associateDomainDraftComposite, bindSystemSession, compileUserCapability, getSystemSession, issueTaskScope, listDomainDrafts, listDomainMemories, listDomainSystems, listMemoryCandidates, listTaskReceipts, openDomainDraft, previewDomainDraft, revokeMemoryCandidate, revokeTaskScope, saveTaskReceipt, setUserCapabilityStatus, validateDomainDraft } from '@/features/devtools/domain/api'
+import { activateMemoryCandidate, associateDomainDraftComposite, bindSystemSession, compileUserCapability, getSystemSession, issueTaskScope, listDomainDrafts, listDomainMemories, listDomainSystems, listMemoryCandidates, listTaskReceipts, openDomainDraft, previewDomainDraft, resolveUserCapabilities, revokeMemoryCandidate, revokeTaskScope, saveTaskReceipt, setUserCapabilityStatus, validateDomainDraft } from '@/features/devtools/domain/api'
 import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
 import { draftHandoffs, includeGlobalTaskDraft, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, unregisterGlobalTask } from './ai-handoff'
+import { CapabilityGovernance } from './capability-governance'
 import { currentScopeLease, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from './scope-lease-manager'
 
 interface AiMessage {
@@ -55,6 +56,8 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('')
   const [memoryCandidates, setMemoryCandidates] = useState<DomainMemory[]>([])
   const [activeMemories, setActiveMemories] = useState<DomainMemory[]>([])
+  const [reusableReceipts, setReusableReceipts] = useState<TaskReceipt[]>([])
+  const [resolvedCapabilities, setResolvedCapabilities] = useState<CapabilityResolution[]>([])
   const [globalWriteSystems, setGlobalWriteSystems] = useState<string[]>([])
   const [globalPending, setGlobalPending] = useState(false)
   const resumedSessionRef = useRef('')
@@ -82,9 +85,13 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     void Promise.all([
       listMemoryCandidates(project.id, manifest.systemId),
       listDomainMemories(project.id, manifest.systemId, true),
-    ]).then(([candidates, active]) => {
+      listTaskReceipts(project.id, manifest.systemId),
+      resolveUserCapabilities(project.id, manifest.systemId),
+    ]).then(([candidates, active, receipts, capabilities]) => {
       setMemoryCandidates(candidates.filter(memory => memory.sourceTaskId === taskId))
       setActiveMemories(active)
+      setReusableReceipts(receipts.filter(receipt => isSuccessfulReceipt(receipt.status)).slice(0, 6))
+      setResolvedCapabilities(capabilities.slice(0, 12))
     }).catch(reason => setError(String(reason)))
   }, [manifest.systemId, project.id, taskId])
 
@@ -241,7 +248,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       })
       const posted = postSessionMessage('mir3/systemSession.create', project.id, manifest.systemId, taskId, activeSessionId, {
         cwd: project.activeWorkspaceRoot,
-        prompt: scopedPrompt(content, manifest, project, selectedPath, draftId, activeScopeToken, activeMemories),
+        prompt: scopedPrompt(content, manifest, project, selectedPath, draftId, activeScopeToken, activeMemories, reusableReceipts, resolvedCapabilities),
       })
       if (!posted) {
         stopScopeLease(leaseIdentity)
@@ -250,7 +257,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       return
     }
     const posted = postSessionMessage('mir3/systemSession.prompt', project.id, manifest.systemId, taskId, activeSessionId, {
-      content: scopedPrompt(content, manifest, project, selectedPath, draftId, activeScopeToken, activeMemories),
+      content: scopedPrompt(content, manifest, project, selectedPath, draftId, activeScopeToken, activeMemories, reusableReceipts, resolvedCapabilities),
       mode: 'queue',
     })
     if (!posted)
@@ -291,6 +298,8 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     setSelectedCapabilityId('')
     setMemoryCandidates([])
     setActiveMemories([])
+    setReusableReceipts([])
+    setResolvedCapabilities([])
     setGlobalWriteSystems([])
     setGlobalPending(false)
     lastSequenceRef.current.clear()
@@ -607,6 +616,11 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
             {memoryCandidates.map(memory => <MemoryCandidate key={memory.id} memory={memory} onReview={status => void reviewMemory(memory, status)} />)}
           </div>
         </If>
+        <CapabilityGovernance
+          projectId={project.id}
+          systemId={manifest.systemId}
+          refreshToken={`${capabilityDraft?.id ?? ''}:${capabilityDraft?.status ?? ''}`}
+        />
         <If cond={error != null}><p className="rounded-xl border border-danger/30 bg-danger/8 p-3 text-xs text-danger">{error}</p></If>
       </div>
       <div className="shrink-0 border-t border-line p-3">
@@ -986,12 +1000,32 @@ function systemTaskStorageKey(projectId: string, systemId: string) {
   return `mir3-system-task:${projectId}:${systemId}`
 }
 
-function scopedPrompt(content: string, manifest: DomainManifest, project: Mir3Project, selectedPath?: string | null, draftId?: string | null, scopeToken?: string, memories: DomainMemory[] = []) {
+function scopedPrompt(
+  content: string,
+  manifest: DomainManifest,
+  project: Mir3Project,
+  selectedPath?: string | null,
+  draftId?: string | null,
+  scopeToken?: string,
+  memories: DomainMemory[] = [],
+  receipts: TaskReceipt[] = [],
+  capabilities: CapabilityResolution[] = [],
+) {
   const context = [
     `[MIR3 System Scope] project=${project.id}; system=${manifest.systemId}; plugin=${manifest.version}; writeSystems=${manifest.systemId}; readSystems=${[manifest.systemId, ...manifest.dependencies].join(',')}; draft=${draftId ?? 'none'}; selectedFile=${selectedPath ?? 'none'}; scopeToken=${scopeToken ?? 'none'}.`,
   ]
   if (memories.length > 0)
     context.push(`[Activated domain memories]\n${memories.slice(0, 8).map(memory => `- ${memory.summary}`).join('\n')}`)
+  if (receipts.length > 0) {
+    context.push(`[Relevant task receipts]\n${receipts.slice(0, 6).map(receipt => (
+      `- id=${receipt.id}; status=${receipt.status}; draft=${receipt.draftId ?? 'none'}; summary=${receipt.summary.slice(0, 160)}`
+    )).join('\n')}`)
+  }
+  if (capabilities.length > 0) {
+    context.push(`[Resolved reusable capabilities]\n${capabilities.slice(0, 12).map(item => (
+      `- ${item.capability.id}@${item.capability.version}; scope=${item.resolvedScope}; writes=${item.capability.writeSystems.join(',')}`
+    )).join('\n')}`)
+  }
   context.push(content)
   return context.join('\n')
 }

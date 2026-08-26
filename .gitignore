@@ -7,6 +7,7 @@ src-tauri/gen
 src-tauri/resources/node
 src-tauri/resources/runtime-baseline/*
 !src-tauri/resources/runtime-baseline/.gitkeep
+src-tauri/resources/build-provenance.json
 .cache/mir3-runtime
 *.log
 .DS_Store

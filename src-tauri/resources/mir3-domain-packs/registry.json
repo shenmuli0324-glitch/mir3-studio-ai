@@ -4,9 +4,24 @@
     {
       "kind": "domain",
       "systemId": "map",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -1026,7 +1041,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1130,7 +1145,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1236,7 +1251,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1491,7 +1506,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1602,7 +1617,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1712,7 +1727,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1799,7 +1814,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1885,9 +1900,24 @@
     {
       "kind": "domain",
       "systemId": "npc",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -2717,7 +2747,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2798,7 +2828,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2901,7 +2931,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2988,7 +3018,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3095,7 +3125,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3196,7 +3226,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3303,7 +3333,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3393,9 +3423,24 @@
     {
       "kind": "domain",
       "systemId": "monster",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -4109,7 +4154,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4204,7 +4249,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4298,7 +4343,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4395,7 +4440,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4495,7 +4540,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4581,7 +4626,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4671,9 +4716,24 @@
     {
       "kind": "domain",
       "systemId": "equipment",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -5340,7 +5400,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5445,7 +5505,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5556,7 +5616,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5644,7 +5704,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5754,7 +5814,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5839,9 +5899,24 @@
     {
       "kind": "domain",
       "systemId": "item",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -6491,7 +6566,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6595,7 +6670,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6705,7 +6780,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6790,7 +6865,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6900,7 +6975,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6985,9 +7060,24 @@
     {
       "kind": "domain",
       "systemId": "level",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -7681,7 +7771,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7776,7 +7866,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7868,7 +7958,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7963,7 +8053,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8053,7 +8143,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8138,7 +8228,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8228,9 +8318,24 @@
     {
       "kind": "domain",
       "systemId": "rebirth",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -8863,7 +8968,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8965,7 +9070,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9067,7 +9172,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9163,7 +9268,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9250,7 +9355,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9345,9 +9450,24 @@
     {
       "kind": "domain",
       "systemId": "title",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -9954,7 +10074,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10048,7 +10168,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10148,7 +10268,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10247,7 +10367,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10332,7 +10452,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10417,9 +10537,24 @@
     {
       "kind": "domain",
       "systemId": "buff",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -11144,7 +11279,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11243,7 +11378,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11344,7 +11479,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11448,7 +11583,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11553,7 +11688,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11638,7 +11773,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11723,9 +11858,24 @@
     {
       "kind": "domain",
       "systemId": "skill",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -12343,7 +12493,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12438,7 +12588,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12546,7 +12696,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12624,7 +12774,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12725,7 +12875,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12816,9 +12966,24 @@
     {
       "kind": "domain",
       "systemId": "enhance",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -13448,7 +13613,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13562,7 +13727,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13656,7 +13821,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13757,7 +13922,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13842,7 +14007,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13928,9 +14093,24 @@
     {
       "kind": "domain",
       "systemId": "crafting",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -14558,7 +14738,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14653,7 +14833,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14739,7 +14919,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14833,7 +15013,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14933,7 +15113,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15023,9 +15203,24 @@
     {
       "kind": "domain",
       "systemId": "gem",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -15782,7 +15977,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15895,7 +16090,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15997,7 +16192,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16097,7 +16292,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16203,7 +16398,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16290,7 +16485,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16376,9 +16571,24 @@
     {
       "kind": "domain",
       "systemId": "refine",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -17119,7 +17329,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17225,7 +17435,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17329,7 +17539,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17439,7 +17649,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17549,7 +17759,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17633,7 +17843,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17725,9 +17935,24 @@
     {
       "kind": "domain",
       "systemId": "quest",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -18395,7 +18620,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18496,7 +18721,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18610,7 +18835,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18699,7 +18924,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18806,7 +19031,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18896,9 +19121,24 @@
     {
       "kind": "domain",
       "systemId": "checkin",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -19518,7 +19758,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19621,7 +19861,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19716,7 +19956,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19817,7 +20057,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19902,7 +20142,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19993,9 +20233,24 @@
     {
       "kind": "domain",
       "systemId": "online_reward",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -20693,7 +20948,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20789,7 +21044,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20873,7 +21128,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20972,7 +21227,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21066,7 +21321,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21166,7 +21421,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21256,9 +21511,24 @@
     {
       "kind": "domain",
       "systemId": "limited_event",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -21977,7 +22247,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22074,7 +22344,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22155,7 +22425,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22257,7 +22527,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22360,7 +22630,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22448,7 +22718,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22538,9 +22808,24 @@
     {
       "kind": "domain",
       "systemId": "launch_event",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -23281,7 +23566,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23380,7 +23665,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23463,7 +23748,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23567,7 +23852,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23672,7 +23957,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23762,7 +24047,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23852,9 +24137,24 @@
     {
       "kind": "domain",
       "systemId": "first_charge",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -24480,7 +24780,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24566,7 +24866,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24662,7 +24962,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24763,7 +25063,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24865,7 +25165,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24955,9 +25255,24 @@
     {
       "kind": "domain",
       "systemId": "cumulative_charge",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -25579,7 +25894,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25686,7 +26001,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25780,7 +26095,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25880,7 +26195,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25965,7 +26280,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26051,9 +26366,24 @@
     {
       "kind": "domain",
       "systemId": "vip",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -26676,7 +27006,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26781,7 +27111,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26879,7 +27209,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26971,7 +27301,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27058,7 +27388,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27148,9 +27478,24 @@
     {
       "kind": "domain",
       "systemId": "shop",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -27911,7 +28256,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28023,7 +28368,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28111,7 +28456,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28199,7 +28544,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28312,7 +28657,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28418,7 +28763,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28513,9 +28858,24 @@
     {
       "kind": "domain",
       "systemId": "recycle",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -29221,7 +29581,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29330,7 +29690,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29399,7 +29759,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29508,7 +29868,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29611,7 +29971,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29696,7 +30056,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29786,9 +30146,24 @@
     {
       "kind": "domain",
       "systemId": "guild",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -30496,7 +30871,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30589,7 +30964,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30693,7 +31068,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30784,7 +31159,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30881,7 +31256,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30967,7 +31342,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31057,9 +31432,24 @@
     {
       "kind": "domain",
       "systemId": "sabac",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -31971,7 +32361,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32071,7 +32461,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32171,7 +32561,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32243,7 +32633,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32346,7 +32736,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32444,7 +32834,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32548,7 +32938,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32637,7 +33027,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32727,9 +33117,24 @@
     {
       "kind": "domain",
       "systemId": "ranking",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -33475,7 +33880,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33576,7 +33981,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33679,7 +34084,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33766,7 +34171,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33872,7 +34277,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33979,7 +34384,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34064,9 +34469,24 @@
     {
       "kind": "domain",
       "systemId": "resource_production",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -34819,7 +35239,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34922,7 +35342,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35023,7 +35443,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35130,7 +35550,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35237,7 +35657,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35325,7 +35745,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35420,9 +35840,24 @@
     {
       "kind": "domain",
       "systemId": "manor",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -36238,7 +36673,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36336,7 +36771,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36436,7 +36871,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36508,7 +36943,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36611,7 +37046,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36715,7 +37150,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36805,7 +37240,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36895,9 +37330,24 @@
     {
       "kind": "domain",
       "systemId": "hero_soul",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -37537,7 +37987,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37638,7 +38088,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37740,7 +38190,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37836,7 +38286,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37924,7 +38374,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38010,9 +38460,24 @@
     {
       "kind": "domain",
       "systemId": "talent",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -38903,7 +39368,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39004,7 +39469,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39105,7 +39570,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39175,7 +39640,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39280,7 +39745,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39379,7 +39844,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39484,7 +39949,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39570,7 +40035,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39656,9 +40121,24 @@
     {
       "kind": "domain",
       "systemId": "season",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -40438,7 +40918,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40535,7 +41015,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40616,7 +41096,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40687,7 +41167,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40789,7 +41269,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40892,7 +41372,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40980,7 +41460,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41070,9 +41550,24 @@
     {
       "kind": "domain",
       "systemId": "cross_server",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "kernelApiRange": "^1.0.0",
-      "supportedEngineRange": "*",
+      "supportedEngineRange": ">=1.0.0",
+      "engineCompatibility": {
+        "strategy": "evidence-gated-auto-generalization-v1",
+        "versionAliases": [
+          "semver",
+          "v-prefixed-semver",
+          "major-minor"
+        ],
+        "requiredEvidence": [
+          "project-directory-layout",
+          "owned-selector-or-content-fingerprint",
+          "resource-schema-validation"
+        ],
+        "unknownVersionPolicy": "readonly",
+        "incompatibleVersionPolicy": "readonly"
+      },
       "manifestSchemaVersion": 1,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
@@ -41904,7 +42399,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42011,7 +42506,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42082,7 +42577,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42194,7 +42689,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42299,7 +42794,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42410,7 +42905,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42497,7 +42992,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.1.0",
+          "version": "1.2.0",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true

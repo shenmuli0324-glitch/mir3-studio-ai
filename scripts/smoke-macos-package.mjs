@@ -22,6 +22,7 @@ let outputBuffer = ''
 let coreProcessId = null
 let corePort = null
 let passed = false
+const launchedAt = Date.now()
 const app = spawn(executable, [], {
   cwd: root,
   env: { ...process.env, MIR3_STUDIO_HOME: smokeRoot },
@@ -53,7 +54,7 @@ try {
       return false
     }
   }, 45_000, `Harness HTTP service on ${corePort}`)
-  await delay(1_500)
+  const coreCanary = await waitFor(async () => readCoreCanary(smokeRoot, packagedVersion, launchedAt), 90_000, 'durable Core compatibility canary')
   if (/startup failed|HARNESS_NOT_OWNED|启动超时/u.test(outputBuffer))
     throw new Error(`Native startup reported a failure:\n${outputBuffer}`)
   const packRoot = join(smokeRoot, 'domain-packs')
@@ -69,6 +70,8 @@ try {
   process.stdout.write(`Version: ${packagedVersion}\n`)
   process.stdout.write(`Harness: http://127.0.0.1:${corePort}/\n`)
   process.stdout.write(`Domain packs: ${packCount}\n`)
+  process.stdout.write(`Core canary: ${coreCanary.status}; protocol v${coreCanary.protocolVersion}; ${coreCanary.checks.length} public runtime gates\n`)
+  process.stdout.write(`UI visibility/search acceptance: not asserted by this smoke\n`)
 }
 finally {
   await stopProcess(app.pid, 'native app')
@@ -91,6 +94,37 @@ function hasStateFile(path) {
   }
   catch {
     return false
+  }
+}
+
+function readCoreCanary(root, expectedVersion, minimumPassedAt) {
+  try {
+    const state = JSON.parse(readFileSync(join(root, '.mir3-core-canary.json'), 'utf8'))
+    const expectedChecks = [
+      'bridge-v2',
+      'ordinary-session',
+      'archived-system-session',
+      'mcp-sidecar',
+      'domain-capability',
+    ]
+    if (state.schemaVersion !== 1
+      || state.status !== 'passed'
+      || state.protocolVersion !== 2
+      || state.appVersion !== expectedVersion
+      || !Number.isSafeInteger(state.passedAt)
+      || state.passedAt < minimumPassedAt - 2_000
+      || typeof state.coreTag !== 'string'
+      || state.coreTag.length === 0
+      || typeof state.coreCommit !== 'string'
+      || state.coreCommit.length === 0
+      || !Array.isArray(state.checks)
+      || expectedChecks.some(check => !state.checks.includes(check))) {
+      return null
+    }
+    return state
+  }
+  catch {
+    return null
   }
 }
 

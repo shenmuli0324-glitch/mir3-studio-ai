@@ -1,0 +1,25 @@
+{
+  "systemId": "level",
+  "fixture": "invalid",
+  "records": [
+    {
+      "level": 256,
+      "requiredExperience": 1,
+      "statPoints": 1,
+      "recommendedMonsterId": "monster:missing"
+    },
+    {
+      "level": 256,
+      "requiredExperience": 2,
+      "statPoints": 2,
+      "recommendedMonsterId": "monster:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "level.experience-monotonic",
+      "expected": false
+    }
+  ]
+}

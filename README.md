@@ -8,7 +8,7 @@
 
 <p align="center"><samp><a href="./README.en.md">English</a> · <strong>中文</strong></samp></p>
 
-> 当前版本为 `0.9.2`。MIR3 Studio 通过统一系统开发内核、33 个领域包、归档系统会话和安全 Draft 工作流开发由 996 项目管理器创建的项目。
+> 当前版本为 `0.9.3`。MIR3 Studio 通过统一系统开发内核、33 个领域包、归档系统会话和安全 Draft 工作流开发由 996 项目管理器创建的项目。
 
 MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。在其插件化架构基础上，我们独立开发了面向 996 传奇3的项目模型、知识体系、开发工具链和 AI 工作流。
 
@@ -32,7 +32,7 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 | --- | --- |
 | 应用名 | MIR3 Studio AI |
 | 核心显示名 | MIR3 AI Core |
-| 版本 | 0.9.2 |
+| 版本 | 0.9.3 |
 | Tauri identifier | `ai.mir3.studio` |
 | 数据目录 | `~/.mir3-studio-ai` |
 | 开发数据目录 | `~/.mir3-studio-ai.dev` |
@@ -53,7 +53,9 @@ corepack pnpm tauri dev
 
 Apple Silicon macOS 的固定交付命令为 `pnpm package:mac`。该命令一次完成 `.app`、`.dmg`、签名结构、镜像校验和 SHA-256 输出；未配置 Developer ID 时默认使用可真机测试的 ad-hoc 签名。
 
-正式发布若启用领域包远程候选，必须在编译时同时注入 HTTPS 索引地址 `MIR3_DOMAIN_PACK_INDEX_URL` 和 Base64 编码的 32 字节 Ed25519 公钥 `MIR3_DOMAIN_PACK_ED25519_PUBLIC_KEY`。未配置时远程检查会以 `DOMAIN_PACK_UPDATE_NOT_CONFIGURED` 明确关闭，本地随包候选、确认激活与回滚仍正常可用；仓库不内置虚构的发布源或密钥。
+正式发布若启用领域包远程候选，必须在编译时同时注入 HTTPS 索引地址 `MIR3_DOMAIN_PACK_INDEX_URL` 和 Base64 编码的 32 字节 Ed25519 公钥 `MIR3_DOMAIN_PACK_ED25519_PUBLIC_KEY`；构建脚本会拒绝单边配置、非 HTTPS/带凭据地址和明显无效的公钥。启用后桌面端在启动 60 秒后及每 6 小时后台检查并验签、暂存候选，但绝不自动激活；激活仍需用户确认。未配置时后台任务安静关闭，手动远程检查以 `DOMAIN_PACK_UPDATE_NOT_CONFIGURED` 失败关闭，本地随包候选、确认激活与回滚仍正常可用；仓库不内置虚构的发布源或密钥。
+
+33 个领域包使用证据门控的引擎自动泛化：只归一化 SemVer、`v` 前缀 SemVer 与 `major.minor` 三类明确别名，并同时要求真实 996 项目目录、领域选择器/内容指纹与资源 Schema 校验。未识别或不兼容的引擎只能查看和诊断，Draft 写入与最终 Apply 都会拒绝。
 
 详细说明见 [中文开发文档](./docs/DEVELOPMENT.zh.md)。运行时基线的升级和按平台验收规则见 [基线发布约定](./docs/runtime-baseline-policy.md)，版本更新见 [CHANGELOG](./CHANGELOG.md)。
 

@@ -1,7 +1,7 @@
 {
   "name": "mir3-studio-ai",
   "type": "module",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "description": "AI development workspace for MIR3 engine projects.",
@@ -20,6 +20,7 @@
     "plugin:audit": "node scripts/audit-harness-plugins.mjs",
     "domain:audit": "node scripts/audit-domain-kernel.mjs",
     "domain:corpus:audit": "node scripts/audit-domain-corpus.mjs",
+    "domain:corpus:accept": "node scripts/run-domain-corpus-acceptance.mjs",
     "version:bump": "node scripts/bump-product-version.mjs",
     "version:check": "node scripts/check-product-version.mjs",
     "release:check": "pnpm version:check && pnpm brand:audit && pnpm plugin:audit && pnpm domain:audit",

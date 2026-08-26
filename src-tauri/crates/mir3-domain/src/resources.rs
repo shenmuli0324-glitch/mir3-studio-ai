@@ -626,7 +626,7 @@ mod tests {
         create_project(&first_root, first_path);
         create_project(&second_root, second_path);
 
-        let store = DomainStore::new(base.join("data")).unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
         let first = store.import_project(&first_root).unwrap();
         let second = store.import_project(&second_root).unwrap();
         store.scan_project(&first.id, || false).unwrap();

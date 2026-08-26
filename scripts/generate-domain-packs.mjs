@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
+import { defineDomainFixtures, defineDomainManifest } from '../src-tauri/resources/mir3-domain-sdk/index.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const outputRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-packs')
@@ -100,7 +101,7 @@ const compoundUniqueKeys = {
   talent: ['treeId', 'nodeId'],
 }
 
-function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.1.0') {
+function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.2.0') {
   return { id, category, complexity, renderer, keywords, dependencies, capabilities, version }
 }
 
@@ -122,7 +123,14 @@ function createPack(definition) {
     systemId: id,
     version,
     kernelApiRange: '^1.0.0',
-    supportedEngineRange: '*',
+    supportedEngineRange: '>=1.0.0',
+    engineCompatibility: {
+      strategy: 'evidence-gated-auto-generalization-v1',
+      versionAliases: ['semver', 'v-prefixed-semver', 'major-minor'],
+      requiredEvidence: ['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'],
+      unknownVersionPolicy: 'readonly',
+      incompatibleVersionPolicy: 'readonly',
+    },
     manifestSchemaVersion: 1,
     resourceSchemaVersion: 1,
     capabilitySchemaVersion: 1,
@@ -455,7 +463,7 @@ function fixtures(systemId, spec) {
   }
 }
 
-const packs = packDefinitions.map(createPack)
+const packs = packDefinitions.map(definition => defineDomainManifest(createPack(definition)))
 
 mkdirSync(outputRoot, { recursive: true })
 writeFileSync(join(outputRoot, 'registry.json'), `${JSON.stringify({ schemaVersion: 1, packs }, null, 2)}\n`)
@@ -467,7 +475,7 @@ for (const entry of packs) {
   mkdirSync(schemaDirectory, { recursive: true })
   mkdirSync(fixtureDirectory, { recursive: true })
   const spec = domainSpecs[entry.systemId]
-  const examples = fixtures(entry.systemId, spec)
+  const examples = defineDomainFixtures(fixtures(entry.systemId, spec))
   const manifest = {
     name: `@mir3-studio/domain-${entry.systemId}`,
     kind: 'domain',
@@ -479,6 +487,7 @@ for (const entry of packs) {
       systemId: entry.systemId,
       kernelApiRange: entry.kernelApiRange,
       supportedEngineRange: entry.supportedEngineRange,
+      engineCompatibility: entry.engineCompatibility,
       resourceSchema: 'schemas/resource.schema.json',
       fixtures: entry.fixtures,
       changelog: 'CHANGELOG.md',
@@ -493,9 +502,9 @@ for (const entry of packs) {
   writeFileSync(join(fixtureDirectory, 'invalid.json'), `${JSON.stringify(examples.invalid, null, 2)}\n`)
   writeFileSync(join(fixtureDirectory, 'expected-diagnostics.json'), `${JSON.stringify(examples.expectedDiagnostics, null, 2)}\n`)
   const compatibility = `Pack version: \`${entry.version}\`; compiler compatibility: MIR3 System Kernel \`${entry.kernelApiRange}\`; engine range: \`${entry.supportedEngineRange}\`.`
-  writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. ${compatibility} Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
+  writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. ${compatibility} Engine versions are normalized only from SemVer, v-prefixed SemVer, or major.minor aliases. Write access additionally requires the real project layout, an owned selector or content fingerprint, and resource-schema validation; unknown/incompatible engines and unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
   const mapChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
-  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
 }
 
 process.stdout.write(`Generated ${packs.length} MIR3 domain packs with schemas and contract fixtures.\n`)
