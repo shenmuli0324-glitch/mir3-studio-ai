@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { assertDependencyInputTree, hashDependencyInputTree } from './package-dependency-provenance.mjs'
@@ -23,6 +23,7 @@ const dmgPath = join(bundleRoot, 'dmg', `${tauri.productName}_${product.version}
 const embeddedProvenanceSource = join(root, 'src-tauri', 'resources', 'build-provenance.json')
 const embeddedProvenancePath = join(appPath, 'Contents', 'Resources', 'resources', 'build-provenance.json')
 const provenancePath = `${dmgPath}.provenance.json`
+const smokeEvidencePath = `${dmgPath}.smoke.json`
 const dependencyRoot = join(root, 'node_modules')
 const verifyOnly = process.argv.includes('--verify-only')
 const environment = {
@@ -34,6 +35,9 @@ const source = assertCleanCommittedSource()
 const dependencyInput = hashDependencyInputTree(dependencyRoot)
 let embeddedProvenance
 if (!verifyOnly) {
+  // 同版本重新打包会覆盖 DMG；先删除旧 smoke 证据，避免新包尚未通过
+  // native canary 时旁边仍残留绑定旧 DMG 的 passed 结果。
+  rmSync(smokeEvidencePath, { force: true })
   embeddedProvenance = createEmbeddedProvenance(source, dependencyInput)
   writeFileSync(embeddedProvenanceSource, `${JSON.stringify(embeddedProvenance, null, 2)}\n`, { mode: 0o644 })
   stopRunningBundleApp(appPath)

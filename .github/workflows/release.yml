@@ -27,10 +27,15 @@ permissions:
   contents: write
 
 jobs:
+  quality-gate:
+    name: Quality Gate
+    uses: ./.github/workflows/ci.yml
+
   # 正式发布专用：根据 commit/PR 生成 changelog 并创建 release。
   # 需要完整 git 历史（fetch-depth: 0），避免 changelog 生成器拿不到提交记录。
   changelog:
     name: Generate Changelog
+    needs: quality-gate
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -75,9 +80,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
-    # tag 触发时等待 changelog 生成完成再打包；手动触发时跳过 changelog 直接测试打包
-    needs: changelog
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.changelog.result == 'success')
+    # 全部质量门禁先于 changelog 和打包；手动触发时只跳过 changelog。
+    needs: [quality-gate, changelog]
+    if: >-
+      always()
+      && needs.quality-gate.result == 'success'
+      && (github.event_name == 'workflow_dispatch' || needs.changelog.result == 'success')
     strategy:
       fail-fast: false
       matrix:
@@ -170,10 +178,6 @@ jobs:
       - name: Install frontend dependencies
         if: steps.check.outputs.should_run == 'true'
         run: pnpm install --frozen-lockfile
-
-      - name: Verify MIR3 brand consistency
-        if: steps.check.outputs.should_run == 'true'
-        run: pnpm brand:audit
 
       # 正式发布：release 已由 changelog 任务创建，这里只上传产物。
       # 注意：不要传 releaseBody —— tauri-action 会用它覆盖已有 release 的正文。

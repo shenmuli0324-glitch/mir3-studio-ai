@@ -1,17 +1,25 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
+import { assertUnlockedMacosConsoleSession } from './macos-console-session.mjs'
+import { REQUIRED_CORE_CHECKS, writeMacosSmokeEvidence } from './macos-smoke-evidence.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const product = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const tauri = JSON.parse(readFileSync(join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'))
 const appPath = join(root, 'src-tauri', 'target', 'release', 'bundle', 'macos', `${tauri.productName}.app`)
 const executable = join(appPath, 'Contents', 'MacOS', 'mir3-studio-ai')
+const architecture = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
+const dmgPath = join(root, 'src-tauri', 'target', 'release', 'bundle', 'dmg', `${tauri.productName}_${product.version}_${architecture}.dmg`)
+const provenancePath = `${dmgPath}.provenance.json`
+const smokeEvidencePath = `${dmgPath}.smoke.json`
 
 if (process.platform !== 'darwin')
   throw new Error('smoke:mac can only run on macOS')
+
+assertUnlockedMacosConsoleSession()
 
 const packagedVersion = output('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', join(appPath, 'Contents', 'Info.plist')])
 if (packagedVersion !== product.version)
@@ -54,6 +62,7 @@ try {
       return false
     }
   }, 45_000, `Harness HTTP service on ${corePort}`)
+  assertUnlockedMacosConsoleSession()
   const coreCanary = await waitFor(async () => readCoreCanary(smokeRoot, packagedVersion, launchedAt), 90_000, 'durable Core compatibility canary')
   if (/startup failed|HARNESS_NOT_OWNED|启动超时/u.test(outputBuffer))
     throw new Error(`Native startup reported a failure:\n${outputBuffer}`)
@@ -64,6 +73,16 @@ try {
     .length
   if (packCount !== 33)
     throw new Error(`Expected 33 initialized domain packs, got ${packCount}`)
+  writeMacosSmokeEvidence({
+    appVersion: packagedVersion,
+    coreCanary,
+    dmgPath,
+    evidencePath: smokeEvidencePath,
+    expectedDmgRelativePath: normalizePath(relative(root, dmgPath)),
+    packCount,
+    passedAt: Date.now(),
+    provenancePath,
+  })
   passed = true
   process.stdout.write(`Native macOS smoke passed\n`)
   process.stdout.write(`App: ${appPath}\n`)
@@ -71,6 +90,7 @@ try {
   process.stdout.write(`Harness: http://127.0.0.1:${corePort}/\n`)
   process.stdout.write(`Domain packs: ${packCount}\n`)
   process.stdout.write(`Core canary: ${coreCanary.status}; protocol v${coreCanary.protocolVersion}; ${coreCanary.checks.length} public runtime gates\n`)
+  process.stdout.write(`Smoke evidence: ${smokeEvidencePath}\n`)
   process.stdout.write(`UI visibility/search acceptance: not asserted by this smoke\n`)
 }
 finally {
@@ -100,13 +120,6 @@ function hasStateFile(path) {
 function readCoreCanary(root, expectedVersion, minimumPassedAt) {
   try {
     const state = JSON.parse(readFileSync(join(root, '.mir3-core-canary.json'), 'utf8'))
-    const expectedChecks = [
-      'bridge-v2',
-      'ordinary-session',
-      'archived-system-session',
-      'mcp-sidecar',
-      'domain-capability',
-    ]
     if (state.schemaVersion !== 1
       || state.status !== 'passed'
       || state.protocolVersion !== 2
@@ -118,7 +131,7 @@ function readCoreCanary(root, expectedVersion, minimumPassedAt) {
       || typeof state.coreCommit !== 'string'
       || state.coreCommit.length === 0
       || !Array.isArray(state.checks)
-      || expectedChecks.some(check => !state.checks.includes(check))) {
+      || REQUIRED_CORE_CHECKS.some(check => !state.checks.includes(check))) {
       return null
     }
     return state
@@ -209,6 +222,10 @@ function output(command, args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
   }).trim()
+}
+
+function normalizePath(value) {
+  return value.split(sep).join('/')
 }
 
 function delay(milliseconds) {

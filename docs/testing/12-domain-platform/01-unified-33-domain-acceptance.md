@@ -46,18 +46,58 @@
 - 系统转全局只传结构化任务总结、资源引用、Draft、权限范围和未完成计划，不复制原始聊天记录。
 - 系统 AI 与全局 Harness 共享同一 MCP、Capability Registry 和外置 Draft；真实项目应用仍只由 Studio 在确认后执行。
 
+2026-08-26 使用 `f4fc4d2` 原生 smoke 保留的一次性 profile，独立启动 Harness
+`0.1.1-rc.2` 并进行浏览器级只读回归：主工作台、会话搜索、新建会话、工作区选择、
+通用设置、模型、插件、Agent 预设页面均可渲染；插件清单显示 140 个运行项，
+`mir3-core` 为“已挂载、已启用”。隔离 profile 内的 Core Plugin client SHA-256 与
+仓库文件一致：
+`d4d8281384d5ba45810835719595888f1da8efcefbca3826f66ecd672641e644`。
+该记录证明当前 Harness Web 表面和兼容插件可加载，但没有工作区/API Key，且不是
+最新原生窗口截图，因此不作为文件、编辑器、终端、Agent、MCP Client、隐藏会话或
+物理设备回归的完成证据。
+
+## G0 历史基线
+
+G0 的可定位历史基线是 commit
+`8ecb8c516126ce6a150fef9322256fa42d4265c4`。仓库只能证明该 Git 对象当前可读，
+不声称任何仓库外 G0 备份仍然存在。可用以下命令恢复一份无 `.git`
+元数据的只读快照，并直接比较历史基线与当前 `HEAD`：
+
+```bash
+MIR3_G0_COMMIT=8ecb8c516126ce6a150fef9322256fa42d4265c4
+git cat-file -e "${MIR3_G0_COMMIT}^{commit}"
+MIR3_G0_SNAPSHOT="$(mktemp -d)/mir3-g0"
+mkdir -p "$MIR3_G0_SNAPSHOT"
+git archive "$MIR3_G0_COMMIT" | tar -x -C "$MIR3_G0_SNAPSHOT"
+chmod -R a-w "$MIR3_G0_SNAPSHOT"
+git diff --stat "$MIR3_G0_COMMIT"..HEAD --
+git diff --name-status "$MIR3_G0_COMMIT"..HEAD --
+```
+
+只有用户另行提供了外置 G0 路径时，才能把它与上述只读快照比较；
+`git diff --no-index` 在发现差异时返回码为 1：
+
+```bash
+git diff --no-index --stat "$MIR3_G0_SNAPSHOT" /absolute/path/to/user-provided-g0-copy
+```
+
 ## 三个真实项目副本
 
-自动化只对一次性副本写入，原项目不参与写测试。当前三份显著不同结构的副本规模为：
+自动化只对一次性副本写入，原项目不参与写测试。仓库不保存真实项目副本，当前也
+没有可复核的三项目验收报告；历史临时目录的规模不能作为最终证据。最终验收必须
+由用户明确提供三个互不嵌套、可丢弃且结构显著不同的绝对路径，并由运行器生成带
+内容哈希的仓库外报告。建议至少覆盖：
 
-| 副本 | 文件数 | 自动识别领域数 | 用途 |
-|---|---:|---:|---|
-| A | 673 | 16 | 中等目录、客户端与引擎混合结构 |
-| B | 13 | 6 | 极小结构、缺失依赖与未知文件诊断 |
-| C | 4510 | 20 | 大目录、共享文件与复杂依赖 |
+| 副本 | 目标结构 | 验收重点 |
+|---|---|---|
+| A | 中等目录、客户端与引擎混合结构 | 常规识别、共享文件和跨领域引用 |
+| B | 极小或旧版本结构 | 缺失依赖、版本别名和未知文件只读诊断 |
+| C | 大目录或显著不同版本 | 大规模索引、复杂依赖、批量修改和恢复 |
 
-不能仅运行普通 `cargo test` 作为真实语料证据：两个 external corpus 测试在未提供
-`MIR3_DOMAIN_CORPUS_ROOTS` 时会跳过。最终验收必须对三份明确的一次性副本运行：
+不能仅运行普通 `cargo test` 作为真实语料证据：两个 external corpus 测试使用
+Rust harness 的 `#[ignore]`，普通测试输出必须把它们记为 `ignored`，而不是误导性的
+`ok`。最终验收必须由专用运行器设置 `MIR3_DOMAIN_CORPUS_ROOTS` 并显式执行
+ignored 测试，对三份明确的一次性副本运行：
 
 ```bash
 node scripts/run-domain-corpus-acceptance.mjs \
@@ -115,6 +155,14 @@ SHA-256、文件数、字节数和验证时间。`node scripts/package-macos.mjs
 Session、归档系统 Session、真实 MCP sidecar 和官方领域能力 canary 全部通过后写入。
 这仍不证明归档会话在 Workspace/Ungrouped/搜索中的可见性，后者保留为真实 UI 验收。
 
+macOS 控制台未登录、锁屏或会话状态无法可靠读取时，原生 smoke 必须在创建临时目录和
+启动应用前 fail-closed，并提示解锁后重新运行。全部 native canary 通过后，smoke 在 DMG
+provenance 同目录原子覆盖写入 `<DMG filename>.smoke.json`。该证据绑定产品版本、buildId、源码
+commit/tree、DMG 与 provenance SHA-256、Core tag/commit、Bridge protocol、必需 runtime
+gates、33 包计数和通过时间；不记录临时数据目录、端口或用户名。证据写入或任一绑定校验
+失败时，smoke 仍然失败。同版本重新打包会先删除旧 smoke sidecar，防止新 DMG 尚未
+通过 canary 时残留旧 passed 结果。此 sidecar 证明本次自动化 native canary，不替代下列真实 UI 验收。
+
 ## 必须保留的外部验收项
 
 以下项目不能由当前 macOS 自动化替代，完成前不得宣称物理验收全部通过：
@@ -125,3 +173,14 @@ Session、归档系统 Session、真实 MCP sidecar 和官方领域能力 canary
 - 地图、任务、活动、沙巴克、跨服在真实游戏运行环境中的专项验收。
 - Windows debug/release 的端口、数据隔离、安装、启动和基础流程。
 - 最新 macOS 原生包的可视 UI 与物理设备操作验收。
+
+当前证据状态必须按事实更新，不能用单元测试、HTTP 健康检查或历史临时目录代替：
+
+| 验收项 | 当前状态 | 完成所需证据 |
+|---|---|---|
+| 三个真实项目副本 | 待提供 | 三个明确绝对路径及 `run-domain-corpus-acceptance.mjs` 的 passed 报告 |
+| macOS Core/WebView canary | 锁屏阻塞 | 解锁 console 会话后 `pnpm smoke:mac` 通过 |
+| macOS 可视 UI 与隐藏会话 | 待执行 | 正控制普通会话可见、负断言归档系统会话在三个入口均不可见 |
+| Windows 基础流程 | 待执行 | Windows debug/release 物理机日志与验收记录 |
+| 真实游戏专项 | 待执行 | 地图、任务、活动、沙巴克、跨服加载及运行结果 |
+| 领域包在线更新 | 待配置 | 生产 HTTPS 索引、公钥、签名候选及失败回滚证据 |

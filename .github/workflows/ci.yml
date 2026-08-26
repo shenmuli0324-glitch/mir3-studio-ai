@@ -5,17 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
-  unit-test:
-    uses: sxzz/workflows/.github/workflows/unit-test.yml@main
-    with:
-      lint: pnpm run lint # && pnpm run knip
-
-  brand-and-types:
-    name: Brand audit and TypeScript
+  frontend-and-governance:
+    name: Frontend and governance checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -27,29 +24,58 @@ jobs:
           node-version: '22'
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm version:check
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check frontend
+        run: pnpm typecheck
+      - name: Test frontend
+        run: pnpm test -- --run
+      - name: Lint frontend
+        run: pnpm lint
+      - name: Detect unused frontend code
+        run: pnpm knip
+      - name: Verify version, brand, plugin, domain, and release gates
+        run: pnpm release:check
         env:
-          MIR3_VERSION_BASE: ${{ github.event.pull_request.base.sha }}
-      - run: pnpm brand:audit
-      - run: pnpm plugin:audit
-      - run: pnpm typecheck
-      - run: pnpm exec vitest run
+          # Reusable release calls retain the tag/workflow_dispatch event; only PRs have a comparison base.
+          MIR3_VERSION_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      - name: Check changed-range and working-tree whitespace
+        env:
+          MIR3_DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          diff_base="$MIR3_DIFF_BASE"
+          if [ -n "$diff_base" ] && [ -z "${diff_base//0/}" ]; then
+            diff_base=''
+          fi
+          if [ -n "$diff_base" ] && ! git cat-file -e "${diff_base}^{commit}" 2>/dev/null; then
+            diff_base=''
+          fi
+          if [ -z "$diff_base" ]; then
+            diff_base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -n "$diff_base" ]; then
+            git diff --check "${diff_base}...HEAD"
+          fi
+          git diff --check
 
   rust:
     name: Rust checks
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       # Tauri 在解析 externalBin 时要求目标平台 sidecar 已存在；干净 CI 环境
       # 不含本地 ignored 产物，先按当前 runner 构建 MIR3 MCP。
-      - run: node scripts/prepare-mir3-sidecar.mjs debug
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --workspace --locked
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked
-
-  # coverage:
-  #   uses: sxzz/workflows/.github/workflows/coverage.yml@main
-  #   needs: unit-test
-  #   permissions:
-  #     id-token: write
+      - name: Prepare MIR3 MCP sidecar
+        run: node scripts/prepare-mir3-sidecar.mjs debug
+      - name: Check Rust workspace
+        run: cargo check --manifest-path src-tauri/Cargo.toml --workspace --locked
+      - name: Test Rust workspace
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked -- --test-threads=1

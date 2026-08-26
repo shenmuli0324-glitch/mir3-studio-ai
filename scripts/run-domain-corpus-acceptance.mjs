@@ -37,6 +37,7 @@ const cargo = run('cargo', [
   'mir3-domain',
   'external_real_project_corpus',
   '--',
+  '--ignored',
   '--nocapture',
   '--test-threads=1',
 ], {
@@ -260,7 +261,7 @@ function matrixReport(cargo) {
   if (!cargo)
     return { status: 'not-run' }
   return {
-    command: 'cargo test -p mir3-domain external_real_project_corpus -- --nocapture --test-threads=1',
+    command: 'cargo test -p mir3-domain external_real_project_corpus -- --ignored --nocapture --test-threads=1',
     exitCode: cargo.status,
     stdoutSha256: sha256(cargo.stdout),
     stderrSha256: sha256(cargo.stderr),

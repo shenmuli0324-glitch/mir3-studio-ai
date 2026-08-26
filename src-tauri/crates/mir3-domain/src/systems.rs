@@ -3386,10 +3386,11 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires MIR3_DOMAIN_CORPUS_ROOTS and the disposable-corpus acceptance runner"]
     fn external_real_project_corpus_runs_the_full_readonly_domain_matrix() {
-        let Some(raw_roots) = std::env::var_os("MIR3_DOMAIN_CORPUS_ROOTS") else {
-            return;
-        };
+        let raw_roots = std::env::var_os("MIR3_DOMAIN_CORPUS_ROOTS").expect(
+            "MIR3_DOMAIN_CORPUS_ROOTS must be set by the disposable-corpus acceptance runner",
+        );
         let _corpus_guard = EXTERNAL_CORPUS_LOCK.lock().unwrap();
         let roots = std::env::split_paths(&raw_roots).collect::<Vec<_>>();
         assert!(
@@ -3447,10 +3448,11 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires MIR3_DOMAIN_CORPUS_ROOTS and the disposable-corpus acceptance runner"]
     fn external_real_project_corpus_applies_and_restores_verified_drafts() {
-        let Some(raw_roots) = std::env::var_os("MIR3_DOMAIN_CORPUS_ROOTS") else {
-            return;
-        };
+        let raw_roots = std::env::var_os("MIR3_DOMAIN_CORPUS_ROOTS").expect(
+            "MIR3_DOMAIN_CORPUS_ROOTS must be set by the disposable-corpus acceptance runner",
+        );
         let _corpus_guard = EXTERNAL_CORPUS_LOCK.lock().unwrap();
         let roots = std::env::split_paths(&raw_roots).collect::<Vec<_>>();
         assert!(

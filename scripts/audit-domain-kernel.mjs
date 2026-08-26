@@ -379,6 +379,7 @@ if (frontendIds.length !== 33 || expectedIds.some(id => !frontendIds.includes(id
 const mcp = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-mcp', 'src', 'main.rs'), 'utf8')
 const packLifecycle = readFileSync(join(root, 'src-tauri', 'src', 'service', 'plugin', 'system.rs'), 'utf8')
 const domainSystems = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'systems.rs'), 'utf8')
+const corpusRunner = readFileSync(join(root, 'scripts', 'run-domain-corpus-acceptance.mjs'), 'utf8')
 const domainFixtures = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'fixtures.rs'), 'utf8')
 const systemAi = readFileSync(join(root, 'src', 'features', 'system-ai', 'system-ai-panel.tsx'), 'utf8')
 const rendererSource = readFileSync(join(root, 'src', 'features', 'devtools', 'domain', 'renderers', 'resource-renderer.tsx'), 'utf8')
@@ -438,6 +439,11 @@ if (!domainSystems.includes('unknown_extensions_are_readonly')
   || !domainSystems.includes('external_real_project_corpus_runs_the_full_readonly_domain_matrix')
   || !domainSystems.includes('"every detected domain must be validated"')) {
   failures.push('Domain tests must cover unknown-format readonly behavior and the external corpus matrix')
+}
+if ((domainSystems.match(/#\[ignore = "requires MIR3_DOMAIN_CORPUS_ROOTS/g) || []).length !== 2
+  || !domainSystems.includes('MIR3_DOMAIN_CORPUS_ROOTS must be set by the disposable-corpus acceptance runner')
+  || !/'--ignored'/.test(corpusRunner)) {
+  failures.push('External corpus tests must be ignored by default and explicitly executed by the disposable-corpus runner')
 }
 if (!systemAi.includes('manifest.capabilities')
   || !systemAi.includes('writeSystems')
