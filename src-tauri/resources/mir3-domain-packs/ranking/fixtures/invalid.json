@@ -1,0 +1,27 @@
+{
+  "systemId": "ranking",
+  "fixture": "invalid",
+  "records": [
+    {
+      "boardId": "ranking-boardId-1",
+      "metric": "level",
+      "cycleSeconds": 31536001,
+      "rewardItemId": "item:missing",
+      "seasonId": "season:fixture-1"
+    },
+    {
+      "boardId": "ranking-boardId-1",
+      "metric": "power",
+      "cycleSeconds": 62,
+      "rewardItemId": "item:fixture-2",
+      "seasonId": "season:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "ranking.settlement-within-cycle",
+      "expected": false
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "season.unique",
+    "severity": "error",
+    "field": "seasonId"
+  },
+  {
+    "code": "season.range",
+    "severity": "error",
+    "field": "startEpochSeconds"
+  },
+  {
+    "code": "season.reference",
+    "severity": "error",
+    "field": "rankingBoardId"
+  },
+  {
+    "code": "season.runtime",
+    "severity": "error",
+    "rule": "season.window-and-settlement-ordered"
+  }
+]

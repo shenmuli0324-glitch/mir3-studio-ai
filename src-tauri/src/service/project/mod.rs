@@ -56,9 +56,18 @@ pub struct ProjectService {
 }
 
 impl ProjectService {
+    #[cfg(test)]
     pub fn new(data_root: PathBuf) -> Result<Self, String> {
+        let domain_pack_root = data_root.join("domain-packs");
+        Self::new_with_domain_pack_root(data_root, domain_pack_root)
+    }
+
+    pub fn new_with_domain_pack_root(
+        data_root: PathBuf,
+        domain_pack_root: PathBuf,
+    ) -> Result<Self, String> {
         Ok(Self {
-            store: DomainStore::new(data_root)?,
+            store: DomainStore::new_with_domain_pack_root(data_root, domain_pack_root)?,
             scan_cancelled: Arc::new(AtomicBool::new(false)),
             scan_state: Arc::new(Mutex::new(ScanState {
                 project_id: None,

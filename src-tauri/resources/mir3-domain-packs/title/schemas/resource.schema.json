@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/title/resource.schema.json",
+  "title": "title.title-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "titleId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "displayLabel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "grantedBuffId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "buff"
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 315360000
+    },
+    "minimumLevel": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    }
+  },
+  "required": [
+    "titleId",
+    "displayLabel",
+    "grantedBuffId",
+    "durationSeconds",
+    "minimumLevel"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "titleId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "titleId",
+      "compareFields": [
+        "titleId",
+        "displayLabel"
+      ]
+    },
+    "runtimeRule": "title.permanent-duration-zero"
+  }
+}

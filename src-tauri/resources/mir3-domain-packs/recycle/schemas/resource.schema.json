@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/recycle/resource.schema.json",
+  "title": "recycle.recycle-rule-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ruleId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "itemType": {
+      "type": "string",
+      "enum": [
+        "equipment",
+        "material",
+        "consumable"
+      ]
+    },
+    "minimumQuality": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20
+    },
+    "maximumQuality": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20
+    },
+    "currencyItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "returnValue": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2000000000
+    }
+  },
+  "required": [
+    "ruleId",
+    "itemType",
+    "minimumQuality",
+    "maximumQuality",
+    "currencyItemId",
+    "returnValue"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "ruleId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "ruleId",
+      "compareFields": [
+        "minimumQuality",
+        "maximumQuality"
+      ]
+    },
+    "runtimeRule": "recycle.quality-range-ordered"
+  }
+}

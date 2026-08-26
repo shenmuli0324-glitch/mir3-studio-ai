@@ -1,0 +1,29 @@
+{
+  "systemId": "npc",
+  "fixture": "invalid",
+  "records": [
+    {
+      "npcId": "npc-npcId-1",
+      "scriptPath": "scripts/npc-1.lua",
+      "mapId": "map:missing",
+      "coordinateX": 4096,
+      "coordinateY": 1,
+      "shopId": "shop:fixture-1"
+    },
+    {
+      "npcId": "npc-npcId-1",
+      "scriptPath": "scripts/npc-2.lua",
+      "mapId": "map:fixture-2",
+      "coordinateX": 2,
+      "coordinateY": 2,
+      "shopId": "shop:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "npc.script-entry-resolves",
+      "expected": false
+    }
+  ]
+}

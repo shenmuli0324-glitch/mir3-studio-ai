@@ -1,0 +1,22 @@
+[
+  {
+    "code": "online_reward.unique",
+    "severity": "error",
+    "field": "rewardId"
+  },
+  {
+    "code": "online_reward.range",
+    "severity": "error",
+    "field": "durationSeconds"
+  },
+  {
+    "code": "online_reward.reference",
+    "severity": "error",
+    "field": "rewardItemId"
+  },
+  {
+    "code": "online_reward.runtime",
+    "severity": "error",
+    "rule": "online-reward.duration-monotonic"
+  }
+]

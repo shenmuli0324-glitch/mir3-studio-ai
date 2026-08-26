@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/store/modules/*/index.ts",
+    "scripts/*.mjs",
+    "src-tauri/resources/*-plugin/lib/*.js"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx,css}",
+    "scripts/**/*.mjs",
+    "src-tauri/resources/*-plugin/lib/*.js"
+  ],
+  "ignoreBinaries": [
+    "pgrep",
+    "rustc"
+  ],
+  "ignoreDependencies": [
+    "@deepseek-ai/dsh-sandbox-policy"
+  ],
+  "ignoreExportsUsedInFile": true
+}

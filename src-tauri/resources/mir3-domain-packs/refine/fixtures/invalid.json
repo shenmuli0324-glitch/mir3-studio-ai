@@ -1,0 +1,29 @@
+{
+  "systemId": "refine",
+  "fixture": "invalid",
+  "records": [
+    {
+      "poolId": "refine-poolId-1",
+      "equipmentId": "equipment:missing",
+      "attributeKey": "attack",
+      "weight": 1000001,
+      "minimumValue": -999999,
+      "maximumValue": -999999
+    },
+    {
+      "poolId": "refine-poolId-1",
+      "equipmentId": "equipment:missing",
+      "attributeKey": "attack",
+      "weight": 3,
+      "minimumValue": -999998,
+      "maximumValue": -999998
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "refine.minimum-not-greater-than-maximum",
+      "expected": false
+    }
+  ]
+}

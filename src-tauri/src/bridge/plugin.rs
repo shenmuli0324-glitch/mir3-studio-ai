@@ -5,8 +5,8 @@
 
 use crate::config;
 use crate::service::plugin;
-use tauri::AppHandle;
 use tauri::Emitter;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 /// 获取预装插件列表（含已安装检测结果），首次启动引导界面渲染用
@@ -75,6 +75,144 @@ pub async fn open_preinstall_repo(app_handle: AppHandle, id: String) -> Result<(
 #[tauri::command]
 pub fn get_dsh_plugins(app_handle: AppHandle) -> Vec<plugin::DshPlugin> {
     plugin::watch::list(&app_handle)
+}
+
+#[tauri::command]
+pub fn domain_pack_list(
+    app_handle: AppHandle,
+) -> Result<Vec<plugin::system::DomainPackStateView>, String> {
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    plugin::system::list_domain_pack_states(&root)
+}
+
+#[tauri::command]
+pub fn domain_pack_state(
+    app_handle: AppHandle,
+    system_id: String,
+) -> Result<plugin::system::DomainPackStateView, String> {
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    plugin::system::domain_pack_state(&root, &system_id)
+}
+
+/// 查询正式签名索引；未注入发布配置时保持本地候选可用并明确返回未配置。
+#[tauri::command]
+pub async fn domain_pack_update_check(
+    app_handle: AppHandle,
+    system_id: Option<String>,
+) -> Result<plugin::domain_update::DomainPackUpdateCheck, String> {
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    plugin::domain_update::check(&root, system_id.as_deref()).await
+}
+
+/// 验签、校验并暂存一个远程候选，不执行激活。
+#[tauri::command]
+pub async fn domain_pack_update_stage(
+    app_handle: AppHandle,
+    system_id: String,
+    version: String,
+) -> Result<plugin::system::DomainPackStateView, String> {
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    plugin::domain_update::stage(&root, &system_id, &version).await
+}
+
+#[tauri::command]
+pub fn domain_pack_activate(
+    app_handle: AppHandle,
+    system_id: String,
+    confirmed: bool,
+) -> Result<plugin::system::DomainPackStateView, String> {
+    if !confirmed {
+        return Err(
+            "DOMAIN_PACK_ACTIVATION_CONFIRMATION_REQUIRED: review candidate before activation"
+                .to_string(),
+        );
+    }
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    let activated = plugin::system::activate_domain_pack_candidate(&root, &system_id)?;
+    let expected = activated
+        .current
+        .as_ref()
+        .map(|release| release.version.as_str())
+        .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+    if let Err(error) = assert_runtime_domain_version(&app_handle, &system_id, expected) {
+        let rollback = plugin::system::rollback_domain_pack(&root, &system_id);
+        return Err(format!(
+            "DOMAIN_PACK_RUNTIME_CANARY_FAILED: {error}; rollback={}",
+            rollback
+                .map(|_| "ok".to_string())
+                .unwrap_or_else(|rollback_error| rollback_error)
+        ));
+    }
+    plugin::system::domain_pack_state(&root, &system_id)
+}
+
+#[tauri::command]
+pub fn domain_pack_rollback(
+    app_handle: AppHandle,
+    system_id: String,
+    confirmed: bool,
+) -> Result<plugin::system::DomainPackStateView, String> {
+    if !confirmed {
+        return Err(
+            "DOMAIN_PACK_ROLLBACK_CONFIRMATION_REQUIRED: confirm before rollback".to_string(),
+        );
+    }
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    let rolled_back = plugin::system::rollback_domain_pack(&root, &system_id)?;
+    let expected = rolled_back
+        .current
+        .as_ref()
+        .map(|release| release.version.as_str())
+        .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+    assert_runtime_domain_version(&app_handle, &system_id, expected)?;
+    plugin::system::domain_pack_state(&root, &system_id)
+}
+
+#[tauri::command]
+pub fn domain_pack_mark_lkg(
+    app_handle: AppHandle,
+    system_id: String,
+    canary_passed: bool,
+    confirmed: bool,
+) -> Result<plugin::system::DomainPackStateView, String> {
+    if !canary_passed || !confirmed {
+        return Err(
+            "DOMAIN_PACK_LKG_CANARY_REQUIRED: all contract and runtime canaries must pass first"
+                .to_string(),
+        );
+    }
+    let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
+    let state = plugin::system::domain_pack_state(&root, &system_id)?;
+    let expected = state
+        .state
+        .current
+        .as_ref()
+        .map(|release| release.version.as_str())
+        .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+    assert_runtime_domain_version(&app_handle, &system_id, expected)?;
+    plugin::system::mark_domain_pack_lkg(&root, &system_id)?;
+    plugin::system::domain_pack_state(&root, &system_id)
+}
+
+fn assert_runtime_domain_version(
+    app_handle: &AppHandle,
+    system_id: &str,
+    expected_version: &str,
+) -> Result<(), String> {
+    let project_service = app_handle.state::<crate::service::project::ProjectService>();
+    let active = project_service
+        .store()
+        .list_domain_systems()?
+        .into_iter()
+        .find(|manifest| manifest.system_id == system_id)
+        .ok_or_else(|| format!("DOMAIN_PACK_RUNTIME_UNAVAILABLE: {system_id}"))?;
+    if active.version != expected_version {
+        return Err(format!(
+            "DOMAIN_PACK_RUNTIME_VERSION_MISMATCH: expected {expected_version}, got {}",
+            active.version
+        ));
+    }
+    Ok(())
 }
 
 /// 升级单个已安装插件：`dsh plugin --profile <当前档案> update <id>`，

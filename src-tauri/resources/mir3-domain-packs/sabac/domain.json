@@ -1,0 +1,898 @@
+{
+  "kind": "domain",
+  "systemId": "sabac",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "social",
+  "complexity": 5,
+  "renderer": "spatial-flow-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "sabac",
+      "沙巴克",
+      "攻城"
+    ],
+    "ownedSelectors": [
+      "sabac",
+      "沙巴克",
+      "攻城"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "guild"
+      },
+      {
+        "systemId": "npc"
+      },
+      {
+        "systemId": "monster"
+      },
+      {
+        "systemId": "ranking"
+      },
+      {
+        "systemId": "item"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "sabac",
+        "caseSensitive": false
+      },
+      {
+        "contains": "沙巴克",
+        "caseSensitive": false
+      },
+      {
+        "contains": "攻城",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "sabac.sabac-phase-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(sabac:phaseId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "sabac.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "battleMapId",
+        "systemId": "map",
+        "required": true
+      },
+      {
+        "field": "guildRewardItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "phaseId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "spatial-flow-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "spatial-flow-v1",
+    "safePrimitive": "map"
+  },
+  "dependencies": [
+    "map",
+    "guild",
+    "npc",
+    "monster",
+    "ranking",
+    "item"
+  ],
+  "operations": [
+    {
+      "id": "inspect-sabac",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-sabac"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "inspect-sabac",
+          "operation": "inspect-sabac"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "edit-sabac-phase",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-sabac-phase"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "battleMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "startMinute": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10079
+              },
+              "endMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10080
+              },
+              "guildRewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [
+        "sabac"
+      ],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded",
+        "sabac.draft-open",
+        "sabac.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-sabac-phase"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-sabac-region",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-sabac-region"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "battleMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "startMinute": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10079
+              },
+              "endMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10080
+              },
+              "guildRewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [
+        "sabac"
+      ],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded",
+        "sabac.draft-open",
+        "sabac.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-sabac-region"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "validate-sabac-settlement",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "validate-sabac-settlement"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "targetEngineVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "includeRuntimeDiagnostics": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "targetEngineVersion"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "validate-sabac-settlement",
+          "operation": "validate-sabac-settlement"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-sabac",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-sabac"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "inspect-sabac",
+          "operation": "inspect-sabac"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-sabac-phase",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-sabac-phase"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "battleMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "startMinute": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10079
+              },
+              "endMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10080
+              },
+              "guildRewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [
+        "sabac"
+      ],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded",
+        "sabac.draft-open",
+        "sabac.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-sabac-phase"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-sabac-region",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-sabac-region"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "battleMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "startMinute": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10079
+              },
+              "endMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10080
+              },
+              "guildRewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [
+        "sabac"
+      ],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded",
+        "sabac.draft-open",
+        "sabac.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-sabac-region"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "validate-sabac-settlement",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "validate-sabac-settlement"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "targetEngineVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "includeRuntimeDiagnostics": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "targetEngineVersion"
+        ]
+      },
+      "readSystems": [
+        "sabac",
+        "map",
+        "guild",
+        "npc",
+        "monster",
+        "ranking",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "sabac.resource-index-ready",
+        "sabac.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "validate-sabac-settlement",
+          "operation": "validate-sabac-settlement"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "sabac.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "sabac.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "sabac-phase-record"
+    },
+    {
+      "id": "sabac.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "phaseId"
+      ],
+      "scope": "sabac.project"
+    },
+    {
+      "id": "sabac.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "startMinute",
+          "minimum": 0,
+          "maximum": 10079
+        },
+        {
+          "field": "endMinute",
+          "minimum": 1,
+          "maximum": 10080
+        }
+      ]
+    },
+    {
+      "id": "sabac.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "battleMapId",
+          "systemId": "map",
+          "required": true
+        },
+        {
+          "field": "guildRewardItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "sabac.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "phaseId",
+      "compareFields": [
+        "phaseId",
+        "battleMapId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "sabac.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "sabac.phases-ordered-and-regions-contained",
+      "severity": "error",
+      "target": "sabac.sabac-phase-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

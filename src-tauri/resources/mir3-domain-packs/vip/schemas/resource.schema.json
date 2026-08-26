@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/vip/resource.schema.json",
+  "title": "vip.vip-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "vipLevel": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 99
+    },
+    "requiredPoints": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2000000000
+    },
+    "shopDiscountBasisPoints": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "grantedTitleId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "title"
+    }
+  },
+  "required": [
+    "vipLevel",
+    "requiredPoints",
+    "shopDiscountBasisPoints",
+    "grantedTitleId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "vipLevel"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "vipLevel",
+      "compareFields": [
+        "vipLevel",
+        "requiredPoints"
+      ]
+    },
+    "runtimeRule": "vip.points-monotonic"
+  }
+}

@@ -1,0 +1,872 @@
+{
+  "kind": "domain",
+  "systemId": "talent",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "featured",
+  "complexity": 4,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "talent",
+      "天赋"
+    ],
+    "ownedSelectors": [
+      "talent",
+      "天赋"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "skill"
+      },
+      {
+        "systemId": "buff"
+      },
+      {
+        "systemId": "level"
+      },
+      {
+        "systemId": "rebirth"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "talent",
+        "caseSensitive": false
+      },
+      {
+        "contains": "天赋",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "talent.talent-node-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(talent:nodeId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "talent.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "grantedSkillId",
+        "systemId": "skill",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "treeId",
+      "nodeId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "skill",
+    "buff",
+    "level",
+    "rebirth"
+  ],
+  "operations": [
+    {
+      "id": "inspect-talent",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-talent"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-talent",
+          "operation": "inspect-talent"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "edit-talent-node",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-talent-node"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "treeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "parentNodeId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [
+        "talent"
+      ],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded",
+        "talent.draft-open",
+        "talent.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-talent-node"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-talent-edge",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-talent-edge"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "treeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "parentNodeId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [
+        "talent"
+      ],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded",
+        "talent.draft-open",
+        "talent.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-talent-edge"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "validate-talent-budget",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "validate-talent-budget"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "targetEngineVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "includeRuntimeDiagnostics": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "targetEngineVersion"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "validate-talent-budget",
+          "operation": "validate-talent-budget"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-talent",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-talent"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-talent",
+          "operation": "inspect-talent"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-talent-node",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-talent-node"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "treeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "parentNodeId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [
+        "talent"
+      ],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded",
+        "talent.draft-open",
+        "talent.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-talent-node"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-talent-edge",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-talent-edge"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "treeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9999
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "parentNodeId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [
+        "talent"
+      ],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded",
+        "talent.draft-open",
+        "talent.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-talent-edge"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "validate-talent-budget",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "validate-talent-budget"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "targetEngineVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "includeRuntimeDiagnostics": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "targetEngineVersion"
+        ]
+      },
+      "readSystems": [
+        "talent",
+        "skill",
+        "buff",
+        "level",
+        "rebirth"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "talent.resource-index-ready",
+        "talent.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "validate-talent-budget",
+          "operation": "validate-talent-budget"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "talent.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "talent.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "talent-node-record"
+    },
+    {
+      "id": "talent.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "treeId",
+        "nodeId"
+      ],
+      "scope": "talent.project"
+    },
+    {
+      "id": "talent.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "costPoints",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        {
+          "field": "requiredLevel",
+          "minimum": 1,
+          "maximum": 255
+        }
+      ]
+    },
+    {
+      "id": "talent.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "grantedSkillId",
+          "systemId": "skill",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "talent.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "nodeId",
+      "compareFields": [
+        "treeId",
+        "nodeId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "talent.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "talent.graph-acyclic-and-budget-valid",
+      "severity": "error",
+      "target": "talent.talent-node-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

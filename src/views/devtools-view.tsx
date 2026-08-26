@@ -2,8 +2,7 @@ import type { DevToolId } from '@/features/devtools/devtool-registry'
 import { useState } from 'react'
 import { DevToolsCatalog } from '@/features/devtools/catalog/devtools-catalog'
 import { getDevTool } from '@/features/devtools/devtool-registry'
-import { MapToolView } from '@/features/devtools/map/map-tool-view'
-import { PlannedToolView } from '@/features/devtools/shell/planned-tool-view'
+import { DomainSystemView } from '@/features/devtools/domain/domain-system-view'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 
 export function DevToolsView({ preview = false }: { preview?: boolean }) {
@@ -21,16 +20,12 @@ export function DevToolsView({ preview = false }: { preview?: boolean }) {
     return <DevToolsCatalog onOpenTool={openTool} />
 
   const tool = getDevTool(activeToolId)
-  if (activeToolId === 'map') {
-    if (preview)
-      return <MapToolView tool={tool} onBack={closeTool} hasProject />
-    return <ConnectedMapToolView tool={tool} onBack={closeTool} />
-  }
-
-  return <PlannedToolView tool={tool} onBack={closeTool} />
+  if (preview)
+    return <DomainSystemView tool={tool} project={null} onBack={closeTool} />
+  return <ConnectedDomainSystemView tool={tool} onBack={closeTool} />
 }
 
-function ConnectedMapToolView({ tool, onBack }: { tool: ReturnType<typeof getDevTool>, onBack: () => void }) {
+function ConnectedDomainSystemView({ tool, onBack }: { tool: ReturnType<typeof getDevTool>, onBack: () => void }) {
   const { activeProject } = useMir3Projects()
-  return <MapToolView tool={tool} onBack={onBack} hasProject={activeProject != null} />
+  return <DomainSystemView tool={tool} project={activeProject} onBack={onBack} />
 }

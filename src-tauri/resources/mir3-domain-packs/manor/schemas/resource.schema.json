@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/manor/resource.schema.json",
+  "title": "manor.manor-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "manorId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "map"
+    },
+    "entryNpcId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "npc"
+    },
+    "minimumLevel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255
+    },
+    "productionPointId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "resource_production"
+    }
+  },
+  "required": [
+    "manorId",
+    "mapId",
+    "entryNpcId",
+    "minimumLevel",
+    "productionPointId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "manorId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "manorId",
+      "compareFields": [
+        "manorId",
+        "mapId"
+      ]
+    },
+    "runtimeRule": "manor.entry-and-exit-loop-reachable"
+  }
+}

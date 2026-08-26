@@ -1,0 +1,22 @@
+[
+  {
+    "code": "resource_production.unique",
+    "severity": "error",
+    "field": "pointId"
+  },
+  {
+    "code": "resource_production.range",
+    "severity": "error",
+    "field": "intervalSeconds"
+  },
+  {
+    "code": "resource_production.reference",
+    "severity": "error",
+    "field": "mapId"
+  },
+  {
+    "code": "resource_production.runtime",
+    "severity": "error",
+    "rule": "production.point-inside-map-and-rate-positive"
+  }
+]

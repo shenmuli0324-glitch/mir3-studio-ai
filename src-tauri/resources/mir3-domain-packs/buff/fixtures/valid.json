@@ -1,0 +1,26 @@
+{
+  "systemId": "buff",
+  "fixture": "valid",
+  "records": [
+    {
+      "buffId": "buff-buffId-1",
+      "stackMode": "replace",
+      "maximumStacks": 2,
+      "durationMilliseconds": 2,
+      "effectSkillId": "skill:fixture-1"
+    },
+    {
+      "buffId": "buff-buffId-2",
+      "stackMode": "refresh",
+      "maximumStacks": 3,
+      "durationMilliseconds": 3,
+      "effectSkillId": "skill:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "skill": [
+      "skill:fixture-1",
+      "skill:fixture-2"
+    ]
+  }
+}

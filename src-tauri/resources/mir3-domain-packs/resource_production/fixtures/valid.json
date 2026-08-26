@@ -1,0 +1,36 @@
+{
+  "systemId": "resource_production",
+  "fixture": "valid",
+  "records": [
+    {
+      "pointId": "resource_production-pointId-1",
+      "mapId": "map:fixture-1",
+      "outputItemId": "item:fixture-1",
+      "intervalSeconds": 2,
+      "yieldCount": 2,
+      "guardMonsterId": "monster:fixture-1"
+    },
+    {
+      "pointId": "resource_production-pointId-2",
+      "mapId": "map:fixture-2",
+      "outputItemId": "item:fixture-2",
+      "intervalSeconds": 3,
+      "yieldCount": 3,
+      "guardMonsterId": "monster:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "map": [
+      "map:fixture-1",
+      "map:fixture-2"
+    ],
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ],
+    "monster": [
+      "monster:fixture-1",
+      "monster:fixture-2"
+    ]
+  }
+}

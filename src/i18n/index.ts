@@ -3,7 +3,7 @@ import { initReactI18next } from 'react-i18next'
 import { languageDetector } from './index.detector'
 import { resources } from './index.resource'
 
-export const i18n = i18next
+i18next
   .use(languageDetector)
   .use(initReactI18next)
   .init({

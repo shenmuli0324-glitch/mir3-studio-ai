@@ -1,0 +1,30 @@
+{
+  "systemId": "hero_soul",
+  "fixture": "valid",
+  "records": [
+    {
+      "routeId": "hero_soul-routeId-1",
+      "nodeId": "hero_soul-nodeId-1",
+      "costItemId": "item:fixture-1",
+      "grantedSkillId": "skill:fixture-1",
+      "powerValue": 1
+    },
+    {
+      "routeId": "hero_soul-routeId-2",
+      "nodeId": "hero_soul-nodeId-2",
+      "costItemId": "item:fixture-2",
+      "grantedSkillId": "skill:fixture-2",
+      "powerValue": 2
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ],
+    "skill": [
+      "skill:fixture-1",
+      "skill:fixture-2"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "systemId": "gem",
+  "fixture": "valid",
+  "records": [
+    {
+      "gemId": "gem-gemId-1",
+      "gemTier": 2,
+      "socketType": "attack",
+      "itemId": "item:fixture-1",
+      "grantedBuffId": "buff:fixture-1"
+    },
+    {
+      "gemId": "gem-gemId-2",
+      "gemTier": 3,
+      "socketType": "defense",
+      "itemId": "item:fixture-2",
+      "grantedBuffId": "buff:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ],
+    "buff": [
+      "buff:fixture-1",
+      "buff:fixture-2"
+    ]
+  }
+}

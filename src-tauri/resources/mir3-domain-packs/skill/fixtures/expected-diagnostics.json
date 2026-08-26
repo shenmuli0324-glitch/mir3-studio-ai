@@ -1,0 +1,22 @@
+[
+  {
+    "code": "skill.unique",
+    "severity": "error",
+    "field": "skillId,skillLevel"
+  },
+  {
+    "code": "skill.range",
+    "severity": "error",
+    "field": "skillLevel"
+  },
+  {
+    "code": "skill.reference",
+    "severity": "error",
+    "field": "appliedBuffId"
+  },
+  {
+    "code": "skill.runtime",
+    "severity": "error",
+    "rule": "skill.level-curve-contiguous"
+  }
+]

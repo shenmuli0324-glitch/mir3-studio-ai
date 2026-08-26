@@ -1,0 +1,36 @@
+{
+  "systemId": "quest",
+  "fixture": "valid",
+  "records": [
+    {
+      "questId": "quest-questId-1",
+      "startNpcId": "npc:fixture-1",
+      "targetMonsterId": "monster:fixture-1",
+      "rewardItemId": "item:fixture-1",
+      "minimumLevel": 2,
+      "nextQuestId": "quest-nextQuestId-1"
+    },
+    {
+      "questId": "quest-questId-2",
+      "startNpcId": "npc:fixture-2",
+      "targetMonsterId": "monster:fixture-2",
+      "rewardItemId": "item:fixture-2",
+      "minimumLevel": 3,
+      "nextQuestId": "quest-nextQuestId-2"
+    }
+  ],
+  "referenceCatalog": {
+    "npc": [
+      "npc:fixture-1",
+      "npc:fixture-2"
+    ],
+    "monster": [
+      "monster:fixture-1",
+      "monster:fixture-2"
+    ],
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

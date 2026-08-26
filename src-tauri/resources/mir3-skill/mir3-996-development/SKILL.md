@@ -10,11 +10,11 @@ description: 开发、分析、修改或验收996传奇3项目时使用，覆盖
 ## 工具边界
 
 - 使用 Harness 原生文件、搜索、编辑、终端和会话能力处理普通文件任务；不要寻找或创建另一套 MIR3 文件工具。
-- 使用 `mcp__mir3__mir3_project_status` 确认当前项目、版本、Workspace 和索引状态。
-- 使用 `mcp__mir3__mir3_index_query` 查询 Map、NPC、Monster、Item、Quest、Lua、Config 等领域实体与关系。
-- 使用 `mcp__mir3__mir3_knowledge_search` 查询已经人工激活的项目知识。
-- 计划修改正式项目时，先调用 `mcp__mir3__mir3_draft_open`，再用 `mcp__mir3__mir3_draft_patch` 写入外置 Draft。
-- 使用 `mcp__mir3__mir3_draft_diff` 和 `mcp__mir3__mir3_validate` 检查修改。
+- 使用 `mcp__mir3__mir3_system_list` 和 `mcp__mir3__mir3_system_describe` 确认目标领域、插件版本、文件覆盖和依赖。
+- 使用 `mcp__mir3__mir3_resource_query`、`mcp__mir3__mir3_resource_get` 和 `mcp__mir3__mir3_dependency_resolve` 查询当前领域的真实文件资源与关系。
+- 计划修改正式项目时，先调用 `mcp__mir3__mir3_draft_open`，再用 `mcp__mir3__mir3_domain_operate` 或版本固定的领域能力写入外置 Draft。
+- 使用 `mcp__mir3__mir3_capability_list`、`mcp__mir3__mir3_capability_describe` 和 `mcp__mir3__mir3_capability_invoke` 复用安全结构化能力。
+- 使用 `mcp__mir3__mir3_validate` 检查项目、领域和 Draft；正式应用只能在 Studio 中由用户确认。
 
 ## 安全要求
 

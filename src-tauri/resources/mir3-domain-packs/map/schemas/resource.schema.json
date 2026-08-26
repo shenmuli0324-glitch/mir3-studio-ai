@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/map/resource.schema.json",
+  "title": "map.map-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mapId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_\\-]+$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "safeZoneMode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "partial",
+        "full"
+      ]
+    },
+    "spawnNpcId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "npc"
+    }
+  },
+  "required": [
+    "mapId",
+    "displayName",
+    "width",
+    "height",
+    "safeZoneMode",
+    "spawnNpcId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "mapId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "mapId",
+      "compareFields": [
+        "width",
+        "height"
+      ]
+    },
+    "runtimeRule": "map.bounds-contain-spawns"
+  }
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "equipment.unique",
+    "severity": "error",
+    "field": "equipmentId"
+  },
+  {
+    "code": "equipment.range",
+    "severity": "error",
+    "field": "requiredLevel"
+  },
+  {
+    "code": "equipment.reference",
+    "severity": "error",
+    "field": "baseItemId"
+  },
+  {
+    "code": "equipment.runtime",
+    "severity": "error",
+    "rule": "equipment.slot-matches-item-mode"
+  }
+]

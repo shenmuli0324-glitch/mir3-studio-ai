@@ -1,0 +1,25 @@
+{
+  "systemId": "guild",
+  "fixture": "invalid",
+  "records": [
+    {
+      "guildLevel": 100,
+      "requiredContribution": 1,
+      "maximumMembers": 2,
+      "rankingBoardId": "ranking:missing"
+    },
+    {
+      "guildLevel": 100,
+      "requiredContribution": 2,
+      "maximumMembers": 3,
+      "rankingBoardId": "ranking:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "guild.members-and-contribution-monotonic",
+      "expected": false
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "ranking.unique",
+    "severity": "error",
+    "field": "boardId"
+  },
+  {
+    "code": "ranking.range",
+    "severity": "error",
+    "field": "cycleSeconds"
+  },
+  {
+    "code": "ranking.reference",
+    "severity": "error",
+    "field": "rewardItemId"
+  },
+  {
+    "code": "ranking.runtime",
+    "severity": "error",
+    "rule": "ranking.settlement-within-cycle"
+  }
+]

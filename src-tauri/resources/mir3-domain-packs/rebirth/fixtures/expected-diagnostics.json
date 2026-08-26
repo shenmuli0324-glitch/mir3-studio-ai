@@ -1,0 +1,22 @@
+[
+  {
+    "code": "rebirth.unique",
+    "severity": "error",
+    "field": "rebirthTier"
+  },
+  {
+    "code": "rebirth.range",
+    "severity": "error",
+    "field": "rebirthTier"
+  },
+  {
+    "code": "rebirth.reference",
+    "severity": "error",
+    "field": "costItemId"
+  },
+  {
+    "code": "rebirth.runtime",
+    "severity": "error",
+    "rule": "rebirth.minimum-level-reachable"
+  }
+]

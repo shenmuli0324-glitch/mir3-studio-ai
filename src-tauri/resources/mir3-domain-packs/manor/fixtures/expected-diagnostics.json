@@ -1,0 +1,22 @@
+[
+  {
+    "code": "manor.unique",
+    "severity": "error",
+    "field": "manorId"
+  },
+  {
+    "code": "manor.range",
+    "severity": "error",
+    "field": "minimumLevel"
+  },
+  {
+    "code": "manor.reference",
+    "severity": "error",
+    "field": "mapId"
+  },
+  {
+    "code": "manor.runtime",
+    "severity": "error",
+    "rule": "manor.entry-and-exit-loop-reachable"
+  }
+]

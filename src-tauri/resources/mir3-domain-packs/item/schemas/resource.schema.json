@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/item/resource.schema.json",
+  "title": "item.item-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "itemId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "itemType": {
+      "type": "string",
+      "enum": [
+        "consumable",
+        "material",
+        "equipment",
+        "currency",
+        "quest"
+      ]
+    },
+    "stackLimit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "clientIcon": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engineStdMode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "linkedBuffId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "buff"
+    }
+  },
+  "required": [
+    "itemId",
+    "itemType",
+    "stackLimit",
+    "clientIcon",
+    "engineStdMode",
+    "linkedBuffId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "itemId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "itemId",
+      "compareFields": [
+        "itemId",
+        "engineStdMode"
+      ]
+    },
+    "runtimeRule": "item.icon-resource-exists"
+  }
+}

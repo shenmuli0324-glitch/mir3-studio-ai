@@ -1,0 +1,31 @@
+{
+  "systemId": "shop",
+  "fixture": "invalid",
+  "records": [
+    {
+      "offerId": "shop-offerId-1",
+      "shopId": "shop-shopId-1",
+      "itemId": "item:missing",
+      "currencyItemId": "item:fixture-1",
+      "price": 1000000001,
+      "startEpochSeconds": 1,
+      "endEpochSeconds": 2
+    },
+    {
+      "offerId": "shop-offerId-1",
+      "shopId": "shop-shopId-2",
+      "itemId": "item:fixture-2",
+      "currencyItemId": "item:fixture-2",
+      "price": 2,
+      "startEpochSeconds": 2,
+      "endEpochSeconds": 3
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "shop.sale-window-and-price-valid",
+      "expected": false
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CircleInfo, Clock, Lock, ShieldCheck } from '@gravity-ui/icons'
+import { CircleInfo } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useTranslation } from 'react-i18next'
 
@@ -62,31 +62,6 @@ export function EmptyPanel({ icon, title, description }: {
       <span className="mb-4 grid size-11 place-items-center rounded-xl border border-line bg-panel2 text-muted">{icon}</span>
       <strong className="text-base font-semibold text-ink">{title}</strong>
       <p className="mt-2 max-w-lg text-sm leading-6 text-muted">{description}</p>
-    </section>
-  )
-}
-
-export function PrincipleStrip() {
-  const { t } = useTranslation()
-  const items = [
-    { icon: Lock, title: t('studio.project.guard.source'), description: t('studio.project.guard.source_desc') },
-    { icon: ShieldCheck, title: t('studio.project.guard.draft'), description: t('studio.project.guard.draft_desc') },
-    { icon: Clock, title: t('studio.project.guard.acceptance'), description: t('studio.project.guard.acceptance_desc') },
-  ]
-  return (
-    <section className="grid grid-cols-3 overflow-hidden rounded-2xl border border-line bg-panel max-[820px]:grid-cols-1">
-      {items.map((item) => {
-        const Icon = item.icon
-        return (
-          <div className="flex items-start gap-3 border-r border-line p-4 last:border-r-0 max-[820px]:border-r-0 max-[820px]:border-b max-[820px]:last:border-b-0" key={item.title}>
-            <Icon className="mt-0.5 size-4 shrink-0 text-accent" />
-            <span>
-              <strong className="block text-sm font-medium text-ink">{item.title}</strong>
-              <small className="mt-1 block text-xs leading-5 text-muted">{item.description}</small>
-            </span>
-          </div>
-        )
-      })}
     </section>
   )
 }

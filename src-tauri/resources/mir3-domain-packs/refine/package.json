@@ -1,0 +1,26 @@
+{
+  "name": "@mir3-studio/domain-refine",
+  "kind": "domain",
+  "version": "1.0.0",
+  "private": true,
+  "files": [
+    "CHANGELOG.md",
+    "README.md",
+    "domain.json",
+    "fixtures/",
+    "schemas/"
+  ],
+  "mir3Domain": {
+    "kind": "domain",
+    "systemId": "refine",
+    "kernelApiRange": "^1.0.0",
+    "supportedEngineRange": "*",
+    "resourceSchema": "schemas/resource.schema.json",
+    "fixtures": {
+      "valid": "fixtures/valid.json",
+      "invalid": "fixtures/invalid.json",
+      "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+    },
+    "changelog": "CHANGELOG.md"
+  }
+}

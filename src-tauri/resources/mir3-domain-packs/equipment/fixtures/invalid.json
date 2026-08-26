@@ -1,0 +1,27 @@
+{
+  "systemId": "equipment",
+  "fixture": "invalid",
+  "records": [
+    {
+      "equipmentId": "equipment-equipmentId-1",
+      "slot": "weapon",
+      "baseItemId": "item:missing",
+      "requiredLevel": 256,
+      "durability": 2
+    },
+    {
+      "equipmentId": "equipment-equipmentId-1",
+      "slot": "armor",
+      "baseItemId": "item:fixture-2",
+      "requiredLevel": 2,
+      "durability": 3
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "equipment.slot-matches-item-mode",
+      "expected": false
+    }
+  ]
+}

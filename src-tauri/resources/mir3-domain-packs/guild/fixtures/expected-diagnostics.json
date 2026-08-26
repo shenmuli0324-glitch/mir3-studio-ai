@@ -1,0 +1,22 @@
+[
+  {
+    "code": "guild.unique",
+    "severity": "error",
+    "field": "guildLevel"
+  },
+  {
+    "code": "guild.range",
+    "severity": "error",
+    "field": "guildLevel"
+  },
+  {
+    "code": "guild.reference",
+    "severity": "error",
+    "field": "rankingBoardId"
+  },
+  {
+    "code": "guild.runtime",
+    "severity": "error",
+    "rule": "guild.members-and-contribution-monotonic"
+  }
+]

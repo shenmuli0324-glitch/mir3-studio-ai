@@ -4,15 +4,21 @@
 //! 避免项目索引、知识与 Draft 出现两套状态。
 
 mod draft;
+mod governance;
 mod knowledge;
+mod map_adapter;
 mod project;
 mod safe_files;
 mod scan;
 mod store;
+mod systems;
 
 pub use draft::*;
+pub use governance::*;
 pub use knowledge::*;
+pub use map_adapter::*;
 pub use project::*;
 pub use safe_files::*;
 pub use scan::*;
 pub use store::*;
+pub use systems::*;

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "shop.unique",
+    "severity": "error",
+    "field": "offerId"
+  },
+  {
+    "code": "shop.range",
+    "severity": "error",
+    "field": "price"
+  },
+  {
+    "code": "shop.reference",
+    "severity": "error",
+    "field": "itemId"
+  },
+  {
+    "code": "shop.runtime",
+    "severity": "error",
+    "rule": "shop.sale-window-and-price-valid"
+  }
+]

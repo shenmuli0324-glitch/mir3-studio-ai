@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/talent/resource.schema.json",
+  "title": "talent.talent-node-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "nodeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "treeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "costPoints": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9999
+    },
+    "requiredLevel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255
+    },
+    "grantedSkillId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "skill"
+    },
+    "parentNodeId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "nodeId",
+    "treeId",
+    "costPoints",
+    "requiredLevel",
+    "grantedSkillId",
+    "parentNodeId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "treeId",
+      "nodeId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "nodeId",
+      "compareFields": [
+        "treeId",
+        "nodeId"
+      ]
+    },
+    "runtimeRule": "talent.graph-acyclic-and-budget-valid"
+  }
+}

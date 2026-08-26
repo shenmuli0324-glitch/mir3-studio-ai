@@ -1,0 +1,27 @@
+{
+  "systemId": "manor",
+  "fixture": "invalid",
+  "records": [
+    {
+      "manorId": "manor-manorId-1",
+      "mapId": "map:missing",
+      "entryNpcId": "npc:fixture-1",
+      "minimumLevel": 256,
+      "productionPointId": "resource_production:fixture-1"
+    },
+    {
+      "manorId": "manor-manorId-1",
+      "mapId": "map:fixture-2",
+      "entryNpcId": "npc:fixture-2",
+      "minimumLevel": 3,
+      "productionPointId": "resource_production:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "manor.entry-and-exit-loop-reachable",
+      "expected": false
+    }
+  ]
+}

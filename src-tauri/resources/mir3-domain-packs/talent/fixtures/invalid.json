@@ -1,0 +1,29 @@
+{
+  "systemId": "talent",
+  "fixture": "invalid",
+  "records": [
+    {
+      "nodeId": "talent-nodeId-1",
+      "treeId": "talent-treeId-1",
+      "costPoints": 10000,
+      "requiredLevel": 2,
+      "grantedSkillId": "skill:missing",
+      "parentNodeId": "talent-parentNodeId-1"
+    },
+    {
+      "nodeId": "talent-nodeId-1",
+      "treeId": "talent-treeId-1",
+      "costPoints": 2,
+      "requiredLevel": 3,
+      "grantedSkillId": "skill:fixture-2",
+      "parentNodeId": "talent-parentNodeId-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "talent.graph-acyclic-and-budget-valid",
+      "expected": false
+    }
+  ]
+}

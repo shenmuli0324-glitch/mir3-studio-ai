@@ -1,0 +1,22 @@
+[
+  {
+    "code": "crafting.unique",
+    "severity": "error",
+    "field": "recipeId"
+  },
+  {
+    "code": "crafting.range",
+    "severity": "error",
+    "field": "outputCount"
+  },
+  {
+    "code": "crafting.reference",
+    "severity": "error",
+    "field": "outputItemId"
+  },
+  {
+    "code": "crafting.runtime",
+    "severity": "error",
+    "rule": "crafting.no-self-consuming-cycle"
+  }
+]

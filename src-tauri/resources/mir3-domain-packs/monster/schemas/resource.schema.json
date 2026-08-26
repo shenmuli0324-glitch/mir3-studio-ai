@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/monster/resource.schema.json",
+  "title": "monster.monster-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "monsterId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "combatLevel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255
+    },
+    "healthPoints": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000000000
+    },
+    "spawnMapId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "map"
+    },
+    "primaryDropItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    }
+  },
+  "required": [
+    "monsterId",
+    "combatLevel",
+    "healthPoints",
+    "spawnMapId",
+    "primaryDropItemId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "monsterId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "monsterId",
+      "compareFields": [
+        "monsterId",
+        "combatLevel"
+      ]
+    },
+    "runtimeRule": "monster.drop-weight-positive"
+  }
+}

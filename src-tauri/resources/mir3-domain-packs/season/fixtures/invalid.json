@@ -1,0 +1,27 @@
+{
+  "systemId": "season",
+  "fixture": "invalid",
+  "records": [
+    {
+      "seasonId": "season-seasonId-1",
+      "startEpochSeconds": 4102444801,
+      "endEpochSeconds": 2,
+      "rankingBoardId": "ranking:missing",
+      "seasonShopId": "shop:fixture-1"
+    },
+    {
+      "seasonId": "season-seasonId-1",
+      "startEpochSeconds": 2,
+      "endEpochSeconds": 3,
+      "rankingBoardId": "ranking:fixture-2",
+      "seasonShopId": "shop:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "season.window-and-settlement-ordered",
+      "expected": false
+    }
+  ]
+}

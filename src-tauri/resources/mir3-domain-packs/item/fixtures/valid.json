@@ -1,0 +1,28 @@
+{
+  "systemId": "item",
+  "fixture": "valid",
+  "records": [
+    {
+      "itemId": "item-itemId-1",
+      "itemType": "consumable",
+      "stackLimit": 2,
+      "clientIcon": "item-clientIcon-1",
+      "engineStdMode": 1,
+      "linkedBuffId": "buff:fixture-1"
+    },
+    {
+      "itemId": "item-itemId-2",
+      "itemType": "material",
+      "stackLimit": 3,
+      "clientIcon": "item-clientIcon-2",
+      "engineStdMode": 2,
+      "linkedBuffId": "buff:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "buff": [
+      "buff:fixture-1",
+      "buff:fixture-2"
+    ]
+  }
+}

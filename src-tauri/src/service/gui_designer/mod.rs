@@ -650,10 +650,20 @@ pub fn prepare_draft(
 
     let draft = match request.draft_id.as_deref() {
         Some(id) => project_service.store().get_draft(project_id, id)?,
-        None => project_service.store().open_draft(
-            project_id,
-            &format!("GUI 编辑 {} 个文件", request.files.len()),
-        )?,
+        None => {
+            let draft = project_service.store().open_draft(
+                project_id,
+                &format!("GUI 编辑 {} 个文件", request.files.len()),
+            )?;
+            project_service.store().bind_draft_domain(
+                project_id,
+                &draft.id,
+                "__studio_gui__",
+                env!("CARGO_PKG_VERSION"),
+                None,
+            )?;
+            draft
+        }
     };
     if draft.revision != request.expected_revision {
         return Err(format!(

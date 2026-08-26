@@ -1,0 +1,935 @@
+{
+  "kind": "domain",
+  "systemId": "shop",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "commercial",
+  "complexity": 3,
+  "renderer": "table-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "shop",
+      "mall",
+      "store",
+      "商城"
+    ],
+    "ownedSelectors": [
+      "shop",
+      "mall",
+      "store",
+      "商城"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "vip"
+      },
+      {
+        "systemId": "first_charge"
+      },
+      {
+        "systemId": "limited_event"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "shop",
+        "caseSensitive": false
+      },
+      {
+        "contains": "mall",
+        "caseSensitive": false
+      },
+      {
+        "contains": "store",
+        "caseSensitive": false
+      },
+      {
+        "contains": "商城",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "shop.shop-offer-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(shop:offerId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "shop.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "itemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "currencyItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "offerId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "table-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "table-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "item",
+    "equipment",
+    "vip",
+    "first_charge",
+    "limited_event"
+  ],
+  "operations": [
+    {
+      "id": "inspect-shop",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-shop"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-shop",
+          "operation": "inspect-shop"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "batch-price-shop",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-price-shop"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "shopId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "price": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000000
+              },
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "shop"
+      ],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded",
+        "shop.draft-open",
+        "shop.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-price-shop"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "schedule-shop-item",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "schedule-shop-item"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "startEpochSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4102444800
+          },
+          "endEpochSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4102444800
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "startEpochSeconds",
+          "endEpochSeconds",
+          "timezone",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "shop"
+      ],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded",
+        "shop.draft-open",
+        "shop.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "schedule-shop-item"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-shop-item",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-shop-item"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "itemId",
+              "currencyItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "shop"
+      ],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded",
+        "shop.draft-open",
+        "shop.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-shop-item"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-shop",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-shop"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-shop",
+          "operation": "inspect-shop"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-price-shop",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-price-shop"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "shopId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "price": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000000
+              },
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "shop"
+      ],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded",
+        "shop.draft-open",
+        "shop.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-price-shop"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "schedule-shop-item",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "schedule-shop-item"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "startEpochSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4102444800
+          },
+          "endEpochSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4102444800
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "startEpochSeconds",
+          "endEpochSeconds",
+          "timezone",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "shop"
+      ],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded",
+        "shop.draft-open",
+        "shop.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "schedule-shop-item"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-shop-item",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-shop-item"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "itemId",
+              "currencyItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "shop",
+        "item",
+        "equipment",
+        "vip",
+        "first_charge",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "shop"
+      ],
+      "preconditions": [
+        "shop.resource-index-ready",
+        "shop.schema-loaded",
+        "shop.draft-open",
+        "shop.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-shop-item"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "shop.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "shop.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "shop-offer-record"
+    },
+    {
+      "id": "shop.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "offerId"
+      ],
+      "scope": "shop.project"
+    },
+    {
+      "id": "shop.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "price",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        {
+          "field": "startEpochSeconds",
+          "minimum": 0,
+          "maximum": 4102444800
+        },
+        {
+          "field": "endEpochSeconds",
+          "minimum": 1,
+          "maximum": 4102444800
+        }
+      ]
+    },
+    {
+      "id": "shop.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "itemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "currencyItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "shop.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "offerId",
+      "compareFields": [
+        "offerId",
+        "shopId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "shop.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "shop.sale-window-and-price-valid",
+      "severity": "error",
+      "target": "shop.shop-offer-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

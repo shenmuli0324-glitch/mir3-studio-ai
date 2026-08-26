@@ -1,0 +1,890 @@
+{
+  "kind": "domain",
+  "systemId": "npc",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "resources",
+  "complexity": 3,
+  "renderer": "flow-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "npc",
+      "market_def",
+      "merchant",
+      "商人"
+    ],
+    "ownedSelectors": [
+      "npc",
+      "market_def",
+      "merchant",
+      "商人"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "quest"
+      },
+      {
+        "systemId": "shop"
+      },
+      {
+        "systemId": "item"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "npc",
+        "caseSensitive": false
+      },
+      {
+        "contains": "market_def",
+        "caseSensitive": false
+      },
+      {
+        "contains": "merchant",
+        "caseSensitive": false
+      },
+      {
+        "contains": "商人",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "npc.npc-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(npc:npcId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "npc.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "mapId",
+        "systemId": "map",
+        "required": true
+      },
+      {
+        "field": "shopId",
+        "systemId": "shop",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "npcId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "flow-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "flow-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "map",
+    "quest",
+    "shop",
+    "item"
+  ],
+  "operations": [
+    {
+      "id": "inspect-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-npc"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-npc",
+          "operation": "inspect-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "move-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "move-npc"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destinationMapId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coordinateX": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4095
+          },
+          "coordinateY": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4095
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceId",
+          "destinationMapId",
+          "coordinateX",
+          "coordinateY",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "move-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-dialogue",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-dialogue"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-dialogue"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-npc-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-npc-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "mapId",
+              "shopId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-npc-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-npc"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-npc",
+          "operation": "inspect-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "move-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "move-npc"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destinationMapId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coordinateX": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4095
+          },
+          "coordinateY": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4095
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceId",
+          "destinationMapId",
+          "coordinateX",
+          "coordinateY",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "move-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-dialogue",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-dialogue"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-dialogue"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-npc-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-npc-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "mapId",
+              "shopId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-npc-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "npc.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "npc.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "npc-record"
+    },
+    {
+      "id": "npc.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "npcId"
+      ],
+      "scope": "npc.project"
+    },
+    {
+      "id": "npc.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "coordinateX",
+          "minimum": 0,
+          "maximum": 4095
+        },
+        {
+          "field": "coordinateY",
+          "minimum": 0,
+          "maximum": 4095
+        }
+      ]
+    },
+    {
+      "id": "npc.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "mapId",
+          "systemId": "map",
+          "required": true
+        },
+        {
+          "field": "shopId",
+          "systemId": "shop",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "npc.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "npcId",
+      "compareFields": [
+        "npcId",
+        "scriptPath"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "npc.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "npc.script-entry-resolves",
+      "severity": "error",
+      "target": "npc.npc-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

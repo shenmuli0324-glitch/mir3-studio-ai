@@ -1,0 +1,895 @@
+{
+  "kind": "domain",
+  "systemId": "skill",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "growth",
+  "complexity": 4,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "skill",
+      "magic",
+      "技能"
+    ],
+    "ownedSelectors": [
+      "skill",
+      "magic",
+      "技能"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "buff"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "monster"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "skill",
+        "caseSensitive": false
+      },
+      {
+        "contains": "magic",
+        "caseSensitive": false
+      },
+      {
+        "contains": "技能",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "skill.skill-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(skill:skillId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "skill.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "appliedBuffId",
+        "systemId": "buff",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "skillId",
+      "skillLevel"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "buff",
+    "equipment",
+    "monster"
+  ],
+  "operations": [
+    {
+      "id": "inspect-skill",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-skill"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-skill",
+          "operation": "inspect-skill"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-skill",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-skill"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "skillLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "manaCost": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "cooldownMilliseconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400000
+              },
+              "appliedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [
+        "skill"
+      ],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded",
+        "skill.draft-open",
+        "skill.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-skill"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "generate-skill-curve",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-skill-curve"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "skillLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "manaCost": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "cooldownMilliseconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400000
+              },
+              "appliedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [
+        "skill"
+      ],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded",
+        "skill.draft-open",
+        "skill.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-skill-curve"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "bind-skill-effect",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "bind-skill-effect"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "targetReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "appliedBuffId"
+            ]
+          },
+          "replaceExisting": {
+            "type": "boolean",
+            "default": false
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceId",
+          "targetReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [
+        "skill"
+      ],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded",
+        "skill.draft-open",
+        "skill.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "bind-skill-effect"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-skill",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-skill"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-skill",
+          "operation": "inspect-skill"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-skill",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-skill"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "skillLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "manaCost": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "cooldownMilliseconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400000
+              },
+              "appliedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [
+        "skill"
+      ],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded",
+        "skill.draft-open",
+        "skill.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-skill"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "generate-skill-curve",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-skill-curve"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "skillLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "manaCost": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "cooldownMilliseconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400000
+              },
+              "appliedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [
+        "skill"
+      ],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded",
+        "skill.draft-open",
+        "skill.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-skill-curve"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "bind-skill-effect",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "bind-skill-effect"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "targetReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "appliedBuffId"
+            ]
+          },
+          "replaceExisting": {
+            "type": "boolean",
+            "default": false
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceId",
+          "targetReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "skill",
+        "buff",
+        "equipment",
+        "monster"
+      ],
+      "writeSystems": [
+        "skill"
+      ],
+      "preconditions": [
+        "skill.resource-index-ready",
+        "skill.schema-loaded",
+        "skill.draft-open",
+        "skill.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "bind-skill-effect"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "skill.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "skill.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "skill-record"
+    },
+    {
+      "id": "skill.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "skillId",
+        "skillLevel"
+      ],
+      "scope": "skill.project"
+    },
+    {
+      "id": "skill.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "skillLevel",
+          "minimum": 1,
+          "maximum": 99
+        },
+        {
+          "field": "manaCost",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        {
+          "field": "cooldownMilliseconds",
+          "minimum": 0,
+          "maximum": 86400000
+        }
+      ]
+    },
+    {
+      "id": "skill.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "appliedBuffId",
+          "systemId": "buff",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "skill.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "skillId",
+      "compareFields": [
+        "skillId",
+        "skillLevel"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "skill.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "skill.level-curve-contiguous",
+      "severity": "error",
+      "target": "skill.skill-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

@@ -81,6 +81,22 @@ pub struct SnapshotFile {
     pub sha256: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeDraftConfirmation {
+    pub draft_id: String,
+    pub expected_revision: i64,
+    pub expected_diff_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeApplyResult {
+    pub composite_id: String,
+    pub draft_ids: Vec<String>,
+    pub snapshot: Snapshot,
+}
+
 impl DomainStore {
     pub fn open_draft(&self, project_id: &str, intent: &str) -> Result<Draft, String> {
         let trimmed = intent.trim();
@@ -161,6 +177,7 @@ impl DomainStore {
             .map_err(|e| format!("DRAFT_TRANSACTION_FAILED: {e}"))?;
         for change in changes {
             validate_relative_path(&change.path)?;
+            self.assert_draft_path_writable(project_id, draft_id, &change.path)?;
             let target = safe_project_target(&root, &change.path)?;
             let existing = fs::read(&target).ok();
             let base_hash = existing.as_deref().map(hash_bytes);
@@ -200,7 +217,7 @@ impl DomainStore {
         self.preview_draft(project_id, draft_id)
     }
 
-    /// Safe Files 专用的原始字节 Draft 写入。它与文本 MCP 共用同一 Draft、
+    /// Studio 安全编辑器使用的原始字节 Draft 写入。它与文本 MCP 共用同一 Draft、
     /// revision 和人工确认链路，但不会把 GB18030/BOM 文本强制转换成 UTF-8。
     pub fn patch_draft_bytes(
         &self,
@@ -230,6 +247,7 @@ impl DomainStore {
             .map_err(|e| format!("DRAFT_TRANSACTION_FAILED: {e}"))?;
         for change in changes {
             validate_relative_path(&change.path)?;
+            self.assert_draft_path_writable(project_id, draft_id, &change.path)?;
             let target = safe_project_target(&root, &change.path)?;
             let existing = fs::read(&target).ok();
             let base_hash = existing.as_deref().map(hash_bytes);
@@ -410,6 +428,133 @@ impl DomainStore {
             )
             .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
         Ok(snapshot)
+    }
+
+    /// 将多个领域 Draft 作为一个组合变更原子应用。
+    ///
+    /// 全部基线和确认信息会在第一次写入前完成检查；任意写入或数据库提交失败时，
+    /// 使用同一组合快照恢复全部文件，避免跨系统任务只提交一部分。
+    pub fn apply_composite_drafts(
+        &self,
+        project_id: &str,
+        composite_id: &str,
+        confirmations: &[CompositeDraftConfirmation],
+    ) -> Result<CompositeApplyResult, String> {
+        if composite_id.trim().is_empty() || confirmations.len() < 2 {
+            return Err(
+                "COMPOSITE_DRAFT_INVALID: composite id and at least two drafts are required"
+                    .to_string(),
+            );
+        }
+        let project = self.get_project(project_id)?;
+        let root = PathBuf::from(&project.root);
+        let mut all_paths = Vec::new();
+        let mut operations = Vec::new();
+        let mut draft_ids = Vec::new();
+        for confirmation in confirmations {
+            if draft_ids.contains(&confirmation.draft_id) {
+                return Err(format!(
+                    "COMPOSITE_DRAFT_DUPLICATE: {}",
+                    confirmation.draft_id
+                ));
+            }
+            let preview = self.preview_draft(project_id, &confirmation.draft_id)?;
+            if preview.draft.status != DraftStatus::Open
+                || preview.draft.revision != confirmation.expected_revision
+                || preview.diff_hash != confirmation.expected_diff_hash
+            {
+                return Err(format!(
+                    "COMPOSITE_CONFIRMATION_STALE: {}",
+                    confirmation.draft_id
+                ));
+            }
+            for change in &preview.changes {
+                if all_paths.contains(&change.path) {
+                    return Err(format!("COMPOSITE_PATH_CONFLICT: {}", change.path));
+                }
+                let target = safe_project_target(&root, &change.path)?;
+                let current = fs::read(&target).ok().as_deref().map(hash_bytes);
+                if current != change.base_sha256 {
+                    return Err(format!(
+                        "DRAFT_BASE_CONFLICT: {} changed after preview",
+                        change.path
+                    ));
+                }
+                all_paths.push(change.path.clone());
+            }
+            let connection = self.project_connection(project_id)?;
+            let mut statement = connection
+                .prepare(
+                    "SELECT path,content,deleted FROM draft_changes WHERE draft_id=?1 ORDER BY path",
+                )
+                .map_err(|error| format!("COMPOSITE_DRAFT_READ_FAILED: {error}"))?;
+            let rows = statement
+                .query_map([&confirmation.draft_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<Vec<u8>>>(1)?,
+                        row.get::<_, i64>(2)? != 0,
+                    ))
+                })
+                .map_err(|error| format!("COMPOSITE_DRAFT_READ_FAILED: {error}"))?;
+            operations.extend(
+                rows.collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("COMPOSITE_DRAFT_READ_FAILED: {error}"))?,
+            );
+            draft_ids.push(confirmation.draft_id.clone());
+        }
+        let snapshot = self.create_snapshot(project_id, None, &all_paths)?;
+        for (path, content, deleted) in operations {
+            let target = safe_project_target(&root, &path)?;
+            let result = if deleted {
+                if target.exists() {
+                    fs::remove_file(&target)
+                } else {
+                    Ok(())
+                }
+            } else {
+                if let Some(parent) = target.parent() {
+                    if let Err(error) = fs::create_dir_all(parent) {
+                        let _ = self.restore_snapshot(project_id, &snapshot.id);
+                        return Err(format!(
+                            "COMPOSITE_APPLY_FAILED: {}: {error}",
+                            parent.display()
+                        ));
+                    }
+                }
+                replace_file_safely(&target, &content.unwrap_or_default())
+            };
+            if let Err(error) = result {
+                let _ = self.restore_snapshot(project_id, &snapshot.id);
+                return Err(format!(
+                    "COMPOSITE_APPLY_FAILED: {}: {error}",
+                    target.display()
+                ));
+            }
+        }
+        let mut connection = self.project_connection(project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("COMPOSITE_TRANSACTION_FAILED: {error}"))?;
+        for draft_id in &draft_ids {
+            if let Err(error) = transaction.execute(
+                "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1 AND status='open'",
+                params![draft_id, now_millis()],
+            ) {
+                drop(transaction);
+                let _ = self.restore_snapshot(project_id, &snapshot.id);
+                return Err(format!("COMPOSITE_STATUS_FAILED: {error}"));
+            }
+        }
+        if let Err(error) = transaction.commit() {
+            let _ = self.restore_snapshot(project_id, &snapshot.id);
+            return Err(format!("COMPOSITE_COMMIT_FAILED: {error}"));
+        }
+        Ok(CompositeApplyResult {
+            composite_id: composite_id.to_string(),
+            draft_ids,
+            snapshot,
+        })
     }
 
     pub fn discard_draft(&self, project_id: &str, draft_id: &str) -> Result<Draft, String> {
@@ -679,18 +824,22 @@ mod tests {
         let project = base.join("木立");
         fs::create_dir_all(project.join("客户端/dev")).unwrap();
         fs::create_dir_all(project.join("引擎")).unwrap();
-        let target = project.join("客户端/dev/Main.lua");
+        let target = project.join("客户端/dev/Quest/Main.lua");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, "return 1\n").unwrap();
         let store = DomainStore::new(base.join("data")).unwrap();
         let imported = store.import_project(&project).unwrap();
         let draft = store.open_draft(&imported.id, "修改入口").unwrap();
+        store
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.0.0", None)
+            .unwrap();
         let preview = store
             .patch_draft(
                 &imported.id,
                 &draft.id,
                 0,
                 &[DraftChangeInput {
-                    path: "客户端/dev/Main.lua".to_string(),
+                    path: "客户端/dev/Quest/Main.lua".to_string(),
                     content: Some("return 2\n".to_string()),
                     deleted: false,
                     expected_sha256: None,
@@ -709,6 +858,112 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), "return 2\n");
         store.restore_snapshot(&imported.id, &snapshot.id).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "return 1\n");
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn scoped_drafts_reject_foreign_files_and_composite_apply_is_atomic() {
+        let base = std::env::temp_dir().join(format!("mir3-composite-{}", std::process::id()));
+        let project = base.join("木立");
+        let quest_path = "引擎/Mir200/Envir/QuestDiary/DailyQuest.txt";
+        let shop_path = "引擎/Mir200/Envir/Shop/ShopList.txt";
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir/QuestDiary")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir/Shop")).unwrap();
+        fs::write(project.join(quest_path), "quest=1\n").unwrap();
+        fs::write(project.join(shop_path), "shop=1\n").unwrap();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+
+        let quest = store.open_draft(&imported.id, "更新任务").unwrap();
+        store
+            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.0.0", Some("release-1"))
+            .unwrap();
+        let denied = store.patch_draft(
+            &imported.id,
+            &quest.id,
+            0,
+            &[DraftChangeInput {
+                path: shop_path.to_string(),
+                content: Some("shop=2\n".to_string()),
+                deleted: false,
+                expected_sha256: None,
+            }],
+        );
+        assert!(denied
+            .unwrap_err()
+            .starts_with("DRAFT_DOMAIN_SCOPE_DENIED:"));
+        let quest_preview = store
+            .patch_draft(
+                &imported.id,
+                &quest.id,
+                0,
+                &[DraftChangeInput {
+                    path: quest_path.to_string(),
+                    content: Some("quest=2\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+
+        let shop = store.open_draft(&imported.id, "更新商城").unwrap();
+        store
+            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.0.0", Some("release-1"))
+            .unwrap();
+        let shop_preview = store
+            .patch_draft(
+                &imported.id,
+                &shop.id,
+                0,
+                &[DraftChangeInput {
+                    path: shop_path.to_string(),
+                    content: Some("shop=2\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+
+        let applied = store
+            .apply_composite_drafts(
+                &imported.id,
+                "release-1",
+                &[
+                    CompositeDraftConfirmation {
+                        draft_id: quest.id,
+                        expected_revision: quest_preview.draft.revision,
+                        expected_diff_hash: quest_preview.diff_hash,
+                    },
+                    CompositeDraftConfirmation {
+                        draft_id: shop.id,
+                        expected_revision: shop_preview.draft.revision,
+                        expected_diff_hash: shop_preview.diff_hash,
+                    },
+                ],
+            )
+            .unwrap();
+        assert_eq!(applied.draft_ids.len(), 2);
+        assert_eq!(
+            fs::read_to_string(project.join(quest_path)).unwrap(),
+            "quest=2\n"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(shop_path)).unwrap(),
+            "shop=2\n"
+        );
+        store
+            .restore_snapshot(&imported.id, &applied.snapshot.id)
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(project.join(quest_path)).unwrap(),
+            "quest=1\n"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(shop_path)).unwrap(),
+            "shop=1\n"
+        );
         fs::remove_dir_all(base).ok();
     }
 }

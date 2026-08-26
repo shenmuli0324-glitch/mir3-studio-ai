@@ -6,8 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
-import { postProjectActivation } from '@/features/projects/workspace-bridge'
-import { setSafeFileDirty } from '@/features/workbench/safe-files-state'
+import { bridgeRequestId, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, postProjectActivation, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
 import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
 
@@ -46,29 +45,24 @@ interface ClipboardImageRequest {
 
 interface Mir3PluginMessage {
   source?: 'mir3-core-plugin'
-  type?: 'mir3/plugin.ready' | 'mir3/workspace.pick' | 'mir3/project.activated' | 'mir3/project.error'
-  version?: number
+  protocolVersion?: number
+  type?: 'mir3/plugin.ready' | 'mir3/bridge.description' | 'mir3/project.activated' | 'mir3/bridge.error'
   requestId?: string
-  payload?: { projectId?: string, code?: string, message?: string }
+  projectId?: string
+  systemId?: string
+  taskId?: string
+  sessionId?: string
+  sequence?: number
+  payload?: {
+    protocolVersion?: number
+    code?: string
+    message?: string
+    capabilities?: { sessions?: boolean, workspaces?: boolean, archive?: boolean, snapshot?: boolean, pendingInteraction?: boolean }
+  }
 }
 
-interface Mir3SafeFilesMessage {
-  source?: 'mir3-safe-files-plugin'
-  type?: 'mir3/files.ready' | 'mir3/files.request' | 'mir3/files.mode' | 'mir3/files.dirty' | 'mir3/files.error'
-  version?: number
-  requestId?: string
-  payload?: Record<string, unknown>
-}
-
-const SAFE_FILES_COMMANDS = new Set([
-  'safe_file_open',
-  'safe_text_patch',
-  'safe_lua_patch',
-  'safe_xls_open',
-  'safe_xls_sheet_read',
-  'safe_xls_patch',
-  'safe_file_status',
-])
+let coreReadyCommitted = false
+let coreCanaryRunning = false
 
 export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
   const isMounted = useMountedState()
@@ -169,21 +163,26 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
 
   function handleMir3Plugin(event: MessageEvent<Mir3PluginMessage>) {
     const data = event.data
-    if (!data || typeof data !== 'object' || data.source !== 'mir3-core-plugin' || data.version !== 1)
+    if (!isMir3BridgeV2(data))
       return
     if (event.source !== iframeRef.current?.contentWindow)
       return
     const iframeOrigin = getIframeOrigin(iframeRef)
     if (!iframeOrigin || event.origin !== iframeOrigin)
       return
-    if (data.type === 'mir3/project.error') {
-      console.error('[MIR3 Core Plugin] project activation failed:', data.payload?.code, data.payload?.message)
+    if (data.type === 'mir3/bridge.error') {
+      console.error('[MIR3 Core Plugin] bridge request failed:', data.payload?.code, data.payload?.message)
       return
     }
     if (data.type === 'mir3/plugin.ready') {
-      store.harness.markCorePluginReady()
-      void invoke<boolean>('mark_core_ready')
-        .catch(error => console.error('[MIR3 Core Plugin] failed to commit ready Core:', error))
+      postHarnessBridge({
+        type: 'mir3/bridge.describe',
+        projectId: '',
+        systemId: '',
+        taskId: '',
+        sessionId: '',
+        payload: {},
+      })
       void invoke<Mir3Project | null>('project_get_active')
         .then((project) => {
           if (project)
@@ -192,81 +191,29 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
         .catch(error => console.error('[MIR3 Core Plugin] failed to read active project:', error))
       return
     }
-    if (data.type !== 'mir3/workspace.pick')
+    if (data.type !== 'mir3/bridge.description' || coreReadyCommitted || coreCanaryRunning)
       return
-    void (async () => {
-      const project = await invoke<Mir3Project | null>('project_get_active')
-      if (!project)
-        throw new Error('No active MIR3 project')
-      const path = await invoke<string | null>('workspace_pick_directory', { projectId: project.id })
-      if (!path)
-        return
-      const updated = await invoke<Mir3Project>('workspace_select', { projectId: project.id, path })
-      await queryClient.invalidateQueries({ queryKey: ['mir3-active-project'] })
-      await queryClient.invalidateQueries({ queryKey: ['mir3-projects'] })
-      postProjectActivation(iframeRef, updated)
-    })().catch(error => console.error('[MIR3 Core Plugin] workspace selection failed:', error))
-  }
-
-  function handleMir3SafeFiles(event: MessageEvent<Mir3SafeFilesMessage>) {
-    const data = event.data
-    if (!data || typeof data !== 'object' || data.source !== 'mir3-safe-files-plugin' || data.version !== 1)
-      return
-    if (event.source !== iframeRef.current?.contentWindow)
-      return
-    const iframeOrigin = getIframeOrigin(iframeRef)
-    if (!iframeOrigin || event.origin !== iframeOrigin)
-      return
-    if (data.type === 'mir3/files.ready') {
-      void invoke<Mir3Project | null>('project_get_active')
-        .then((project) => {
-          if (project)
-            postProjectActivation(iframeRef, project)
-        })
-        .catch(error => console.error('[MIR3 Safe Files] failed to bind active project:', error))
+    if (!passesCoreCanary(data.payload)) {
+      console.error('[MIR3 Core Plugin] bridge v2 capability canary failed:', data.payload)
       return
     }
-    if (data.type === 'mir3/files.error') {
-      console.error('[MIR3 Safe Files]', data.payload?.message)
-      return
-    }
-    if (data.type === 'mir3/files.dirty') {
-      const relativePath = data.payload?.relativePath
-      if (typeof relativePath === 'string')
-        setSafeFileDirty(relativePath, data.payload?.dirty === true)
-      return
-    }
-    if (data.type !== 'mir3/files.request' || !data.requestId)
-      return
-    const command = data.payload?.command
-    if (typeof command !== 'string' || !SAFE_FILES_COMMANDS.has(command))
-      return
-    const requestId = data.requestId
-    const origin = iframeOrigin
-    const args = { ...data.payload }
-    delete args.command
-    function reply(result?: unknown, error?: unknown) {
-      iframeRef.current?.contentWindow?.postMessage(
-        {
-          source: 'mir3-studio',
-          type: 'mir3/files.response',
-          version: 1,
-          requestId,
-          payload: error === undefined ? { result } : { error: String(error) },
-        },
-        origin,
-      )
-    }
-    void invoke(command, args)
-      .then(result => reply(result))
-      .catch(error => reply(undefined, error))
+    coreCanaryRunning = true
+    void runCoreCanary()
+      .then(() => invoke<boolean>('mark_core_ready'))
+      .then(() => {
+        coreReadyCommitted = true
+        store.harness.markCorePluginReady()
+      })
+      .catch(error => console.error('[MIR3 Core Plugin] LKG canary failed; candidate was not committed:', error))
+      .finally(() => {
+        coreCanaryRunning = false
+      })
   }
 
   useEvent('message', handleMessage)
   useEvent('message', handlePluginError)
   useEvent('message', handleClipboardImage)
   useEvent('message', handleMir3Plugin)
-  useEvent('message', handleMir3SafeFiles)
 
   // 系统通知点击 → 通知 iframe 聚焦对应会话
   useEffect(() => {
@@ -360,4 +307,81 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
 
   // 兜底轮询：覆盖监听不到的状态变化（如任务栏切换）
   useInterval(syncVisibility, 1000)
+}
+
+function isMir3BridgeV2(data: Mir3PluginMessage | null | undefined): data is Mir3PluginMessage & { type: NonNullable<Mir3PluginMessage['type']> } {
+  return Boolean(data
+    && typeof data === 'object'
+    && data.source === 'mir3-core-plugin'
+    && data.protocolVersion === MIR3_BRIDGE_PROTOCOL_VERSION
+    && typeof data.type === 'string'
+    && typeof data.requestId === 'string'
+    && typeof data.projectId === 'string'
+    && typeof data.systemId === 'string'
+    && typeof data.taskId === 'string'
+    && typeof data.sessionId === 'string'
+    && Number.isSafeInteger(data.sequence)
+    && 'payload' in data)
+}
+
+function passesCoreCanary(payload: Mir3PluginMessage['payload']): boolean {
+  const capabilities = payload?.capabilities
+  return payload?.protocolVersion === MIR3_BRIDGE_PROTOCOL_VERSION
+    && capabilities?.sessions === true
+    && capabilities.workspaces === true
+    && capabilities.archive === true
+    && capabilities.snapshot === true
+    && capabilities.pendingInteraction === true
+}
+
+async function runCoreCanary() {
+  const [systems, diagnostics] = await Promise.all([
+    invoke<Array<{ systemId?: string }>>('domain_system_list'),
+    invoke<{ dataRoot: string, mcpBinary?: string | null }>('diagnostics_get'),
+  ])
+  if (systems.length !== 33 || new Set(systems.map(system => system.systemId)).size !== 33)
+    throw new Error(`DOMAIN_REGISTRY_CANARY_FAILED: expected 33 unique systems, received ${systems.length}`)
+  if (!diagnostics.mcpBinary)
+    throw new Error('MCP_CANARY_FAILED: MIR3 MCP sidecar is unavailable')
+  await runSystemSessionCanary(diagnostics.dataRoot)
+}
+
+async function runSystemSessionCanary(cwd: string) {
+  const projectId = '__mir3_core_canary__'
+  const systemId = 'map'
+  const taskId = 'mir3-core-bridge-v2-canary'
+  const sessionId = 'mir3-system-core-bridge-v2-canary'
+  const resume = await requestCanary('mir3/systemSession.resume', projectId, systemId, taskId, sessionId, {})
+  if (resume.type === 'mir3/bridge.error') {
+    const created = await requestCanary('mir3/systemSession.create', projectId, systemId, taskId, sessionId, { cwd })
+    if (created.type === 'mir3/bridge.error')
+      throw new Error(`SYSTEM_SESSION_CANARY_CREATE_FAILED: ${bridgeErrorMessage(created.payload)}`)
+    const payload = created.payload as { archived?: boolean }
+    if (payload.archived !== true)
+      throw new Error('SYSTEM_SESSION_CANARY_ARCHIVE_FAILED: created session was not archived')
+  }
+  const snapshot = await requestCanary('mir3/systemSession.snapshot', projectId, systemId, taskId, sessionId, {})
+  if (snapshot.type !== 'mir3/systemSession.snapshot')
+    throw new Error(`SYSTEM_SESSION_CANARY_SNAPSHOT_FAILED: ${bridgeErrorMessage(snapshot.payload)}`)
+  const completed = await requestCanary('mir3/systemSession.complete', projectId, systemId, taskId, sessionId, {})
+  if (completed.type !== 'mir3/systemSession.completed')
+    throw new Error(`SYSTEM_SESSION_CANARY_COMPLETE_FAILED: ${bridgeErrorMessage(completed.payload)}`)
+}
+
+async function requestCanary(type: string, projectId: string, systemId: string, taskId: string, sessionId: string, payload: unknown) {
+  const requestId = bridgeRequestId()
+  const response = waitForHarnessBridge(message => message.requestId === requestId && (message.type !== 'mir3/plugin.ready'))
+  const posted = postHarnessBridge({ type, requestId, projectId, systemId, taskId, sessionId, payload })
+  if (!posted) {
+    void response.catch(() => {})
+    throw new Error('SYSTEM_SESSION_CANARY_BRIDGE_UNAVAILABLE: Harness frame is unavailable')
+  }
+  return response
+}
+
+function bridgeErrorMessage(payload: unknown) {
+  if (!payload || typeof payload !== 'object')
+    return String(payload)
+  const error = payload as { code?: string, message?: string }
+  return [error.code, error.message].filter(Boolean).join(': ')
 }

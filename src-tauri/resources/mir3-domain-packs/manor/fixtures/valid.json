@@ -1,0 +1,34 @@
+{
+  "systemId": "manor",
+  "fixture": "valid",
+  "records": [
+    {
+      "manorId": "manor-manorId-1",
+      "mapId": "map:fixture-1",
+      "entryNpcId": "npc:fixture-1",
+      "minimumLevel": 2,
+      "productionPointId": "resource_production:fixture-1"
+    },
+    {
+      "manorId": "manor-manorId-2",
+      "mapId": "map:fixture-2",
+      "entryNpcId": "npc:fixture-2",
+      "minimumLevel": 3,
+      "productionPointId": "resource_production:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "map": [
+      "map:fixture-1",
+      "map:fixture-2"
+    ],
+    "npc": [
+      "npc:fixture-1",
+      "npc:fixture-2"
+    ],
+    "resource_production": [
+      "resource_production:fixture-1",
+      "resource_production:fixture-2"
+    ]
+  }
+}

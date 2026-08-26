@@ -1,0 +1,29 @@
+{
+  "systemId": "recycle",
+  "fixture": "invalid",
+  "records": [
+    {
+      "ruleId": "recycle-ruleId-1",
+      "itemType": "equipment",
+      "minimumQuality": 21,
+      "maximumQuality": 1,
+      "currencyItemId": "item:missing",
+      "returnValue": 1
+    },
+    {
+      "ruleId": "recycle-ruleId-1",
+      "itemType": "material",
+      "minimumQuality": 2,
+      "maximumQuality": 2,
+      "currencyItemId": "item:fixture-2",
+      "returnValue": 2
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "recycle.quality-range-ordered",
+      "expected": false
+    }
+  ]
+}

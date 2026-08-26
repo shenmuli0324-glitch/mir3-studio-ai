@@ -1,0 +1,22 @@
+[
+  {
+    "code": "launch_event.unique",
+    "severity": "error",
+    "field": "scheduleId"
+  },
+  {
+    "code": "launch_event.range",
+    "severity": "error",
+    "field": "openServerDay"
+  },
+  {
+    "code": "launch_event.reference",
+    "severity": "error",
+    "field": "eventId"
+  },
+  {
+    "code": "launch_event.runtime",
+    "severity": "error",
+    "rule": "launch-event.day-windows-nonoverlapping"
+  }
+]

@@ -1,0 +1,893 @@
+{
+  "kind": "domain",
+  "systemId": "manor",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "featured",
+  "complexity": 4,
+  "renderer": "spatial-flow-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "manor",
+      "庄园"
+    ],
+    "ownedSelectors": [
+      "manor",
+      "庄园"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "npc"
+      },
+      {
+        "systemId": "monster"
+      },
+      {
+        "systemId": "quest"
+      },
+      {
+        "systemId": "resource_production"
+      },
+      {
+        "systemId": "item"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "manor",
+        "caseSensitive": false
+      },
+      {
+        "contains": "庄园",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "manor.manor-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(manor:manorId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "manor.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "mapId",
+        "systemId": "map",
+        "required": true
+      },
+      {
+        "field": "entryNpcId",
+        "systemId": "npc",
+        "required": true
+      },
+      {
+        "field": "productionPointId",
+        "systemId": "resource_production",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "manorId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "spatial-flow-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "spatial-flow-v1",
+    "safePrimitive": "map"
+  },
+  "dependencies": [
+    "map",
+    "npc",
+    "monster",
+    "quest",
+    "resource_production",
+    "item"
+  ],
+  "operations": [
+    {
+      "id": "inspect-manor",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-manor"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "inspect-manor",
+          "operation": "inspect-manor"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-manor",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-manor"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "entryNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "productionPointId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "resource_production"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [
+        "manor"
+      ],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded",
+        "manor.draft-open",
+        "manor.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-manor"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-manor-entrance",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-manor-entrance"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "entryNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "productionPointId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "resource_production"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [
+        "manor"
+      ],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded",
+        "manor.draft-open",
+        "manor.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-manor-entrance"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "validate-manor-loop",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "validate-manor-loop"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "targetEngineVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "includeRuntimeDiagnostics": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "targetEngineVersion"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "validate-manor-loop",
+          "operation": "validate-manor-loop"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-manor",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-manor"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "inspect-manor",
+          "operation": "inspect-manor"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-manor",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-manor"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "entryNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "productionPointId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "resource_production"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [
+        "manor"
+      ],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded",
+        "manor.draft-open",
+        "manor.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-manor"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-manor-entrance",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-manor-entrance"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "entryNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "productionPointId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "resource_production"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [
+        "manor"
+      ],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded",
+        "manor.draft-open",
+        "manor.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-manor-entrance"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "validate-manor-loop",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "validate-manor-loop"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "targetEngineVersion": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "includeRuntimeDiagnostics": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "targetEngineVersion"
+        ]
+      },
+      "readSystems": [
+        "manor",
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "resource_production",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "manor.resource-index-ready",
+        "manor.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "validate-manor-loop",
+          "operation": "validate-manor-loop"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "manor.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "manor.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "manor-record"
+    },
+    {
+      "id": "manor.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "manorId"
+      ],
+      "scope": "manor.project"
+    },
+    {
+      "id": "manor.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "minimumLevel",
+          "minimum": 1,
+          "maximum": 255
+        }
+      ]
+    },
+    {
+      "id": "manor.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "mapId",
+          "systemId": "map",
+          "required": true
+        },
+        {
+          "field": "entryNpcId",
+          "systemId": "npc",
+          "required": true
+        },
+        {
+          "field": "productionPointId",
+          "systemId": "resource_production",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "manor.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "manorId",
+      "compareFields": [
+        "manorId",
+        "mapId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "manor.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "manor.entry-and-exit-loop-reachable",
+      "severity": "error",
+      "target": "manor.manor-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

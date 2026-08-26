@@ -259,8 +259,8 @@ function CanvasDocument({ document, previewGroups, assets, lightweight, selected
       onPointerCancel={onPointerCancel}
     >
       <g transform={`translate(0 ${viewport.height}) scale(1 -1)`}>
-        {previewGroups.map((group, groupIndex) => (
-          <g transform={matrixTransformValue(group.transform)} key={`${groupIndex}:${group.rootNodeIds.join(':')}`}>
+        {previewGroups.map(group => (
+          <g transform={matrixTransformValue(group.transform)} key={`${group.rootNodeIds.join(':')}:${matrixTransformValue(group.transform)}`}>
             {group.rootNodeIds.map(nodeId => (
               <CanvasNode
                 key={nodeId}

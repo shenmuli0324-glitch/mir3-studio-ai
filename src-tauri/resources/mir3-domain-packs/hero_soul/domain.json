@@ -1,0 +1,755 @@
+{
+  "kind": "domain",
+  "systemId": "hero_soul",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "featured",
+  "complexity": 4,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "hero_soul",
+      "hero soul",
+      "英雄之魂"
+    ],
+    "ownedSelectors": [
+      "hero_soul",
+      "hero soul",
+      "英雄之魂"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "skill"
+      },
+      {
+        "systemId": "buff"
+      },
+      {
+        "systemId": "quest"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "hero_soul",
+        "caseSensitive": false
+      },
+      {
+        "contains": "hero soul",
+        "caseSensitive": false
+      },
+      {
+        "contains": "英雄之魂",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "hero_soul.hero-soul-route-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(hero_soul:routeId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "hero_soul.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "costItemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "grantedSkillId",
+        "systemId": "skill",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "routeId",
+      "nodeId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "item",
+    "equipment",
+    "skill",
+    "buff",
+    "quest"
+  ],
+  "operations": [
+    {
+      "id": "inspect-hero-soul",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-hero-soul"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-hero-soul",
+          "operation": "inspect-hero-soul"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "add-hero-soul-route",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-hero-soul-route"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "routeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "nodeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "powerValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            },
+            "required": [
+              "routeId",
+              "nodeId",
+              "costItemId",
+              "grantedSkillId",
+              "powerValue"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-hero-soul-route"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-edit-hero-soul",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-hero-soul"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "nodeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "powerValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-hero-soul"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-hero-soul",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-hero-soul"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-hero-soul",
+          "operation": "inspect-hero-soul"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-hero-soul-route",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-hero-soul-route"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "routeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "nodeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "powerValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            },
+            "required": [
+              "routeId",
+              "nodeId",
+              "costItemId",
+              "grantedSkillId",
+              "powerValue"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-hero-soul-route"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-edit-hero-soul",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-hero-soul"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "nodeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "powerValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-hero-soul"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "hero_soul.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "hero_soul.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "hero-soul-route-record"
+    },
+    {
+      "id": "hero_soul.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "routeId",
+        "nodeId"
+      ],
+      "scope": "hero_soul.project"
+    },
+    {
+      "id": "hero_soul.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "powerValue",
+          "minimum": 0,
+          "maximum": 2000000000
+        }
+      ]
+    },
+    {
+      "id": "hero_soul.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "costItemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "grantedSkillId",
+          "systemId": "skill",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "hero_soul.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "routeId",
+      "compareFields": [
+        "routeId",
+        "nodeId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "hero_soul.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "hero-soul.route-acyclic-and-affordable",
+      "severity": "error",
+      "target": "hero_soul.hero-soul-route-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

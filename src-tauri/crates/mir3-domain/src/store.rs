@@ -11,12 +11,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::safe_files::CachedXlsWorkbook;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// 领域数据入口；实际项目只读，所有产品数据写入 data_root。
 #[derive(Debug, Clone)]
 pub struct DomainStore {
     data_root: PathBuf,
+    domain_pack_root: PathBuf,
     pub(crate) xls_cache: Arc<Mutex<HashMap<String, Arc<CachedXlsWorkbook>>>>,
 }
 
@@ -30,18 +31,34 @@ pub struct WorkspaceDirectory {
 
 impl DomainStore {
     pub fn new(data_root: impl Into<PathBuf>) -> Result<Self, String> {
+        let data_root = data_root.into();
+        let domain_pack_root = data_root.join("domain-packs");
+        Self::new_with_domain_pack_root(data_root, domain_pack_root)
+    }
+
+    /// 项目数据库与可升级领域包必须显式分根，避免运行时误读编译期内置包。
+    pub fn new_with_domain_pack_root(
+        data_root: impl Into<PathBuf>,
+        domain_pack_root: impl Into<PathBuf>,
+    ) -> Result<Self, String> {
         let store = Self {
             data_root: data_root.into(),
+            domain_pack_root: domain_pack_root.into(),
             xls_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         fs::create_dir_all(&store.data_root)
             .map_err(|e| format!("PROJECT_DATA_CREATE_FAILED: {e}"))?;
         store.init_registry()?;
+        store.migrate_existing_projects()?;
         Ok(store)
     }
 
     pub fn data_root(&self) -> &Path {
         &self.data_root
+    }
+
+    pub fn domain_pack_root(&self) -> &Path {
+        &self.domain_pack_root
     }
 
     pub fn project_dir(&self, project_id: &str) -> Result<PathBuf, String> {
@@ -291,8 +308,16 @@ impl DomainStore {
             fs::create_dir_all(dir.join(name))
                 .map_err(|e| format!("PROJECT_DATA_CREATE_FAILED: {e}"))?;
         }
-        let connection = Connection::open(dir.join("project.sqlite")).map_err(db_error)?;
-        connection.execute_batch(PROJECT_SCHEMA).map_err(db_error)?;
+        let path = dir.join("project.sqlite");
+        migrate_database(&path, PROJECT_SCHEMA, "PROJECT_DATABASE")?;
+        Connection::open(&path)
+            .map_err(db_error)?
+            .execute(
+                "INSERT OR IGNORE INTO draft_domains(draft_id,legacy)
+                 SELECT id,1 FROM drafts",
+                [],
+            )
+            .map_err(db_error)?;
         Ok(())
     }
 
@@ -306,16 +331,14 @@ impl DomainStore {
     }
 
     fn init_registry(&self) -> Result<(), String> {
-        let connection = self.registry()?;
-        connection
-            .execute_batch(REGISTRY_SCHEMA)
-            .map_err(db_error)?;
-        connection
-            .execute(
-                "INSERT INTO metadata(key,value) VALUES('schema_version',?1) ON CONFLICT(key) DO NOTHING",
-                [SCHEMA_VERSION.to_string()],
-            )
-            .map_err(db_error)?;
+        let path = self.data_root.join("registry.sqlite");
+        migrate_database(&path, REGISTRY_SCHEMA, "REGISTRY_DATABASE")
+    }
+
+    fn migrate_existing_projects(&self) -> Result<(), String> {
+        for project in self.list_projects()? {
+            self.prepare_project_storage(&project.id)?;
+        }
         Ok(())
     }
 }
@@ -340,8 +363,7 @@ CREATE TABLE IF NOT EXISTS projects(
 "#;
 
 const PROJECT_SCHEMA: &str = r#"
-PRAGMA foreign_keys=ON;
-PRAGMA journal_mode=WAL;
+CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS files(
   path TEXT PRIMARY KEY,
   role TEXT NOT NULL,
@@ -388,6 +410,77 @@ CREATE TABLE IF NOT EXISTS snapshots(
   draft_id TEXT,
   manifest TEXT NOT NULL,
   created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_receipts(
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  system_id TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  status TEXT NOT NULL,
+  draft_id TEXT,
+  plugin_versions TEXT NOT NULL DEFAULT '{}',
+  evidence TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_receipts_system ON task_receipts(system_id,created_at);
+CREATE TABLE IF NOT EXISTS user_capabilities(
+  id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  system_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  parameter_schema TEXT NOT NULL,
+  steps TEXT NOT NULL,
+  read_systems TEXT NOT NULL,
+  write_systems TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source_task_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(id,version)
+);
+CREATE TABLE IF NOT EXISTS system_sessions(
+  task_id TEXT PRIMARY KEY,
+  system_id TEXT NOT NULL,
+  session_id TEXT NOT NULL UNIQUE,
+  plugin_version TEXT NOT NULL,
+  draft_id TEXT,
+  status TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_scope_leases(
+  token_hash TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  read_systems TEXT NOT NULL,
+  write_systems TEXT NOT NULL,
+  draft_ids TEXT NOT NULL,
+  plugin_versions TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  revoked INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS domain_memories(
+  id TEXT PRIMARY KEY,
+  system_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source_task_id TEXT NOT NULL,
+  plugin_version TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_domain_memories_system ON domain_memories(system_id,status,updated_at);
+CREATE TABLE IF NOT EXISTS draft_domains(
+  draft_id TEXT PRIMARY KEY,
+  system_id TEXT,
+  composite_id TEXT,
+  plugin_version TEXT,
+  legacy INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
 );
 "#;
 
@@ -444,6 +537,71 @@ fn db_error(error: rusqlite::Error) -> String {
     format!("PROJECT_DATABASE_FAILED: {error}")
 }
 
+fn migrate_database(path: &Path, schema: &str, prefix: &str) -> Result<(), String> {
+    let existed = path.is_file();
+    let mut connection = Connection::open(path).map_err(db_error)?;
+    connection
+        .execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")
+        .map_err(db_error)?;
+    let current = connection
+        .query_row(
+            "SELECT value FROM metadata WHERE key='schema_version'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(1);
+    if current > SCHEMA_VERSION {
+        return Err(format!(
+            "{prefix}_SCHEMA_NEWER: database schema {current} is newer than supported {SCHEMA_VERSION}"
+        ));
+    }
+    let backup = path.with_extension(format!("sqlite.v{current}.bak"));
+    if existed && current < SCHEMA_VERSION {
+        connection
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .map_err(db_error)?;
+        drop(connection);
+        if !backup.exists() {
+            fs::copy(path, &backup).map_err(|error| format!("{prefix}_BACKUP_FAILED: {error}"))?;
+        }
+        connection = Connection::open(path).map_err(db_error)?;
+        connection
+            .execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")
+            .map_err(db_error)?;
+    }
+    let migration = (|| -> Result<(), rusqlite::Error> {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch(schema)?;
+        if prefix == "PROJECT_DATABASE" && current < 2 {
+            transaction.execute(
+                "INSERT OR IGNORE INTO draft_domains(draft_id,legacy)
+                 SELECT id,1 FROM drafts",
+                [],
+            )?;
+        }
+        transaction.execute(
+            "INSERT INTO metadata(key,value) VALUES('schema_version',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [SCHEMA_VERSION.to_string()],
+        )?;
+        transaction.commit()
+    })();
+    if let Err(error) = migration {
+        drop(connection);
+        if existed && backup.is_file() {
+            fs::copy(&backup, path).map_err(|restore| {
+                format!("{prefix}_RESTORE_FAILED: {restore}; migration: {error}")
+            })?;
+        }
+        return Err(format!("{prefix}_MIGRATION_FAILED: {error}"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,6 +620,71 @@ mod tests {
         assert_eq!(store.list_projects().unwrap().len(), 1);
         assert!(!project.join(".mir3-ai").exists());
         assert!(data.join(&first.id).join("project.sqlite").is_file());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn schema_v2_migration_creates_recoverable_backups() {
+        let base = std::env::temp_dir().join(format!("mir3-migration-{}", std::process::id()));
+        let project = base.join("项目/木立");
+        let data = base.join("data");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200")).unwrap();
+        let store = DomainStore::new(&data).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        let registry_path = data.join("registry.sqlite");
+        let project_path = data.join(&imported.id).join("project.sqlite");
+        store
+            .registry()
+            .unwrap()
+            .execute(
+                "UPDATE metadata SET value='1' WHERE key='schema_version'",
+                [],
+            )
+            .unwrap();
+        let project_connection = store.project_connection(&imported.id).unwrap();
+        project_connection
+            .execute(
+                "INSERT INTO drafts(id,intent,revision,status,created_at,updated_at)
+                 VALUES('draft-old','旧地图修改',0,'open',1,1)",
+                [],
+            )
+            .unwrap();
+        project_connection
+            .execute(
+                "UPDATE metadata SET value='1' WHERE key='schema_version'",
+                [],
+            )
+            .unwrap();
+        project_connection
+            .execute("DROP TABLE domain_memories", [])
+            .unwrap();
+        drop(project_connection);
+        drop(store);
+
+        let reopened = DomainStore::new(&data).unwrap();
+        assert!(registry_path.with_extension("sqlite.v1.bak").is_file());
+        assert!(project_path.with_extension("sqlite.v1.bak").is_file());
+        let table: String = reopened
+            .project_connection(&imported.id)
+            .unwrap()
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='domain_memories'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table, "domain_memories");
+        let legacy: i64 = reopened
+            .project_connection(&imported.id)
+            .unwrap()
+            .query_row(
+                "SELECT legacy FROM draft_domains WHERE draft_id='draft-old'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(legacy, 1);
         fs::remove_dir_all(base).ok();
     }
 }

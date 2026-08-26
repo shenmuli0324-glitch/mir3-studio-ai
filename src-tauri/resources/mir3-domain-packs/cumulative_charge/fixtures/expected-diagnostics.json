@@ -1,0 +1,22 @@
+[
+  {
+    "code": "cumulative_charge.unique",
+    "severity": "error",
+    "field": "cycleId,chargeThreshold"
+  },
+  {
+    "code": "cumulative_charge.range",
+    "severity": "error",
+    "field": "chargeThreshold"
+  },
+  {
+    "code": "cumulative_charge.reference",
+    "severity": "error",
+    "field": "rewardItemId"
+  },
+  {
+    "code": "cumulative_charge.runtime",
+    "severity": "error",
+    "rule": "cumulative-charge.thresholds-strictly-increase"
+  }
+]

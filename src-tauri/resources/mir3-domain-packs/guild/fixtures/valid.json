@@ -1,0 +1,24 @@
+{
+  "systemId": "guild",
+  "fixture": "valid",
+  "records": [
+    {
+      "guildLevel": 2,
+      "requiredContribution": 1,
+      "maximumMembers": 2,
+      "rankingBoardId": "ranking:fixture-1"
+    },
+    {
+      "guildLevel": 3,
+      "requiredContribution": 2,
+      "maximumMembers": 3,
+      "rankingBoardId": "ranking:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "ranking": [
+      "ranking:fixture-1",
+      "ranking:fixture-2"
+    ]
+  }
+}

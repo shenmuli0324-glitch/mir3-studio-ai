@@ -1,0 +1,26 @@
+{
+  "systemId": "cumulative_charge",
+  "fixture": "valid",
+  "records": [
+    {
+      "tierId": "cumulative_charge-tierId-1",
+      "cycleId": "cumulative_charge-cycleId-1",
+      "chargeThreshold": 1.01,
+      "rewardItemId": "item:fixture-1",
+      "rewardCount": 2
+    },
+    {
+      "tierId": "cumulative_charge-tierId-2",
+      "cycleId": "cumulative_charge-cycleId-2",
+      "chargeThreshold": 2.01,
+      "rewardItemId": "item:fixture-2",
+      "rewardCount": 3
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

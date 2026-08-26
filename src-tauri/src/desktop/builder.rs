@@ -200,6 +200,13 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::skip_preinstall_plugins,
         crate::bridge::open_preinstall_repo,
         crate::bridge::get_dsh_plugins,
+        crate::bridge::domain_pack_list,
+        crate::bridge::domain_pack_state,
+        crate::bridge::domain_pack_update_check,
+        crate::bridge::domain_pack_update_stage,
+        crate::bridge::domain_pack_activate,
+        crate::bridge::domain_pack_rollback,
+        crate::bridge::domain_pack_mark_lkg,
         crate::bridge::update_dsh_plugin,
         crate::bridge::remove_dsh_plugin,
         crate::bridge::report_plugin_error,
@@ -255,9 +262,35 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::scan_status,
         crate::bridge::index_stats,
         crate::bridge::index_search,
+        crate::bridge::domain_system_list,
+        crate::bridge::domain_system_describe,
+        crate::bridge::domain_file_query,
+        crate::bridge::domain_unclaimed_file_query,
+        crate::bridge::domain_resource_get,
+        crate::bridge::domain_dependency_resolve,
+        crate::bridge::domain_validate,
+        crate::bridge::task_receipt_list,
+        crate::bridge::task_receipt_save,
+        crate::bridge::user_capability_list,
+        crate::bridge::user_capability_save,
+        crate::bridge::user_capability_get,
+        crate::bridge::user_capability_set_status,
+        crate::bridge::domain_memory_list,
+        crate::bridge::domain_memory_save,
+        crate::bridge::memory_candidate_list,
+        crate::bridge::memory_candidate_activate,
+        crate::bridge::memory_candidate_contest,
+        crate::bridge::memory_candidate_revoke,
+        crate::bridge::system_session_get,
+        crate::bridge::system_session_bind,
+        crate::bridge::task_scope_issue,
+        crate::bridge::task_scope_revoke,
         crate::bridge::draft_list,
+        crate::bridge::domain_draft_open,
         crate::bridge::draft_preview,
+        crate::bridge::draft_legacy_clone,
         crate::bridge::draft_apply,
+        crate::bridge::draft_composite_apply,
         crate::bridge::draft_discard,
         crate::bridge::safe_file_open,
         crate::bridge::safe_text_patch,
@@ -288,7 +321,15 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
     ];
     move |invoke| {
         let command = invoke.message.command().to_string();
-        if command.starts_with("gui_") && !is_trusted_studio_invoke(&invoke) {
+        if (command.starts_with("gui_")
+            || command.starts_with("domain_")
+            || command.starts_with("draft_")
+            || command.starts_with("task_")
+            || command.starts_with("system_session_")
+            || command.starts_with("memory_")
+            || command.starts_with("user_capability_"))
+            && !is_trusted_studio_invoke(&invoke)
+        {
             log::warn!("[ipc] rejected Studio-only command from remote origin: {command}");
             invoke
                 .resolver
@@ -341,8 +382,12 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
         .setup(|app| {
             let app_handle = app.handle().clone();
-            let project_data = crate::config::get_dsh_data_path(&app_handle).join("projects");
-            let project_service = crate::service::project::ProjectService::new(project_data)
+            let studio_data = crate::config::get_dsh_data_path(&app_handle);
+            let project_service =
+                crate::service::project::ProjectService::new_with_domain_pack_root(
+                    studio_data.join("projects"),
+                    studio_data.join("domain-packs"),
+                )
                 .map_err(std::io::Error::other)?;
             app.manage(project_service);
             build_main_window(&app_handle)?;

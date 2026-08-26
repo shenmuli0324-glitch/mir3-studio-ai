@@ -1,0 +1,30 @@
+{
+  "systemId": "limited_event",
+  "fixture": "valid",
+  "records": [
+    {
+      "eventId": "limited_event-eventId-1",
+      "startEpochSeconds": 1,
+      "endEpochSeconds": 2,
+      "eventMapId": "map:fixture-1",
+      "questId": "quest:fixture-1"
+    },
+    {
+      "eventId": "limited_event-eventId-2",
+      "startEpochSeconds": 2,
+      "endEpochSeconds": 3,
+      "eventMapId": "map:fixture-2",
+      "questId": "quest:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "map": [
+      "map:fixture-1",
+      "map:fixture-2"
+    ],
+    "quest": [
+      "quest:fixture-1",
+      "quest:fixture-2"
+    ]
+  }
+}

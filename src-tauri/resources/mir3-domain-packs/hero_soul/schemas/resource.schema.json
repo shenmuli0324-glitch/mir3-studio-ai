@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/hero_soul/resource.schema.json",
+  "title": "hero_soul.hero-soul-route-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "routeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nodeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "costItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "grantedSkillId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "skill"
+    },
+    "powerValue": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2000000000
+    }
+  },
+  "required": [
+    "routeId",
+    "nodeId",
+    "costItemId",
+    "grantedSkillId",
+    "powerValue"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "routeId",
+      "nodeId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "routeId",
+      "compareFields": [
+        "routeId",
+        "nodeId"
+      ]
+    },
+    "runtimeRule": "hero-soul.route-acyclic-and-affordable"
+  }
+}

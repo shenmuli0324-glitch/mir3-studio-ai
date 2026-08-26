@@ -1,0 +1,734 @@
+{
+  "kind": "domain",
+  "systemId": "cumulative_charge",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "commercial",
+  "complexity": 2,
+  "renderer": "timeline-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "cumulative_charge",
+      "recharge_total",
+      "累计充值"
+    ],
+    "ownedSelectors": [
+      "cumulative_charge",
+      "recharge_total",
+      "累计充值"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "vip"
+      },
+      {
+        "systemId": "limited_event"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "cumulative_charge",
+        "caseSensitive": false
+      },
+      {
+        "contains": "recharge_total",
+        "caseSensitive": false
+      },
+      {
+        "contains": "累计充值",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "cumulative_charge.cumulative-charge-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(cumulative_charge:tierId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "cumulative_charge.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "rewardItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "cycleId",
+      "chargeThreshold"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "timeline-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "timeline-v1",
+    "safePrimitive": "timeline"
+  },
+  "dependencies": [
+    "item",
+    "vip",
+    "limited_event"
+  ],
+  "operations": [
+    {
+      "id": "inspect-cumulative-charge",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-cumulative-charge"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "inspect-cumulative-charge",
+          "operation": "inspect-cumulative-charge"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "generate-charge-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-charge-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chargeThreshold": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100000000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-charge-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-charge-cycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-charge-cycle"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chargeThreshold": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100000000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-charge-cycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-cumulative-charge",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-cumulative-charge"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "inspect-cumulative-charge",
+          "operation": "inspect-cumulative-charge"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "generate-charge-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-charge-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chargeThreshold": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100000000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-charge-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-charge-cycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-charge-cycle"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chargeThreshold": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100000000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-charge-cycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "cumulative_charge.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "cumulative_charge.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "cumulative-charge-record"
+    },
+    {
+      "id": "cumulative_charge.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "cycleId",
+        "chargeThreshold"
+      ],
+      "scope": "cumulative_charge.project"
+    },
+    {
+      "id": "cumulative_charge.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "chargeThreshold",
+          "minimum": 0.01,
+          "maximum": 100000000
+        },
+        {
+          "field": "rewardCount",
+          "minimum": 1,
+          "maximum": 999999
+        }
+      ]
+    },
+    {
+      "id": "cumulative_charge.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "rewardItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cumulative_charge.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "tierId",
+      "compareFields": [
+        "cycleId",
+        "chargeThreshold"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "cumulative_charge.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "cumulative-charge.thresholds-strictly-increase",
+      "severity": "error",
+      "target": "cumulative_charge.cumulative-charge-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/launch_event/resource.schema.json",
+  "title": "launch_event.launch-event-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "scheduleId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "openServerDay": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3650
+    },
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "limited_event"
+    },
+    "rewardItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "rewardCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999999
+    }
+  },
+  "required": [
+    "scheduleId",
+    "openServerDay",
+    "eventId",
+    "rewardItemId",
+    "rewardCount"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "scheduleId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "scheduleId",
+      "compareFields": [
+        "scheduleId",
+        "openServerDay"
+      ]
+    },
+    "runtimeRule": "launch-event.day-windows-nonoverlapping"
+  }
+}

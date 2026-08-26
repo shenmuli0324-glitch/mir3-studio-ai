@@ -1,0 +1,26 @@
+{
+  "systemId": "skill",
+  "fixture": "valid",
+  "records": [
+    {
+      "skillId": "skill-skillId-1",
+      "skillLevel": 2,
+      "manaCost": 1,
+      "cooldownMilliseconds": 1,
+      "appliedBuffId": "buff:fixture-1"
+    },
+    {
+      "skillId": "skill-skillId-2",
+      "skillLevel": 3,
+      "manaCost": 2,
+      "cooldownMilliseconds": 2,
+      "appliedBuffId": "buff:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "buff": [
+      "buff:fixture-1",
+      "buff:fixture-2"
+    ]
+  }
+}

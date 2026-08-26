@@ -1,5 +1,0 @@
-# Installed and removed by the Harness plugin CLI. Safe Files is deliberately
-# not mounted by the MIR3 Core system-plugin block.
-- insert:
-    - id: mir3-safe-files
-      name: '@mir3-studio/dsh-mir3-safe-files'

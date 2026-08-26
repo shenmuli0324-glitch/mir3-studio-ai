@@ -1,0 +1,29 @@
+{
+  "systemId": "map",
+  "fixture": "invalid",
+  "records": [
+    {
+      "mapId": "map-mapId-1",
+      "displayName": "map-displayName-1",
+      "width": 4097,
+      "height": 2,
+      "safeZoneMode": "none",
+      "spawnNpcId": "npc:missing"
+    },
+    {
+      "mapId": "map-mapId-1",
+      "displayName": "map-displayName-2",
+      "width": 3,
+      "height": 3,
+      "safeZoneMode": "partial",
+      "spawnNpcId": "npc:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "map.bounds-contain-spawns",
+      "expected": false
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "systemId": "launch_event",
+  "fixture": "invalid",
+  "records": [
+    {
+      "scheduleId": "launch_event-scheduleId-1",
+      "openServerDay": 3651,
+      "eventId": "limited_event:missing",
+      "rewardItemId": "item:fixture-1",
+      "rewardCount": 2
+    },
+    {
+      "scheduleId": "launch_event-scheduleId-1",
+      "openServerDay": 3,
+      "eventId": "limited_event:fixture-2",
+      "rewardItemId": "item:fixture-2",
+      "rewardCount": 3
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "launch-event.day-windows-nonoverlapping",
+      "expected": false
+    }
+  ]
+}

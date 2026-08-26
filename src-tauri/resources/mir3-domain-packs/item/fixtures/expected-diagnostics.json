@@ -1,0 +1,22 @@
+[
+  {
+    "code": "item.unique",
+    "severity": "error",
+    "field": "itemId"
+  },
+  {
+    "code": "item.range",
+    "severity": "error",
+    "field": "stackLimit"
+  },
+  {
+    "code": "item.reference",
+    "severity": "error",
+    "field": "linkedBuffId"
+  },
+  {
+    "code": "item.runtime",
+    "severity": "error",
+    "rule": "item.icon-resource-exists"
+  }
+]

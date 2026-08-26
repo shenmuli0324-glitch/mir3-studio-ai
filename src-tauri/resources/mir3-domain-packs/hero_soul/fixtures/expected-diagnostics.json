@@ -1,0 +1,22 @@
+[
+  {
+    "code": "hero_soul.unique",
+    "severity": "error",
+    "field": "routeId,nodeId"
+  },
+  {
+    "code": "hero_soul.range",
+    "severity": "error",
+    "field": "powerValue"
+  },
+  {
+    "code": "hero_soul.reference",
+    "severity": "error",
+    "field": "costItemId"
+  },
+  {
+    "code": "hero_soul.runtime",
+    "severity": "error",
+    "rule": "hero-soul.route-acyclic-and-affordable"
+  }
+]

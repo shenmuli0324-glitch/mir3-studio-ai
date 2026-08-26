@@ -1,0 +1,22 @@
+[
+  {
+    "code": "monster.unique",
+    "severity": "error",
+    "field": "monsterId"
+  },
+  {
+    "code": "monster.range",
+    "severity": "error",
+    "field": "combatLevel"
+  },
+  {
+    "code": "monster.reference",
+    "severity": "error",
+    "field": "spawnMapId"
+  },
+  {
+    "code": "monster.runtime",
+    "severity": "error",
+    "rule": "monster.drop-weight-positive"
+  }
+]

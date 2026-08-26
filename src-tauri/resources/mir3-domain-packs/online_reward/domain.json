@@ -1,0 +1,689 @@
+{
+  "kind": "domain",
+  "systemId": "online_reward",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "activities",
+  "complexity": 1,
+  "renderer": "timeline-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "online_reward",
+      "online reward",
+      "在线奖励"
+    ],
+    "ownedSelectors": [
+      "online_reward",
+      "online reward",
+      "在线奖励"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "vip"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "online_reward",
+        "caseSensitive": false
+      },
+      {
+        "contains": "online reward",
+        "caseSensitive": false
+      },
+      {
+        "contains": "在线奖励",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "online_reward.online-reward-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(online_reward:rewardId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "online_reward.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "rewardItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "rewardId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "timeline-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "timeline-v1",
+    "safePrimitive": "timeline"
+  },
+  "dependencies": [
+    "item",
+    "vip"
+  ],
+  "operations": [
+    {
+      "id": "inspect-online-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-online-reward"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "inspect-online-reward",
+          "operation": "inspect-online-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "edit-online-duration",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-online-duration"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-online-duration"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-online-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-online-reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-online-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-online-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-online-reward"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "inspect-online-reward",
+          "operation": "inspect-online-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-online-duration",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-online-duration"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-online-duration"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-online-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-online-reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-online-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "online_reward.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "online_reward.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "online-reward-record"
+    },
+    {
+      "id": "online_reward.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "rewardId"
+      ],
+      "scope": "online_reward.project"
+    },
+    {
+      "id": "online_reward.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "durationSeconds",
+          "minimum": 1,
+          "maximum": 604800
+        },
+        {
+          "field": "rewardCount",
+          "minimum": 1,
+          "maximum": 999999
+        },
+        {
+          "field": "minimumVipLevel",
+          "minimum": 0,
+          "maximum": 99
+        }
+      ]
+    },
+    {
+      "id": "online_reward.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "rewardItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "online_reward.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "rewardId",
+      "compareFields": [
+        "rewardId",
+        "durationSeconds"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "online_reward.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "online-reward.duration-monotonic",
+      "severity": "error",
+      "target": "online_reward.online-reward-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

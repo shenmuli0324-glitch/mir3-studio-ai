@@ -1,0 +1,735 @@
+{
+  "kind": "domain",
+  "systemId": "guild",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "social",
+  "complexity": 4,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "guild",
+      "clan",
+      "行会"
+    ],
+    "ownedSelectors": [
+      "guild",
+      "clan",
+      "行会"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "npc"
+      },
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "ranking"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "guild",
+        "caseSensitive": false
+      },
+      {
+        "contains": "clan",
+        "caseSensitive": false
+      },
+      {
+        "contains": "行会",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "guild.guild-level-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(guild:guildLevel:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "guild.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "rankingBoardId",
+        "systemId": "ranking",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "guildLevel"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "npc",
+    "map",
+    "item",
+    "ranking"
+  ],
+  "operations": [
+    {
+      "id": "inspect-guild",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-guild"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "guild",
+        "npc",
+        "map",
+        "item",
+        "ranking"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "guild.resource-index-ready",
+        "guild.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-guild",
+          "operation": "inspect-guild"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "edit-guild-permission",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-guild-permission"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredContribution": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "maximumMembers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "guild",
+        "npc",
+        "map",
+        "item",
+        "ranking"
+      ],
+      "writeSystems": [
+        "guild"
+      ],
+      "preconditions": [
+        "guild.resource-index-ready",
+        "guild.schema-loaded",
+        "guild.draft-open",
+        "guild.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-guild-permission"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "generate-guild-levels",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-guild-levels"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredContribution": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "maximumMembers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "guild",
+        "npc",
+        "map",
+        "item",
+        "ranking"
+      ],
+      "writeSystems": [
+        "guild"
+      ],
+      "preconditions": [
+        "guild.resource-index-ready",
+        "guild.schema-loaded",
+        "guild.draft-open",
+        "guild.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-guild-levels"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-guild",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-guild"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "guild",
+        "npc",
+        "map",
+        "item",
+        "ranking"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "guild.resource-index-ready",
+        "guild.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-guild",
+          "operation": "inspect-guild"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-guild-permission",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-guild-permission"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredContribution": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "maximumMembers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "guild",
+        "npc",
+        "map",
+        "item",
+        "ranking"
+      ],
+      "writeSystems": [
+        "guild"
+      ],
+      "preconditions": [
+        "guild.resource-index-ready",
+        "guild.schema-loaded",
+        "guild.draft-open",
+        "guild.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-guild-permission"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "generate-guild-levels",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-guild-levels"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredContribution": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "maximumMembers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "guild",
+        "npc",
+        "map",
+        "item",
+        "ranking"
+      ],
+      "writeSystems": [
+        "guild"
+      ],
+      "preconditions": [
+        "guild.resource-index-ready",
+        "guild.schema-loaded",
+        "guild.draft-open",
+        "guild.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-guild-levels"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "guild.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "guild.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "guild-level-record"
+    },
+    {
+      "id": "guild.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "guildLevel"
+      ],
+      "scope": "guild.project"
+    },
+    {
+      "id": "guild.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "guildLevel",
+          "minimum": 1,
+          "maximum": 99
+        },
+        {
+          "field": "requiredContribution",
+          "minimum": 0,
+          "maximum": 2000000000
+        },
+        {
+          "field": "maximumMembers",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      ]
+    },
+    {
+      "id": "guild.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "rankingBoardId",
+          "systemId": "ranking",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "guild.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "guildLevel",
+      "compareFields": [
+        "guildLevel",
+        "requiredContribution"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "guild.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "guild.members-and-contribution-monotonic",
+      "severity": "error",
+      "target": "guild.guild-level-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

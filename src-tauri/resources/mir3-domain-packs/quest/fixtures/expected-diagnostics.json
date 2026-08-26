@@ -1,0 +1,22 @@
+[
+  {
+    "code": "quest.unique",
+    "severity": "error",
+    "field": "questId"
+  },
+  {
+    "code": "quest.range",
+    "severity": "error",
+    "field": "minimumLevel"
+  },
+  {
+    "code": "quest.reference",
+    "severity": "error",
+    "field": "startNpcId"
+  },
+  {
+    "code": "quest.runtime",
+    "severity": "error",
+    "rule": "quest.chain-acyclic-and-reachable"
+  }
+]

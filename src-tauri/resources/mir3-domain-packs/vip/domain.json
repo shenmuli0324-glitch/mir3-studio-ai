@@ -1,0 +1,747 @@
+{
+  "kind": "domain",
+  "systemId": "vip",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "commercial",
+  "complexity": 2,
+  "renderer": "table-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "vip",
+      "贵族"
+    ],
+    "ownedSelectors": [
+      "vip",
+      "贵族"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "first_charge"
+      },
+      {
+        "systemId": "cumulative_charge"
+      },
+      {
+        "systemId": "shop"
+      },
+      {
+        "systemId": "title"
+      },
+      {
+        "systemId": "level"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "vip",
+        "caseSensitive": false
+      },
+      {
+        "contains": "贵族",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "vip.vip-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(vip:vipLevel:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "vip.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "grantedTitleId",
+        "systemId": "title",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "vipLevel"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "table-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "table-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "first_charge",
+    "cumulative_charge",
+    "shop",
+    "title",
+    "level"
+  ],
+  "operations": [
+    {
+      "id": "inspect-vip",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-vip"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "vip",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "title",
+        "level"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "vip.resource-index-ready",
+        "vip.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-vip",
+          "operation": "inspect-vip"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "generate-vip-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-vip-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "shopDiscountBasisPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "vip",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "title",
+        "level"
+      ],
+      "writeSystems": [
+        "vip"
+      ],
+      "preconditions": [
+        "vip.resource-index-ready",
+        "vip.schema-loaded",
+        "vip.draft-open",
+        "vip.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-vip-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-edit-vip-benefits",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-vip-benefits"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "shopDiscountBasisPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "vip",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "title",
+        "level"
+      ],
+      "writeSystems": [
+        "vip"
+      ],
+      "preconditions": [
+        "vip.resource-index-ready",
+        "vip.schema-loaded",
+        "vip.draft-open",
+        "vip.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-vip-benefits"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-vip",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-vip"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "vip",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "title",
+        "level"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "vip.resource-index-ready",
+        "vip.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-vip",
+          "operation": "inspect-vip"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "generate-vip-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-vip-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "shopDiscountBasisPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "vip",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "title",
+        "level"
+      ],
+      "writeSystems": [
+        "vip"
+      ],
+      "preconditions": [
+        "vip.resource-index-ready",
+        "vip.schema-loaded",
+        "vip.draft-open",
+        "vip.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-vip-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-edit-vip-benefits",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-vip-benefits"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "shopDiscountBasisPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "vip",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "title",
+        "level"
+      ],
+      "writeSystems": [
+        "vip"
+      ],
+      "preconditions": [
+        "vip.resource-index-ready",
+        "vip.schema-loaded",
+        "vip.draft-open",
+        "vip.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-vip-benefits"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "vip.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "vip.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "vip-record"
+    },
+    {
+      "id": "vip.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "vipLevel"
+      ],
+      "scope": "vip.project"
+    },
+    {
+      "id": "vip.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "vipLevel",
+          "minimum": 0,
+          "maximum": 99
+        },
+        {
+          "field": "requiredPoints",
+          "minimum": 0,
+          "maximum": 2000000000
+        },
+        {
+          "field": "shopDiscountBasisPoints",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      ]
+    },
+    {
+      "id": "vip.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "grantedTitleId",
+          "systemId": "title",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "vip.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "vipLevel",
+      "compareFields": [
+        "vipLevel",
+        "requiredPoints"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "vip.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "vip.points-monotonic",
+      "severity": "error",
+      "target": "vip.vip-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

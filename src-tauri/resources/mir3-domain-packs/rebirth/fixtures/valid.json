@@ -1,0 +1,30 @@
+{
+  "systemId": "rebirth",
+  "fixture": "valid",
+  "records": [
+    {
+      "rebirthTier": 1,
+      "minimumLevel": 2,
+      "costItemId": "item:fixture-1",
+      "costAmount": 1,
+      "grantedTitleId": "title:fixture-1"
+    },
+    {
+      "rebirthTier": 2,
+      "minimumLevel": 3,
+      "costItemId": "item:fixture-2",
+      "costAmount": 2,
+      "grantedTitleId": "title:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ],
+    "title": [
+      "title:fixture-1",
+      "title:fixture-2"
+    ]
+  }
+}

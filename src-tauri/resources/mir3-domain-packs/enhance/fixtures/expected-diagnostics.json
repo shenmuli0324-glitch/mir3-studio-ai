@@ -1,0 +1,22 @@
+[
+  {
+    "code": "enhance.unique",
+    "severity": "error",
+    "field": "enhanceTier,equipmentClass"
+  },
+  {
+    "code": "enhance.range",
+    "severity": "error",
+    "field": "enhanceTier"
+  },
+  {
+    "code": "enhance.reference",
+    "severity": "error",
+    "field": "materialItemId"
+  },
+  {
+    "code": "enhance.runtime",
+    "severity": "error",
+    "rule": "enhance.probability-budget-valid"
+  }
+]

@@ -1,0 +1,779 @@
+{
+  "kind": "domain",
+  "systemId": "gem",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "equipment",
+  "complexity": 3,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "gem",
+      "jewel",
+      "宝石",
+      "镶嵌"
+    ],
+    "ownedSelectors": [
+      "gem",
+      "jewel",
+      "宝石",
+      "镶嵌"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "crafting"
+      },
+      {
+        "systemId": "buff"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "gem",
+        "caseSensitive": false
+      },
+      {
+        "contains": "jewel",
+        "caseSensitive": false
+      },
+      {
+        "contains": "宝石",
+        "caseSensitive": false
+      },
+      {
+        "contains": "镶嵌",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "gem.gem-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(gem:gemId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "gem.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "itemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "grantedBuffId",
+        "systemId": "buff",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "gemId",
+      "gemTier"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "item",
+    "equipment",
+    "crafting",
+    "buff"
+  ],
+  "operations": [
+    {
+      "id": "inspect-gem",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-gem"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "gem",
+        "item",
+        "equipment",
+        "crafting",
+        "buff"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "gem.resource-index-ready",
+        "gem.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-gem",
+          "operation": "inspect-gem"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "generate-gem-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-gem-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "gemTier": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "socketType": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "utility",
+                  "universal"
+                ]
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "gem",
+        "item",
+        "equipment",
+        "crafting",
+        "buff"
+      ],
+      "writeSystems": [
+        "gem"
+      ],
+      "preconditions": [
+        "gem.resource-index-ready",
+        "gem.schema-loaded",
+        "gem.draft-open",
+        "gem.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-gem-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-gem-slot",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-gem-slot"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "gemTier": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "socketType": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "utility",
+                  "universal"
+                ]
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "gem",
+        "item",
+        "equipment",
+        "crafting",
+        "buff"
+      ],
+      "writeSystems": [
+        "gem"
+      ],
+      "preconditions": [
+        "gem.resource-index-ready",
+        "gem.schema-loaded",
+        "gem.draft-open",
+        "gem.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-gem-slot"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-gem",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-gem"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "gem",
+        "item",
+        "equipment",
+        "crafting",
+        "buff"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "gem.resource-index-ready",
+        "gem.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-gem",
+          "operation": "inspect-gem"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "generate-gem-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-gem-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "gemTier": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "socketType": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "utility",
+                  "universal"
+                ]
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "gem",
+        "item",
+        "equipment",
+        "crafting",
+        "buff"
+      ],
+      "writeSystems": [
+        "gem"
+      ],
+      "preconditions": [
+        "gem.resource-index-ready",
+        "gem.schema-loaded",
+        "gem.draft-open",
+        "gem.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-gem-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-gem-slot",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-gem-slot"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "gemTier": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "socketType": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "utility",
+                  "universal"
+                ]
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "gem",
+        "item",
+        "equipment",
+        "crafting",
+        "buff"
+      ],
+      "writeSystems": [
+        "gem"
+      ],
+      "preconditions": [
+        "gem.resource-index-ready",
+        "gem.schema-loaded",
+        "gem.draft-open",
+        "gem.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-gem-slot"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "gem.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "gem.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "gem-record"
+    },
+    {
+      "id": "gem.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "gemId",
+        "gemTier"
+      ],
+      "scope": "gem.project"
+    },
+    {
+      "id": "gem.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "gemTier",
+          "minimum": 1,
+          "maximum": 99
+        }
+      ]
+    },
+    {
+      "id": "gem.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "itemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "grantedBuffId",
+          "systemId": "buff",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "gem.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "gemId",
+      "compareFields": [
+        "gemId",
+        "gemTier"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "gem.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "gem.tier-chain-contiguous",
+      "severity": "error",
+      "target": "gem.gem-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

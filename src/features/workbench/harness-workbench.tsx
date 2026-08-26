@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
-import { postProjectActivation } from '@/features/projects/workspace-bridge'
+import { connectHarnessBridge, postHarnessBridge, postProjectActivation } from '@/features/projects/workspace-bridge'
 import { useIframeShim } from '@/hooks/use-iframe-shim'
 import { Loadable } from '@/layout/components/loadable'
 import { store } from '@/store'
@@ -24,6 +24,8 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
   const { serviceHealthy, iframeError, iframeKey, iframeLoaded, iframeSrc } = harnessState
   const serviceUrl = serviceOrigin(iframeSrc)
   useIframeShim(iframeRef)
+
+  useEffect(() => connectHarnessBridge(iframeRef), [iframeRef])
 
   useEffect(() => {
     if (!iframeLoaded)
@@ -42,6 +44,19 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
       postProjectActivation(iframeRef, project)
   }, [iframeKey, iframeLoaded, iframeRef, project])
 
+  useEffect(() => {
+    if (!iframeLoaded)
+      return
+    postHarnessBridge({
+      type: 'mir3/bridge.describe',
+      projectId: project?.id ?? '',
+      systemId: '',
+      taskId: '',
+      sessionId: '',
+      payload: {},
+    })
+  }, [iframeKey, iframeLoaded, project?.id])
+
   return (
     <section className={workbenchClass(active)} aria-hidden={!active}>
       <If cond={serviceHealthy} else={<Loadable subtitle={t('status.loading')} />}>
@@ -57,7 +72,7 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
           title={t('app.open_editor')}
         />
       </If>
-      <If cond={serviceHealthy && iframeError}>
+      <If cond={showIframeError(serviceHealthy, iframeError)}>
         <div className="absolute inset-0 z-[1]">
           <Loadable
             icon={CircleExclamation}
@@ -69,6 +84,10 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
       </If>
     </section>
   )
+}
+
+function showIframeError(serviceHealthy: boolean, iframeError: boolean) {
+  return serviceHealthy && iframeError
 }
 
 function workbenchClass(active: boolean): string {

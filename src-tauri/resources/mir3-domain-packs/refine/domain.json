@@ -1,0 +1,753 @@
+{
+  "kind": "domain",
+  "systemId": "refine",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "equipment",
+  "complexity": 3,
+  "renderer": "chart-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "refine",
+      "洗炼",
+      "精炼"
+    ],
+    "ownedSelectors": [
+      "refine",
+      "洗炼",
+      "精炼"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "item"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "refine",
+        "caseSensitive": false
+      },
+      {
+        "contains": "洗炼",
+        "caseSensitive": false
+      },
+      {
+        "contains": "精炼",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "refine.refine-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(refine:poolId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "refine.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "equipmentId",
+        "systemId": "equipment",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "poolId",
+      "equipmentId",
+      "attributeKey"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "chart-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "chart-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "equipment",
+    "item"
+  ],
+  "operations": [
+    {
+      "id": "inspect-refine-pool",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-refine-pool"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-refine-pool",
+          "operation": "inspect-refine-pool"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "edit-refine-weight",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-refine-weight"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-refine-weight"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-refine-template",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-refine-template"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-refine-template"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-refine-pool",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-refine-pool"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-refine-pool",
+          "operation": "inspect-refine-pool"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-refine-weight",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-refine-weight"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-refine-weight"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-refine-template",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-refine-template"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-refine-template"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "refine.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "refine.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "refine-record"
+    },
+    {
+      "id": "refine.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "poolId",
+        "equipmentId",
+        "attributeKey"
+      ],
+      "scope": "refine.project"
+    },
+    {
+      "id": "refine.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "weight",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        {
+          "field": "minimumValue",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        {
+          "field": "maximumValue",
+          "minimum": -1000000,
+          "maximum": 1000000
+        }
+      ]
+    },
+    {
+      "id": "refine.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "equipmentId",
+          "systemId": "equipment",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "refine.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "poolId",
+      "compareFields": [
+        "minimumValue",
+        "maximumValue"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "refine.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "refine.minimum-not-greater-than-maximum",
+      "severity": "error",
+      "target": "refine.refine-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

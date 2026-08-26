@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/limited_event/resource.schema.json",
+  "title": "limited_event.limited-event-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startEpochSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4102444800
+    },
+    "endEpochSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4102444800
+    },
+    "eventMapId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "map"
+    },
+    "questId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "quest"
+    }
+  },
+  "required": [
+    "eventId",
+    "startEpochSeconds",
+    "endEpochSeconds",
+    "eventMapId",
+    "questId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "eventId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "eventId",
+      "compareFields": [
+        "startEpochSeconds",
+        "endEpochSeconds"
+      ]
+    },
+    "runtimeRule": "limited-event.start-before-end"
+  }
+}

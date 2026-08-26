@@ -1,0 +1,22 @@
+[
+  {
+    "code": "level.unique",
+    "severity": "error",
+    "field": "level"
+  },
+  {
+    "code": "level.range",
+    "severity": "error",
+    "field": "level"
+  },
+  {
+    "code": "level.reference",
+    "severity": "error",
+    "field": "recommendedMonsterId"
+  },
+  {
+    "code": "level.runtime",
+    "severity": "error",
+    "rule": "level.experience-monotonic"
+  }
+]

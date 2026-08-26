@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/checkin/resource.schema.json",
+  "title": "checkin.checkin-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cycleId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dayIndex": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 31
+    },
+    "rewardItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "rewardCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999999
+    },
+    "vipMultiplier": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 100
+    }
+  },
+  "required": [
+    "cycleId",
+    "dayIndex",
+    "rewardItemId",
+    "rewardCount",
+    "vipMultiplier"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "cycleId",
+      "dayIndex"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "cycleId",
+      "compareFields": [
+        "cycleId",
+        "dayIndex"
+      ]
+    },
+    "runtimeRule": "checkin.days-contiguous"
+  }
+}

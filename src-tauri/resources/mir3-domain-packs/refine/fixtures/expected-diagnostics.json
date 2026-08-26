@@ -1,0 +1,22 @@
+[
+  {
+    "code": "refine.unique",
+    "severity": "error",
+    "field": "poolId,equipmentId,attributeKey"
+  },
+  {
+    "code": "refine.range",
+    "severity": "error",
+    "field": "weight"
+  },
+  {
+    "code": "refine.reference",
+    "severity": "error",
+    "field": "equipmentId"
+  },
+  {
+    "code": "refine.runtime",
+    "severity": "error",
+    "rule": "refine.minimum-not-greater-than-maximum"
+  }
+]

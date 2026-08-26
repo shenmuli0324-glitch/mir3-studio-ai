@@ -1,8 +1,8 @@
 {
   "name": "@mir3-studio/dsh-mir3-core",
   "type": "module",
-  "version": "0.2.0",
-  "description": "First-party MIR3 Studio project and Harness workspace bridge",
+  "version": "1.0.0",
+  "description": "MIR3 Studio Harness compatibility adapter and archived system-session bridge",
   "exports": {
     ".": {
       "default": "./lib/index.js"
@@ -19,5 +19,17 @@
       "inject": ["@deepseek-ai/dsh-client-runtime"],
       "platform": "web"
     }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-client-runtime": "*",
+    "@deepseek-ai/dsh-sandbox-policy": "*",
+    "@deepseek-ai/dsh-session": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-client-runtime": { "optional": true },
+    "@deepseek-ai/dsh-sandbox-policy": { "optional": true },
+    "@deepseek-ai/dsh-session": { "optional": true }
   }
 }

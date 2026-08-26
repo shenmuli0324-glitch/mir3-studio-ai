@@ -1,0 +1,28 @@
+{
+  "systemId": "map",
+  "fixture": "valid",
+  "records": [
+    {
+      "mapId": "map-mapId-1",
+      "displayName": "map-displayName-1",
+      "width": 2,
+      "height": 2,
+      "safeZoneMode": "none",
+      "spawnNpcId": "npc:fixture-1"
+    },
+    {
+      "mapId": "map-mapId-2",
+      "displayName": "map-displayName-2",
+      "width": 3,
+      "height": 3,
+      "safeZoneMode": "partial",
+      "spawnNpcId": "npc:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "npc": [
+      "npc:fixture-1",
+      "npc:fixture-2"
+    ]
+  }
+}

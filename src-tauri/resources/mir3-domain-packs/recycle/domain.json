@@ -1,0 +1,691 @@
+{
+  "kind": "domain",
+  "systemId": "recycle",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "commercial",
+  "complexity": 2,
+  "renderer": "table-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "recycle",
+      "recover",
+      "回收"
+    ],
+    "ownedSelectors": [
+      "recycle",
+      "recover",
+      "回收"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "shop"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "recycle",
+        "caseSensitive": false
+      },
+      {
+        "contains": "recover",
+        "caseSensitive": false
+      },
+      {
+        "contains": "回收",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "recycle.recycle-rule-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(recycle:ruleId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "recycle.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "currencyItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "ruleId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "table-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "table-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "item",
+    "equipment",
+    "shop"
+  ],
+  "operations": [
+    {
+      "id": "inspect-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-recycle"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-recycle",
+          "operation": "inspect-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "batch-edit-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-recycle"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "equipment",
+                  "material",
+                  "consumable"
+                ]
+              },
+              "minimumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "maximumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "returnValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "preview-recycle-value",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "preview-recycle-value"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "sampleLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "includeDependencyValues": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "preview-recycle-value",
+          "operation": "preview-recycle-value"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-recycle"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-recycle",
+          "operation": "inspect-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-edit-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-recycle"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "equipment",
+                  "material",
+                  "consumable"
+                ]
+              },
+              "minimumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "maximumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "returnValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "preview-recycle-value",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "preview-recycle-value"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "sampleLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "includeDependencyValues": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "preview-recycle-value",
+          "operation": "preview-recycle-value"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "recycle.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "recycle.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "recycle-rule-record"
+    },
+    {
+      "id": "recycle.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "ruleId"
+      ],
+      "scope": "recycle.project"
+    },
+    {
+      "id": "recycle.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "minimumQuality",
+          "minimum": 0,
+          "maximum": 20
+        },
+        {
+          "field": "maximumQuality",
+          "minimum": 0,
+          "maximum": 20
+        },
+        {
+          "field": "returnValue",
+          "minimum": 0,
+          "maximum": 2000000000
+        }
+      ]
+    },
+    {
+      "id": "recycle.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "currencyItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "recycle.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "ruleId",
+      "compareFields": [
+        "minimumQuality",
+        "maximumQuality"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "recycle.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "recycle.quality-range-ordered",
+      "severity": "error",
+      "target": "recycle.recycle-rule-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

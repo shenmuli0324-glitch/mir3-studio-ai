@@ -1,0 +1,748 @@
+{
+  "kind": "domain",
+  "systemId": "enhance",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "equipment",
+  "complexity": 3,
+  "renderer": "chart-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "enhance",
+      "strengthen",
+      "强化"
+    ],
+    "ownedSelectors": [
+      "enhance",
+      "strengthen",
+      "强化"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "buff"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "enhance",
+        "caseSensitive": false
+      },
+      {
+        "contains": "strengthen",
+        "caseSensitive": false
+      },
+      {
+        "contains": "强化",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "enhance.enhance-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(enhance:enhanceTier:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "enhance.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "materialItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "enhanceTier",
+      "equipmentClass"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "chart-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "chart-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "equipment",
+    "item",
+    "buff"
+  ],
+  "operations": [
+    {
+      "id": "inspect-enhancement",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-enhancement"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "enhance",
+        "equipment",
+        "item",
+        "buff"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "enhance.resource-index-ready",
+        "enhance.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-enhancement",
+          "operation": "inspect-enhancement"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "generate-enhancement-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-enhancement-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentClass": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "accessory"
+                ]
+              },
+              "successRateBasisPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "materialItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "failureMode": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "downgrade",
+                  "break"
+                ]
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "enhance",
+        "equipment",
+        "item",
+        "buff"
+      ],
+      "writeSystems": [
+        "enhance"
+      ],
+      "preconditions": [
+        "enhance.resource-index-ready",
+        "enhance.schema-loaded",
+        "enhance.draft-open",
+        "enhance.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-enhancement-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "tune-enhancement-probability",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "tune-enhancement-probability"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "adjustmentMode": {
+            "enum": [
+              "absolute",
+              "delta",
+              "percentage"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "enhanceTier",
+                "successRateBasisPoints"
+              ]
+            },
+            "minItems": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "adjustmentMode",
+          "amount",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "enhance",
+        "equipment",
+        "item",
+        "buff"
+      ],
+      "writeSystems": [
+        "enhance"
+      ],
+      "preconditions": [
+        "enhance.resource-index-ready",
+        "enhance.schema-loaded",
+        "enhance.draft-open",
+        "enhance.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "tune-enhancement-probability"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-enhancement",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-enhancement"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "enhance",
+        "equipment",
+        "item",
+        "buff"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "enhance.resource-index-ready",
+        "enhance.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-enhancement",
+          "operation": "inspect-enhancement"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "generate-enhancement-tiers",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "generate-enhancement-tiers"
+          },
+          "templateResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "interpolation": {
+            "enum": [
+              "linear",
+              "geometric",
+              "step"
+            ]
+          },
+          "generatedPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentClass": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "accessory"
+                ]
+              },
+              "successRateBasisPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "materialItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "failureMode": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "downgrade",
+                  "break"
+                ]
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "templateResourceId",
+          "firstOrdinal",
+          "lastOrdinal",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "enhance",
+        "equipment",
+        "item",
+        "buff"
+      ],
+      "writeSystems": [
+        "enhance"
+      ],
+      "preconditions": [
+        "enhance.resource-index-ready",
+        "enhance.schema-loaded",
+        "enhance.draft-open",
+        "enhance.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "generate-enhancement-tiers"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "tune-enhancement-probability",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "tune-enhancement-probability"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "adjustmentMode": {
+            "enum": [
+              "absolute",
+              "delta",
+              "percentage"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "enhanceTier",
+                "successRateBasisPoints"
+              ]
+            },
+            "minItems": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "adjustmentMode",
+          "amount",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "enhance",
+        "equipment",
+        "item",
+        "buff"
+      ],
+      "writeSystems": [
+        "enhance"
+      ],
+      "preconditions": [
+        "enhance.resource-index-ready",
+        "enhance.schema-loaded",
+        "enhance.draft-open",
+        "enhance.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "tune-enhancement-probability"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "enhance.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "enhance.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "enhance-record"
+    },
+    {
+      "id": "enhance.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "enhanceTier",
+        "equipmentClass"
+      ],
+      "scope": "enhance.project"
+    },
+    {
+      "id": "enhance.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "enhanceTier",
+          "minimum": 1,
+          "maximum": 99
+        },
+        {
+          "field": "successRateBasisPoints",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      ]
+    },
+    {
+      "id": "enhance.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "materialItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "enhance.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "enhanceTier",
+      "compareFields": [
+        "enhanceTier",
+        "equipmentClass"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "enhance.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "enhance.probability-budget-valid",
+      "severity": "error",
+      "target": "enhance.enhance-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

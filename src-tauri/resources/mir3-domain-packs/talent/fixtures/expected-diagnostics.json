@@ -1,0 +1,22 @@
+[
+  {
+    "code": "talent.unique",
+    "severity": "error",
+    "field": "treeId,nodeId"
+  },
+  {
+    "code": "talent.range",
+    "severity": "error",
+    "field": "costPoints"
+  },
+  {
+    "code": "talent.reference",
+    "severity": "error",
+    "field": "grantedSkillId"
+  },
+  {
+    "code": "talent.runtime",
+    "severity": "error",
+    "rule": "talent.graph-acyclic-and-budget-valid"
+  }
+]

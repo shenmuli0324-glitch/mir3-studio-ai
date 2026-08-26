@@ -1,0 +1,27 @@
+{
+  "systemId": "crafting",
+  "fixture": "invalid",
+  "records": [
+    {
+      "recipeId": "crafting-recipeId-1",
+      "outputItemId": "item:missing",
+      "outputCount": 1000000,
+      "materialItemId": "item:fixture-1",
+      "materialCount": 2
+    },
+    {
+      "recipeId": "crafting-recipeId-1",
+      "outputItemId": "item:fixture-2",
+      "outputCount": 3,
+      "materialItemId": "item:fixture-2",
+      "materialCount": 3
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "crafting.no-self-consuming-cycle",
+      "expected": false
+    }
+  ]
+}

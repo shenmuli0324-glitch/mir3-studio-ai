@@ -1,0 +1,22 @@
+[
+  {
+    "code": "gem.unique",
+    "severity": "error",
+    "field": "gemId,gemTier"
+  },
+  {
+    "code": "gem.range",
+    "severity": "error",
+    "field": "gemTier"
+  },
+  {
+    "code": "gem.reference",
+    "severity": "error",
+    "field": "itemId"
+  },
+  {
+    "code": "gem.runtime",
+    "severity": "error",
+    "rule": "gem.tier-chain-contiguous"
+  }
+]

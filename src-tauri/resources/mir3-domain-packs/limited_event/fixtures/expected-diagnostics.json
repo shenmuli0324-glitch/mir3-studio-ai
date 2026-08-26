@@ -1,0 +1,22 @@
+[
+  {
+    "code": "limited_event.unique",
+    "severity": "error",
+    "field": "eventId"
+  },
+  {
+    "code": "limited_event.range",
+    "severity": "error",
+    "field": "startEpochSeconds"
+  },
+  {
+    "code": "limited_event.reference",
+    "severity": "error",
+    "field": "eventMapId"
+  },
+  {
+    "code": "limited_event.runtime",
+    "severity": "error",
+    "rule": "limited-event.start-before-end"
+  }
+]

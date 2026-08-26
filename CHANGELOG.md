@@ -1,5 +1,15 @@
 # MIR3 Studio AI 更新记录
 
+## 0.9.0 - 2026-08-26
+
+- 建立 MIR3 System Kernel v1、Domain 数据库 schema v2 和固定通用 MCP 能力面。
+- 将 33 个系统统一为独立版本化领域包，共享真实文件、资源、依赖、Draft、校验和能力契约。
+- 新增左资源/文件/依赖、中领域视图/源码/Diff/校验、右归档 AI 会话的三栏开发工作区。
+- MIR3 Core Plugin 升级为 protocol v2 Harness 兼容层，系统会话使用 cwd 创建并立即归档。
+- MIR3 Core Plugin 成为唯一 Harness 兼容适配器；移除旧 Safe Files 插件和 iframe 无作用域文件命令转发，Studio 人工编辑改为系统版本绑定 Draft。
+- 增加 Task Receipt、项目/个人/团队能力治理、任务作用域和领域包升级回滚基础设施。
+- 地图改为统一领域包，移除旧地图专属前端状态、Tauri 命令和服务管线，同时复用已验证的无损地图算法。
+
 ## 0.2.1 - 2026-08-24
 
 - 将 Safe Files 插件升级到 0.1.1，BIFF `.xls` 改为当前工作表完整读取和连续显示，不再使用分页交互。

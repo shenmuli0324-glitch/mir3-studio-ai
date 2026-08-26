@@ -1,0 +1,764 @@
+{
+  "kind": "domain",
+  "systemId": "resource_production",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "featured",
+  "complexity": 4,
+  "renderer": "flow-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "resource_production",
+      "production",
+      "资源生产"
+    ],
+    "ownedSelectors": [
+      "resource_production",
+      "production",
+      "资源生产"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "npc"
+      },
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "monster"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "resource_production",
+        "caseSensitive": false
+      },
+      {
+        "contains": "production",
+        "caseSensitive": false
+      },
+      {
+        "contains": "资源生产",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "resource_production.production-point-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(resource_production:pointId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "resource_production.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "mapId",
+        "systemId": "map",
+        "required": true
+      },
+      {
+        "field": "outputItemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "guardMonsterId",
+        "systemId": "monster",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "pointId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "flow-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "flow-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "map",
+    "npc",
+    "item",
+    "monster"
+  ],
+  "operations": [
+    {
+      "id": "inspect-production",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-production"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "resource_production",
+        "map",
+        "npc",
+        "item",
+        "monster"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "resource_production.resource-index-ready",
+        "resource_production.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-production",
+          "operation": "inspect-production"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "edit-production-rate",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-production-rate"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31536000
+              },
+              "yieldCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "guardMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "resource_production",
+        "map",
+        "npc",
+        "item",
+        "monster"
+      ],
+      "writeSystems": [
+        "resource_production"
+      ],
+      "preconditions": [
+        "resource_production.resource-index-ready",
+        "resource_production.schema-loaded",
+        "resource_production.draft-open",
+        "resource_production.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-production-rate"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-production-point",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-production-point"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31536000
+              },
+              "yieldCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "guardMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "resource_production",
+        "map",
+        "npc",
+        "item",
+        "monster"
+      ],
+      "writeSystems": [
+        "resource_production"
+      ],
+      "preconditions": [
+        "resource_production.resource-index-ready",
+        "resource_production.schema-loaded",
+        "resource_production.draft-open",
+        "resource_production.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-production-point"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-production",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-production"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "resource_production",
+        "map",
+        "npc",
+        "item",
+        "monster"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "resource_production.resource-index-ready",
+        "resource_production.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-production",
+          "operation": "inspect-production"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-production-rate",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-production-rate"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31536000
+              },
+              "yieldCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "guardMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "resource_production",
+        "map",
+        "npc",
+        "item",
+        "monster"
+      ],
+      "writeSystems": [
+        "resource_production"
+      ],
+      "preconditions": [
+        "resource_production.resource-index-ready",
+        "resource_production.schema-loaded",
+        "resource_production.draft-open",
+        "resource_production.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-production-rate"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-production-point",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-production-point"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31536000
+              },
+              "yieldCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "guardMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "resource_production",
+        "map",
+        "npc",
+        "item",
+        "monster"
+      ],
+      "writeSystems": [
+        "resource_production"
+      ],
+      "preconditions": [
+        "resource_production.resource-index-ready",
+        "resource_production.schema-loaded",
+        "resource_production.draft-open",
+        "resource_production.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-production-point"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "resource_production.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "resource_production.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "production-point-record"
+    },
+    {
+      "id": "resource_production.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "pointId"
+      ],
+      "scope": "resource_production.project"
+    },
+    {
+      "id": "resource_production.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "intervalSeconds",
+          "minimum": 1,
+          "maximum": 31536000
+        },
+        {
+          "field": "yieldCount",
+          "minimum": 1,
+          "maximum": 999999
+        }
+      ]
+    },
+    {
+      "id": "resource_production.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "mapId",
+          "systemId": "map",
+          "required": true
+        },
+        {
+          "field": "outputItemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "guardMonsterId",
+          "systemId": "monster",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "resource_production.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "pointId",
+      "compareFields": [
+        "pointId",
+        "mapId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "resource_production.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "production.point-inside-map-and-rate-positive",
+      "severity": "error",
+      "target": "resource_production.production-point-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

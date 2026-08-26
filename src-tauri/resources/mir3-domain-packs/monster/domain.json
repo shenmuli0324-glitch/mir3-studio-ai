@@ -1,0 +1,914 @@
+{
+  "kind": "domain",
+  "systemId": "monster",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "resources",
+  "complexity": 2,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "monster",
+      "mongen",
+      "monitems",
+      "怪物"
+    ],
+    "ownedSelectors": [
+      "monster",
+      "mongen",
+      "monitems",
+      "怪物"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "quest"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "monster",
+        "caseSensitive": false
+      },
+      {
+        "contains": "mongen",
+        "caseSensitive": false
+      },
+      {
+        "contains": "monitems",
+        "caseSensitive": false
+      },
+      {
+        "contains": "怪物",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "monster.monster-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(monster:monsterId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "monster.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "spawnMapId",
+        "systemId": "map",
+        "required": true
+      },
+      {
+        "field": "primaryDropItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "monsterId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "map",
+    "item",
+    "quest"
+  ],
+  "operations": [
+    {
+      "id": "inspect-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-monster"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-monster",
+          "operation": "inspect-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-monster"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "combatLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "healthPoints": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000000000
+              },
+              "spawnMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "primaryDropItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "tune-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "tune-monster"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "adjustmentMode": {
+            "enum": [
+              "absolute",
+              "delta",
+              "percentage"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "combatLevel",
+                "healthPoints"
+              ]
+            },
+            "minItems": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "adjustmentMode",
+          "amount",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "tune-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-drop-table",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-drop-table"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "combatLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "healthPoints": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000000000
+              },
+              "spawnMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "primaryDropItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-drop-table"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-monster"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-monster",
+          "operation": "inspect-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-monster"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "combatLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "healthPoints": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000000000
+              },
+              "spawnMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "primaryDropItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "tune-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "tune-monster"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "adjustmentMode": {
+            "enum": [
+              "absolute",
+              "delta",
+              "percentage"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "combatLevel",
+                "healthPoints"
+              ]
+            },
+            "minItems": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "adjustmentMode",
+          "amount",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "tune-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-drop-table",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-drop-table"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "combatLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "healthPoints": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000000000
+              },
+              "spawnMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "primaryDropItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-drop-table"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "monster.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "monster.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "monster-record"
+    },
+    {
+      "id": "monster.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "monsterId"
+      ],
+      "scope": "monster.project"
+    },
+    {
+      "id": "monster.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "combatLevel",
+          "minimum": 1,
+          "maximum": 255
+        },
+        {
+          "field": "healthPoints",
+          "minimum": 1,
+          "maximum": 2000000000
+        }
+      ]
+    },
+    {
+      "id": "monster.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "spawnMapId",
+          "systemId": "map",
+          "required": true
+        },
+        {
+          "field": "primaryDropItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "monster.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "monsterId",
+      "compareFields": [
+        "monsterId",
+        "combatLevel"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "monster.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "monster.drop-weight-positive",
+      "severity": "error",
+      "target": "monster.monster-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

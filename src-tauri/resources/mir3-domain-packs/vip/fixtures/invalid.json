@@ -1,0 +1,25 @@
+{
+  "systemId": "vip",
+  "fixture": "invalid",
+  "records": [
+    {
+      "vipLevel": 100,
+      "requiredPoints": 1,
+      "shopDiscountBasisPoints": 1,
+      "grantedTitleId": "title:missing"
+    },
+    {
+      "vipLevel": 100,
+      "requiredPoints": 2,
+      "shopDiscountBasisPoints": 2,
+      "grantedTitleId": "title:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "vip.points-monotonic",
+      "expected": false
+    }
+  ]
+}

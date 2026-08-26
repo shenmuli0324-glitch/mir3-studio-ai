@@ -1,0 +1,26 @@
+{
+  "systemId": "title",
+  "fixture": "valid",
+  "records": [
+    {
+      "titleId": "title-titleId-1",
+      "displayLabel": "title-displayLabel-1",
+      "grantedBuffId": "buff:fixture-1",
+      "durationSeconds": 1,
+      "minimumLevel": 1
+    },
+    {
+      "titleId": "title-titleId-2",
+      "displayLabel": "title-displayLabel-2",
+      "grantedBuffId": "buff:fixture-2",
+      "durationSeconds": 2,
+      "minimumLevel": 2
+    }
+  ],
+  "referenceCatalog": {
+    "buff": [
+      "buff:fixture-1",
+      "buff:fixture-2"
+    ]
+  }
+}

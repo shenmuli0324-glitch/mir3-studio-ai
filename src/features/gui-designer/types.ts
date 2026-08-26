@@ -270,7 +270,3 @@ export const PC_VIEWPORTS = [
   { width: 1024, height: 768 },
   { width: 800, height: 600 },
 ] as const
-
-export function boundNumber(value: number): BoundValue<number> {
-  return { value, source: 'default', writable: false }
-}

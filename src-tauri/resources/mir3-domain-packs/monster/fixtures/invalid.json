@@ -1,0 +1,27 @@
+{
+  "systemId": "monster",
+  "fixture": "invalid",
+  "records": [
+    {
+      "monsterId": "monster-monsterId-1",
+      "combatLevel": 256,
+      "healthPoints": 2,
+      "spawnMapId": "map:missing",
+      "primaryDropItemId": "item:fixture-1"
+    },
+    {
+      "monsterId": "monster-monsterId-1",
+      "combatLevel": 3,
+      "healthPoints": 3,
+      "spawnMapId": "map:fixture-2",
+      "primaryDropItemId": "item:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "monster.drop-weight-positive",
+      "expected": false
+    }
+  ]
+}

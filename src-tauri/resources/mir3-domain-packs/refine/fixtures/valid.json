@@ -1,0 +1,28 @@
+{
+  "systemId": "refine",
+  "fixture": "valid",
+  "records": [
+    {
+      "poolId": "refine-poolId-1",
+      "equipmentId": "equipment:fixture-1",
+      "attributeKey": "attack",
+      "weight": 2,
+      "minimumValue": -999999,
+      "maximumValue": -999999
+    },
+    {
+      "poolId": "refine-poolId-2",
+      "equipmentId": "equipment:fixture-2",
+      "attributeKey": "defense",
+      "weight": 3,
+      "minimumValue": -999998,
+      "maximumValue": -999998
+    }
+  ],
+  "referenceCatalog": {
+    "equipment": [
+      "equipment:fixture-1",
+      "equipment:fixture-2"
+    ]
+  }
+}

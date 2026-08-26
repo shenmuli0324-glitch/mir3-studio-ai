@@ -1,0 +1,27 @@
+{
+  "systemId": "rebirth",
+  "fixture": "invalid",
+  "records": [
+    {
+      "rebirthTier": 100,
+      "minimumLevel": 2,
+      "costItemId": "item:missing",
+      "costAmount": 1,
+      "grantedTitleId": "title:fixture-1"
+    },
+    {
+      "rebirthTier": 100,
+      "minimumLevel": 3,
+      "costItemId": "item:fixture-2",
+      "costAmount": 2,
+      "grantedTitleId": "title:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "rebirth.minimum-level-reachable",
+      "expected": false
+    }
+  ]
+}

@@ -24,6 +24,7 @@
 //! - [`watch`]：已安装插件文件监控（轮询指纹比对 + `dsh-plugins-updated` 事件推送）
 
 mod cancel;
+pub mod domain_update;
 pub mod errors;
 mod install;
 mod installed;

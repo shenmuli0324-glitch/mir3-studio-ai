@@ -1,0 +1,919 @@
+{
+  "kind": "domain",
+  "systemId": "ranking",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "social",
+  "complexity": 2,
+  "renderer": "ranking-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "ranking",
+      "rank",
+      "排行榜"
+    ],
+    "ownedSelectors": [
+      "ranking",
+      "rank",
+      "排行榜"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "level"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "guild"
+      },
+      {
+        "systemId": "season"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "ranking",
+        "caseSensitive": false
+      },
+      {
+        "contains": "rank",
+        "caseSensitive": false
+      },
+      {
+        "contains": "排行榜",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "ranking.ranking-board-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(ranking:boardId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "ranking.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "rewardItemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "seasonId",
+        "systemId": "season",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "boardId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "ranking-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "ranking-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "level",
+    "equipment",
+    "guild",
+    "season"
+  ],
+  "operations": [
+    {
+      "id": "inspect-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-ranking"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-ranking",
+          "operation": "inspect-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-ranking"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "edit-ranking-cycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-ranking-cycle"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-ranking-cycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-ranking-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-ranking-reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId",
+              "seasonId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-ranking-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-ranking"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-ranking",
+          "operation": "inspect-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-ranking"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "edit-ranking-cycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "edit-ranking-cycle"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "edit-ranking-cycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-ranking-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-ranking-reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId",
+              "seasonId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-ranking-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "ranking.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "ranking.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "ranking-board-record"
+    },
+    {
+      "id": "ranking.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "boardId"
+      ],
+      "scope": "ranking.project"
+    },
+    {
+      "id": "ranking.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "cycleSeconds",
+          "minimum": 60,
+          "maximum": 31536000
+        }
+      ]
+    },
+    {
+      "id": "ranking.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "rewardItemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "seasonId",
+          "systemId": "season",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "ranking.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "boardId",
+      "compareFields": [
+        "boardId",
+        "metric"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "ranking.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "ranking.settlement-within-cycle",
+      "severity": "error",
+      "target": "ranking.ranking-board-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

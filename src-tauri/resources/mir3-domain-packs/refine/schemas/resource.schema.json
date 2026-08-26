@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/refine/resource.schema.json",
+  "title": "refine.refine-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "poolId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "equipmentId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "equipment"
+    },
+    "attributeKey": {
+      "type": "string",
+      "enum": [
+        "attack",
+        "defense",
+        "health",
+        "speed",
+        "critical"
+      ]
+    },
+    "weight": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "minimumValue": {
+      "type": "number",
+      "minimum": -1000000,
+      "maximum": 1000000
+    },
+    "maximumValue": {
+      "type": "number",
+      "minimum": -1000000,
+      "maximum": 1000000
+    }
+  },
+  "required": [
+    "poolId",
+    "equipmentId",
+    "attributeKey",
+    "weight",
+    "minimumValue",
+    "maximumValue"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "poolId",
+      "equipmentId",
+      "attributeKey"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "poolId",
+      "compareFields": [
+        "minimumValue",
+        "maximumValue"
+      ]
+    },
+    "runtimeRule": "refine.minimum-not-greater-than-maximum"
+  }
+}

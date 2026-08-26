@@ -1,0 +1,22 @@
+[
+  {
+    "code": "map.unique",
+    "severity": "error",
+    "field": "mapId"
+  },
+  {
+    "code": "map.range",
+    "severity": "error",
+    "field": "width"
+  },
+  {
+    "code": "map.reference",
+    "severity": "error",
+    "field": "spawnNpcId"
+  },
+  {
+    "code": "map.runtime",
+    "severity": "error",
+    "rule": "map.bounds-contain-spawns"
+  }
+]

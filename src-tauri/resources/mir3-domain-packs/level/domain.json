@@ -1,0 +1,715 @@
+{
+  "kind": "domain",
+  "systemId": "level",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "growth",
+  "complexity": 1,
+  "renderer": "chart-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "level",
+      "exp",
+      "等级",
+      "经验"
+    ],
+    "ownedSelectors": [
+      "level",
+      "exp",
+      "等级",
+      "经验"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "monster"
+      },
+      {
+        "systemId": "quest"
+      },
+      {
+        "systemId": "ranking"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "level",
+        "caseSensitive": false
+      },
+      {
+        "contains": "exp",
+        "caseSensitive": false
+      },
+      {
+        "contains": "等级",
+        "caseSensitive": false
+      },
+      {
+        "contains": "经验",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "level.level-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(level:level:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "level.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "recommendedMonsterId",
+        "systemId": "monster",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "level"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "chart-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "chart-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "monster",
+    "quest",
+    "ranking"
+  ],
+  "operations": [
+    {
+      "id": "inspect-level-curve",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-level-curve"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-level-curve",
+          "operation": "inspect-level-curve"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "scale-experience",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "scale-experience"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "rounding": {
+            "enum": [
+              "nearest",
+              "floor",
+              "ceil"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "level",
+                "requiredExperience",
+                "statPoints"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "factor",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "scale-experience"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "interpolate-levels",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "interpolate-levels"
+          },
+          "anchorResourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "numericFields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "level",
+                "requiredExperience",
+                "statPoints"
+              ]
+            },
+            "minItems": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "anchorResourceIds",
+          "firstOrdinal",
+          "lastOrdinal",
+          "numericFields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "interpolate-levels"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-level-curve",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-level-curve"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-level-curve",
+          "operation": "inspect-level-curve"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "scale-experience",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "scale-experience"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "rounding": {
+            "enum": [
+              "nearest",
+              "floor",
+              "ceil"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "level",
+                "requiredExperience",
+                "statPoints"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "factor",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "scale-experience"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "interpolate-levels",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "interpolate-levels"
+          },
+          "anchorResourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "firstOrdinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "numericFields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "level",
+                "requiredExperience",
+                "statPoints"
+              ]
+            },
+            "minItems": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "anchorResourceIds",
+          "firstOrdinal",
+          "lastOrdinal",
+          "numericFields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "interpolate-levels"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "level.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "level.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "level-record"
+    },
+    {
+      "id": "level.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "level"
+      ],
+      "scope": "level.project"
+    },
+    {
+      "id": "level.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "level",
+          "minimum": 1,
+          "maximum": 255
+        },
+        {
+          "field": "requiredExperience",
+          "minimum": 0,
+          "maximum": 2000000000
+        },
+        {
+          "field": "statPoints",
+          "minimum": 0,
+          "maximum": 100000
+        }
+      ]
+    },
+    {
+      "id": "level.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "recommendedMonsterId",
+          "systemId": "monster",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "level.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "level",
+      "compareFields": [
+        "level",
+        "requiredExperience"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "level.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "level.experience-monotonic",
+      "severity": "error",
+      "target": "level.level-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

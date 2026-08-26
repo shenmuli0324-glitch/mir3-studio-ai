@@ -1,0 +1,30 @@
+{
+  "systemId": "launch_event",
+  "fixture": "valid",
+  "records": [
+    {
+      "scheduleId": "launch_event-scheduleId-1",
+      "openServerDay": 2,
+      "eventId": "limited_event:fixture-1",
+      "rewardItemId": "item:fixture-1",
+      "rewardCount": 2
+    },
+    {
+      "scheduleId": "launch_event-scheduleId-2",
+      "openServerDay": 3,
+      "eventId": "limited_event:fixture-2",
+      "rewardItemId": "item:fixture-2",
+      "rewardCount": 3
+    }
+  ],
+  "referenceCatalog": {
+    "limited_event": [
+      "limited_event:fixture-1",
+      "limited_event:fixture-2"
+    ],
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

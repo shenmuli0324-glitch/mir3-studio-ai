@@ -1,0 +1,27 @@
+{
+  "systemId": "title",
+  "fixture": "invalid",
+  "records": [
+    {
+      "titleId": "title-titleId-1",
+      "displayLabel": "title-displayLabel-1",
+      "grantedBuffId": "buff:missing",
+      "durationSeconds": 315360001,
+      "minimumLevel": 1
+    },
+    {
+      "titleId": "title-titleId-1",
+      "displayLabel": "title-displayLabel-2",
+      "grantedBuffId": "buff:fixture-2",
+      "durationSeconds": 2,
+      "minimumLevel": 2
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "title.permanent-duration-zero",
+      "expected": false
+    }
+  ]
+}

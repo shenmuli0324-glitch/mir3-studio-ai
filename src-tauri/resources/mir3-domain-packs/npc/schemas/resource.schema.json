@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/npc/resource.schema.json",
+  "title": "npc.npc-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "npcId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scriptPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\.(txt|lua)$"
+    },
+    "mapId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "map"
+    },
+    "coordinateX": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4095
+    },
+    "coordinateY": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4095
+    },
+    "shopId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "shop"
+    }
+  },
+  "required": [
+    "npcId",
+    "scriptPath",
+    "mapId",
+    "coordinateX",
+    "coordinateY",
+    "shopId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "npcId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "npcId",
+      "compareFields": [
+        "npcId",
+        "scriptPath"
+      ]
+    },
+    "runtimeRule": "npc.script-entry-resolves"
+  }
+}

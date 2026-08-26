@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/level/resource.schema.json",
+  "title": "level.level-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255
+    },
+    "requiredExperience": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2000000000
+    },
+    "statPoints": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+    },
+    "recommendedMonsterId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "monster"
+    }
+  },
+  "required": [
+    "level",
+    "requiredExperience",
+    "statPoints",
+    "recommendedMonsterId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "level"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "level",
+      "compareFields": [
+        "level",
+        "requiredExperience"
+      ]
+    },
+    "runtimeRule": "level.experience-monotonic"
+  }
+}

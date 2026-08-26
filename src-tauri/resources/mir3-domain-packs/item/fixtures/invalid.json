@@ -1,0 +1,29 @@
+{
+  "systemId": "item",
+  "fixture": "invalid",
+  "records": [
+    {
+      "itemId": "item-itemId-1",
+      "itemType": "consumable",
+      "stackLimit": 65536,
+      "clientIcon": "item-clientIcon-1",
+      "engineStdMode": 1,
+      "linkedBuffId": "buff:missing"
+    },
+    {
+      "itemId": "item-itemId-1",
+      "itemType": "material",
+      "stackLimit": 3,
+      "clientIcon": "item-clientIcon-2",
+      "engineStdMode": 2,
+      "linkedBuffId": "buff:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "item.icon-resource-exists",
+      "expected": false
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "npc.unique",
+    "severity": "error",
+    "field": "npcId"
+  },
+  {
+    "code": "npc.range",
+    "severity": "error",
+    "field": "coordinateX"
+  },
+  {
+    "code": "npc.reference",
+    "severity": "error",
+    "field": "mapId"
+  },
+  {
+    "code": "npc.runtime",
+    "severity": "error",
+    "rule": "npc.script-entry-resolves"
+  }
+]

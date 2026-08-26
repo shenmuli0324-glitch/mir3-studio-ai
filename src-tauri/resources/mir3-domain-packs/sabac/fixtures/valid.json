@@ -1,0 +1,30 @@
+{
+  "systemId": "sabac",
+  "fixture": "valid",
+  "records": [
+    {
+      "phaseId": "sabac-phaseId-1",
+      "battleMapId": "map:fixture-1",
+      "startMinute": 1,
+      "endMinute": 2,
+      "guildRewardItemId": "item:fixture-1"
+    },
+    {
+      "phaseId": "sabac-phaseId-2",
+      "battleMapId": "map:fixture-2",
+      "startMinute": 2,
+      "endMinute": 3,
+      "guildRewardItemId": "item:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "map": [
+      "map:fixture-1",
+      "map:fixture-2"
+    ],
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

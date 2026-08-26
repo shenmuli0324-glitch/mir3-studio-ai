@@ -1,0 +1,28 @@
+{
+  "systemId": "talent",
+  "fixture": "valid",
+  "records": [
+    {
+      "nodeId": "talent-nodeId-1",
+      "treeId": "talent-treeId-1",
+      "costPoints": 1,
+      "requiredLevel": 2,
+      "grantedSkillId": "skill:fixture-1",
+      "parentNodeId": "talent-parentNodeId-1"
+    },
+    {
+      "nodeId": "talent-nodeId-2",
+      "treeId": "talent-treeId-2",
+      "costPoints": 2,
+      "requiredLevel": 3,
+      "grantedSkillId": "skill:fixture-2",
+      "parentNodeId": "talent-parentNodeId-2"
+    }
+  ],
+  "referenceCatalog": {
+    "skill": [
+      "skill:fixture-1",
+      "skill:fixture-2"
+    ]
+  }
+}

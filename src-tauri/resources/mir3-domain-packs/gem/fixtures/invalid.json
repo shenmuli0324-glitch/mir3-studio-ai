@@ -1,0 +1,27 @@
+{
+  "systemId": "gem",
+  "fixture": "invalid",
+  "records": [
+    {
+      "gemId": "gem-gemId-1",
+      "gemTier": 100,
+      "socketType": "attack",
+      "itemId": "item:missing",
+      "grantedBuffId": "buff:fixture-1"
+    },
+    {
+      "gemId": "gem-gemId-1",
+      "gemTier": 100,
+      "socketType": "defense",
+      "itemId": "item:fixture-2",
+      "grantedBuffId": "buff:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "gem.tier-chain-contiguous",
+      "expected": false
+    }
+  ]
+}

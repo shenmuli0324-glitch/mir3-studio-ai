@@ -1,0 +1,759 @@
+{
+  "kind": "domain",
+  "systemId": "rebirth",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "growth",
+  "complexity": 3,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "rebirth",
+      "reincarnation",
+      "转生"
+    ],
+    "ownedSelectors": [
+      "rebirth",
+      "reincarnation",
+      "转生"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "level"
+      },
+      {
+        "systemId": "title"
+      },
+      {
+        "systemId": "skill"
+      },
+      {
+        "systemId": "talent"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "rebirth",
+        "caseSensitive": false
+      },
+      {
+        "contains": "reincarnation",
+        "caseSensitive": false
+      },
+      {
+        "contains": "转生",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "rebirth.rebirth-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(rebirth:rebirthTier:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "rebirth.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "costItemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "grantedTitleId",
+        "systemId": "title",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "rebirthTier"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "level",
+    "title",
+    "skill",
+    "talent"
+  ],
+  "operations": [
+    {
+      "id": "inspect-rebirth",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-rebirth"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "rebirth",
+        "level",
+        "title",
+        "skill",
+        "talent"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "rebirth.resource-index-ready",
+        "rebirth.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-rebirth",
+          "operation": "inspect-rebirth"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "add-rebirth-tier",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-rebirth-tier"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rebirthTier": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "costAmount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            },
+            "required": [
+              "rebirthTier",
+              "minimumLevel",
+              "costItemId",
+              "costAmount",
+              "grantedTitleId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "rebirth",
+        "level",
+        "title",
+        "skill",
+        "talent"
+      ],
+      "writeSystems": [
+        "rebirth"
+      ],
+      "preconditions": [
+        "rebirth.resource-index-ready",
+        "rebirth.schema-loaded",
+        "rebirth.draft-open",
+        "rebirth.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-rebirth-tier"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-edit-rebirth",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-rebirth"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "costAmount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "rebirth",
+        "level",
+        "title",
+        "skill",
+        "talent"
+      ],
+      "writeSystems": [
+        "rebirth"
+      ],
+      "preconditions": [
+        "rebirth.resource-index-ready",
+        "rebirth.schema-loaded",
+        "rebirth.draft-open",
+        "rebirth.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-rebirth"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-rebirth",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-rebirth"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "rebirth",
+        "level",
+        "title",
+        "skill",
+        "talent"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "rebirth.resource-index-ready",
+        "rebirth.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-rebirth",
+          "operation": "inspect-rebirth"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-rebirth-tier",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-rebirth-tier"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rebirthTier": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "costAmount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            },
+            "required": [
+              "rebirthTier",
+              "minimumLevel",
+              "costItemId",
+              "costAmount",
+              "grantedTitleId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "rebirth",
+        "level",
+        "title",
+        "skill",
+        "talent"
+      ],
+      "writeSystems": [
+        "rebirth"
+      ],
+      "preconditions": [
+        "rebirth.resource-index-ready",
+        "rebirth.schema-loaded",
+        "rebirth.draft-open",
+        "rebirth.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-rebirth-tier"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-edit-rebirth",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-edit-rebirth"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "costAmount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000
+              },
+              "grantedTitleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "title"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "rebirth",
+        "level",
+        "title",
+        "skill",
+        "talent"
+      ],
+      "writeSystems": [
+        "rebirth"
+      ],
+      "preconditions": [
+        "rebirth.resource-index-ready",
+        "rebirth.schema-loaded",
+        "rebirth.draft-open",
+        "rebirth.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-edit-rebirth"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "rebirth.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "rebirth.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "rebirth-record"
+    },
+    {
+      "id": "rebirth.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "rebirthTier"
+      ],
+      "scope": "rebirth.project"
+    },
+    {
+      "id": "rebirth.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "rebirthTier",
+          "minimum": 0,
+          "maximum": 99
+        },
+        {
+          "field": "minimumLevel",
+          "minimum": 1,
+          "maximum": 255
+        },
+        {
+          "field": "costAmount",
+          "minimum": 0,
+          "maximum": 1000000000
+        }
+      ]
+    },
+    {
+      "id": "rebirth.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "costItemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "grantedTitleId",
+          "systemId": "title",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "rebirth.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "rebirthTier",
+      "compareFields": [
+        "rebirthTier",
+        "minimumLevel"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "rebirth.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "rebirth.minimum-level-reachable",
+      "severity": "error",
+      "target": "rebirth.rebirth-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

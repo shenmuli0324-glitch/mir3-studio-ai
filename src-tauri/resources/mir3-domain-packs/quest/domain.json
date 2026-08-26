@@ -1,0 +1,961 @@
+{
+  "kind": "domain",
+  "systemId": "quest",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "activities",
+  "complexity": 4,
+  "renderer": "flow-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "quest",
+      "questdiary",
+      "任务"
+    ],
+    "ownedSelectors": [
+      "quest",
+      "questdiary",
+      "任务"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "npc"
+      },
+      {
+        "systemId": "map"
+      },
+      {
+        "systemId": "monster"
+      },
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "level"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "quest",
+        "caseSensitive": false
+      },
+      {
+        "contains": "questdiary",
+        "caseSensitive": false
+      },
+      {
+        "contains": "任务",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "quest.quest-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(quest:questId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "quest.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "startNpcId",
+        "systemId": "npc",
+        "required": true
+      },
+      {
+        "field": "targetMonsterId",
+        "systemId": "monster",
+        "required": true
+      },
+      {
+        "field": "rewardItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "questId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "flow-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "flow-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "npc",
+    "map",
+    "monster",
+    "item",
+    "level"
+  ],
+  "operations": [
+    {
+      "id": "inspect-quest",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-quest"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-quest",
+          "operation": "inspect-quest"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-quest-chain",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-quest-chain"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "startNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "targetMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "nextQuestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [
+        "quest"
+      ],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded",
+        "quest.draft-open",
+        "quest.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-quest-chain"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "insert-quest-step",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "insert-quest-step"
+          },
+          "parentResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "insertionIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "questId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "targetMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "nextQuestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "questId",
+              "startNpcId",
+              "targetMonsterId",
+              "rewardItemId",
+              "minimumLevel",
+              "nextQuestId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "parentResourceId",
+          "insertionIndex",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [
+        "quest"
+      ],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded",
+        "quest.draft-open",
+        "quest.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "insert-quest-step"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-quest-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-quest-reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "startNpcId",
+              "targetMonsterId",
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [
+        "quest"
+      ],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded",
+        "quest.draft-open",
+        "quest.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-quest-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-quest",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-quest"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-quest",
+          "operation": "inspect-quest"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-quest-chain",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-quest-chain"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "startNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "targetMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "nextQuestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [
+        "quest"
+      ],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded",
+        "quest.draft-open",
+        "quest.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-quest-chain"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "insert-quest-step",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "insert-quest-step"
+          },
+          "parentResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "insertionIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "questId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              },
+              "targetMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "minimumLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "nextQuestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "questId",
+              "startNpcId",
+              "targetMonsterId",
+              "rewardItemId",
+              "minimumLevel",
+              "nextQuestId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "parentResourceId",
+          "insertionIndex",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [
+        "quest"
+      ],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded",
+        "quest.draft-open",
+        "quest.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "insert-quest-step"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-quest-reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-quest-reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "startNpcId",
+              "targetMonsterId",
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "quest",
+        "npc",
+        "map",
+        "monster",
+        "item",
+        "level"
+      ],
+      "writeSystems": [
+        "quest"
+      ],
+      "preconditions": [
+        "quest.resource-index-ready",
+        "quest.schema-loaded",
+        "quest.draft-open",
+        "quest.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-quest-reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "quest.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "quest.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "quest-record"
+    },
+    {
+      "id": "quest.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "questId"
+      ],
+      "scope": "quest.project"
+    },
+    {
+      "id": "quest.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "minimumLevel",
+          "minimum": 1,
+          "maximum": 255
+        }
+      ]
+    },
+    {
+      "id": "quest.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "startNpcId",
+          "systemId": "npc",
+          "required": true
+        },
+        {
+          "field": "targetMonsterId",
+          "systemId": "monster",
+          "required": true
+        },
+        {
+          "field": "rewardItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "quest.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "questId",
+      "compareFields": [
+        "questId",
+        "nextQuestId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "quest.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "quest.chain-acyclic-and-reachable",
+      "severity": "error",
+      "target": "quest.quest-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

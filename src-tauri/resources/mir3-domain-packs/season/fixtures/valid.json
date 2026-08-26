@@ -1,0 +1,30 @@
+{
+  "systemId": "season",
+  "fixture": "valid",
+  "records": [
+    {
+      "seasonId": "season-seasonId-1",
+      "startEpochSeconds": 1,
+      "endEpochSeconds": 2,
+      "rankingBoardId": "ranking:fixture-1",
+      "seasonShopId": "shop:fixture-1"
+    },
+    {
+      "seasonId": "season-seasonId-2",
+      "startEpochSeconds": 2,
+      "endEpochSeconds": 3,
+      "rankingBoardId": "ranking:fixture-2",
+      "seasonShopId": "shop:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "ranking": [
+      "ranking:fixture-1",
+      "ranking:fixture-2"
+    ],
+    "shop": [
+      "shop:fixture-1",
+      "shop:fixture-2"
+    ]
+  }
+}

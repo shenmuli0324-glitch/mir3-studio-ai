@@ -73,15 +73,6 @@ export function useCanvasAssets(projectId: string | undefined, nodes: Record<str
   return { hrefs, dimensions, omitted: 0 }
 }
 
-export function clearCanvasAssetUrlCache(): void {
-  for (const timer of projectReleaseTimers.values())
-    window.clearTimeout(timer)
-  projectReleaseTimers.clear()
-  for (const cached of blobUrlCache.values())
-    URL.revokeObjectURL(cached.url)
-  blobUrlCache.clear()
-}
-
 function releaseProjectAssetUrls(projectId: string): void {
   projectReleaseTimers.delete(projectId)
   for (const [key, cached] of blobUrlCache) {

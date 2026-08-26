@@ -1,0 +1,22 @@
+[
+  {
+    "code": "first_charge.unique",
+    "severity": "error",
+    "field": "tierId"
+  },
+  {
+    "code": "first_charge.range",
+    "severity": "error",
+    "field": "chargeThreshold"
+  },
+  {
+    "code": "first_charge.reference",
+    "severity": "error",
+    "field": "rewardItemId"
+  },
+  {
+    "code": "first_charge.runtime",
+    "severity": "error",
+    "rule": "first-charge.first-tier-is-minimum"
+  }
+]

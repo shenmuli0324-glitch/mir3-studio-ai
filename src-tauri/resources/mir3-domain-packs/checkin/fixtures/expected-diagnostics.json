@@ -1,0 +1,22 @@
+[
+  {
+    "code": "checkin.unique",
+    "severity": "error",
+    "field": "cycleId,dayIndex"
+  },
+  {
+    "code": "checkin.range",
+    "severity": "error",
+    "field": "dayIndex"
+  },
+  {
+    "code": "checkin.reference",
+    "severity": "error",
+    "field": "rewardItemId"
+  },
+  {
+    "code": "checkin.runtime",
+    "severity": "error",
+    "rule": "checkin.days-contiguous"
+  }
+]

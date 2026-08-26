@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/equipment/resource.schema.json",
+  "title": "equipment.equipment-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "equipmentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slot": {
+      "type": "string",
+      "enum": [
+        "weapon",
+        "armor",
+        "helmet",
+        "ring",
+        "bracelet",
+        "necklace",
+        "boots"
+      ]
+    },
+    "baseItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "requiredLevel": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "durability": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    }
+  },
+  "required": [
+    "equipmentId",
+    "slot",
+    "baseItemId",
+    "requiredLevel",
+    "durability"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "equipmentId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "equipmentId",
+      "compareFields": [
+        "equipmentId",
+        "slot"
+      ]
+    },
+    "runtimeRule": "equipment.slot-matches-item-mode"
+  }
+}

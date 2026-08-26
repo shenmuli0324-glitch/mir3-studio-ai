@@ -1,9 +1,11 @@
 use crate::{DomainStore, DraftBinaryChangeInput, DraftPreview};
 use calamine::{Reader, Xls};
+use easyexcel_xls::biff8::{Biff8Cell, Biff8TemplatePackage, Biff8Value};
 use encoding_rs::GB18030;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use similar::{DiffTag, TextDiff};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
@@ -101,6 +103,36 @@ pub struct SafeXlsSheet {
     pub source_sha256: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeXlsCellUpdate {
+    pub sheet: String,
+    pub row: u32,
+    pub column: usize,
+    #[serde(default)]
+    pub expected_value: Option<String>,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeXlsDraftPatch {
+    pub relative_path: String,
+    pub draft_id: String,
+    pub expected_revision: i64,
+    pub expected_sha256: String,
+    pub updates: Vec<SafeXlsCellUpdate>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeXlsPatchResult {
+    pub draft_id: String,
+    pub revision: i64,
+    pub sha256: String,
+    pub preview: DraftPreview,
+}
+
 #[derive(Debug)]
 pub(crate) struct CachedXlsWorkbook {
     file_len: u64,
@@ -160,13 +192,10 @@ impl DomainStore {
                 "SAFE_FILE_SOURCE_CONFLICT: source changed since it was opened".to_string(),
             );
         }
-        let draft = match request.draft_id.as_deref() {
-            Some(id) => self.get_draft(project_id, id)?,
-            None => self.open_draft(
-                project_id,
-                &format!("安全编辑 {}", request.relative_path.replace('\\', "/")),
-            )?,
-        };
+        let draft_id = request.draft_id.as_deref().ok_or_else(|| {
+            "DOMAIN_DRAFT_SCOPE_REQUIRED: open and bind a domain Draft before editing".to_string()
+        })?;
+        let draft = self.get_draft(project_id, draft_id)?;
         if draft.revision != request.expected_revision {
             return Err(format!(
                 "DRAFT_REVISION_CONFLICT: expected {}, current {}",
@@ -255,7 +284,7 @@ impl DomainStore {
             relative_path: relative_path.replace('\\', "/"),
             sha256,
             sheets: sheet_meta,
-            read_only: true,
+            read_only: false,
         };
         let cached = CachedXlsWorkbook {
             file_len: metadata.file_len,
@@ -309,6 +338,103 @@ impl DomainStore {
             .ok_or_else(|| format!("SAFE_XLS_SHEET_NOT_FOUND: {sheet}"))
     }
 
+    /// 只在外置 Draft 中覆盖 BIFF8 单元格，并保留未修改记录和原单元格样式。
+    pub fn safe_xls_patch(
+        &self,
+        project_id: &str,
+        request: &SafeXlsDraftPatch,
+    ) -> Result<SafeXlsPatchResult, String> {
+        validate_xls_path(&request.relative_path)?;
+        if request.updates.is_empty() || request.updates.len() > 10_000 {
+            return Err("SAFE_XLS_UPDATE_COUNT_INVALID: expected 1..10000 updates".to_string());
+        }
+        let target = self.safe_file_target(project_id, &request.relative_path)?;
+        let source = fs::read(&target)
+            .map_err(|error| format!("SAFE_XLS_READ_FAILED: {}: {error}", target.display()))?;
+        ensure_ole2(&source)?;
+        let source_sha = hash_bytes(&source);
+        if source_sha != request.expected_sha256 {
+            return Err("SAFE_FILE_SOURCE_CONFLICT: XLS changed since it was opened".to_string());
+        }
+        let draft = self.get_draft(project_id, &request.draft_id)?;
+        if draft.revision != request.expected_revision {
+            return Err(format!(
+                "DRAFT_REVISION_CONFLICT: expected {}, current {}",
+                request.expected_revision, draft.revision
+            ));
+        }
+        let current = self
+            .draft_change_bytes(project_id, &draft.id, &request.relative_path)?
+            .unwrap_or_else(|| source.clone());
+        let mut current_reader = Xls::new(Cursor::new(current.clone()))
+            .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+        let mut package = Biff8TemplatePackage::from_bytes(&current)
+            .map_err(|error| format!("SAFE_XLS_TEMPLATE_UNSUPPORTED: {error}"))?;
+        let sheet_names = package.sheet_names().into_iter().collect::<BTreeSet<_>>();
+        let mut coordinates = BTreeSet::new();
+        for update in &request.updates {
+            if !sheet_names.contains(&update.sheet) {
+                return Err(format!("SAFE_XLS_SHEET_NOT_FOUND: {}", update.sheet));
+            }
+            if update.row as usize >= MAX_XLS_ROWS || update.column >= MAX_XLS_COLUMNS {
+                return Err(format!(
+                    "SAFE_XLS_CELL_RANGE_INVALID: {}!R{}C{}",
+                    update.sheet, update.row, update.column
+                ));
+            }
+            if !coordinates.insert((update.sheet.clone(), update.row, update.column)) {
+                return Err(format!(
+                    "SAFE_XLS_CELL_DUPLICATE: {}!R{}C{}",
+                    update.sheet, update.row, update.column
+                ));
+            }
+            if let Some(expected) = &update.expected_value {
+                let range = current_reader
+                    .worksheet_range(&update.sheet)
+                    .map_err(|error| format!("SAFE_XLS_SHEET_FAILED: {error}"))?;
+                let current_value = range
+                    .get_value((update.row, update.column as u32))
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                if &current_value != expected {
+                    return Err(format!(
+                        "SAFE_XLS_CELL_CONFLICT: {}!R{}C{} expected value does not match",
+                        update.sheet, update.row, update.column
+                    ));
+                }
+            }
+            let value = safe_xls_value(&update.value)?;
+            package
+                .set_cell(
+                    &update.sheet,
+                    update.row,
+                    update.column,
+                    &Biff8Cell::general(value),
+                )
+                .map_err(|error| format!("SAFE_XLS_WRITE_FAILED: {error}"))?;
+        }
+        let output = package
+            .to_bytes()
+            .map_err(|error| format!("SAFE_XLS_WRITE_FAILED: {error}"))?;
+        let output_sha = hash_bytes(&output);
+        let preview = self.patch_draft_bytes(
+            project_id,
+            &draft.id,
+            draft.revision,
+            &[DraftBinaryChangeInput {
+                path: request.relative_path.clone(),
+                content: output,
+                expected_sha256: Some(source_sha),
+            }],
+        )?;
+        Ok(SafeXlsPatchResult {
+            draft_id: draft.id,
+            revision: preview.draft.revision,
+            sha256: output_sha,
+            preview,
+        })
+    }
+
     fn cached_xls(
         &self,
         cache_key: &str,
@@ -346,6 +472,28 @@ impl DomainStore {
             return Err("SAFE_FILE_PATH_OUTSIDE: file is outside the active project".to_string());
         }
         Ok(canonical)
+    }
+}
+
+fn safe_xls_value(value: &serde_json::Value) -> Result<Biff8Value, String> {
+    match value {
+        serde_json::Value::Null => Ok(Biff8Value::Blank),
+        serde_json::Value::Bool(value) => Ok(Biff8Value::Bool(*value)),
+        serde_json::Value::Number(value) => value
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .map(Biff8Value::Number)
+            .ok_or_else(|| "SAFE_XLS_VALUE_INVALID: number must be finite".to_string()),
+        serde_json::Value::String(value) => {
+            if value.starts_with('=') {
+                return Err(
+                    "SAFE_XLS_FORMULA_DENIED: formulas are not accepted by generic operations"
+                        .to_string(),
+                );
+            }
+            Ok(Biff8Value::Text(value.clone()))
+        }
+        _ => Err("SAFE_XLS_VALUE_INVALID: expected string, number, boolean or null".to_string()),
     }
 }
 
@@ -756,6 +904,7 @@ fn hash_bytes(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use easyexcel_xls::biff8::{Biff8Book, Biff8Sheet};
 
     #[test]
     fn gb18030_and_crlf_are_preserved_byte_for_byte_outside_edit() {
@@ -874,7 +1023,8 @@ mod tests {
         let project_root = base.join("项目/木立");
         fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
         fs::create_dir_all(project_root.join("引擎")).unwrap();
-        let target = project_root.join("客户端/dev/配置.txt");
+        let target = project_root.join("客户端/dev/Quest/任务配置.txt");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
         let (encoded, _, had_errors) = GB18030.encode("名称=木立\r\n等级=1\r\n");
         assert!(!had_errors);
         let original = encoded.into_owned();
@@ -883,14 +1033,18 @@ mod tests {
         let store = DomainStore::new(base.join("data")).unwrap();
         let project = store.import_project(&project_root).unwrap();
         let opened = store
-            .safe_text_open(&project.id, "客户端/dev/配置.txt", None)
+            .safe_text_open(&project.id, "客户端/dev/Quest/任务配置.txt", None)
+            .unwrap();
+        let draft = store.open_draft(&project.id, "安全编辑任务配置").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.0.0", None)
             .unwrap();
         let result = store
             .safe_text_patch(
                 &project.id,
                 &SafeTextPatch {
-                    relative_path: "客户端/dev/配置.txt".to_string(),
-                    draft_id: None,
+                    relative_path: "客户端/dev/Quest/任务配置.txt".to_string(),
+                    draft_id: Some(draft.id),
                     expected_revision: 0,
                     expected_sha256: opened.sha256,
                     original_content: opened.content,
@@ -915,6 +1069,104 @@ mod tests {
         assert_eq!(detected.encoding, TextEncoding::Gb18030);
         assert_eq!(detected.newline.as_deref(), Some("\r\n"));
         assert_eq!(detected.content, "名称=木立\r\n等级=2\r\n");
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn safe_patch_without_scoped_draft_fails_without_creating_one() {
+        let base =
+            std::env::temp_dir().join(format!("mir3-safe-file-unscoped-{}", std::process::id()));
+        let project_root = base.join("项目/木立");
+        fs::create_dir_all(project_root.join("客户端/dev/Quest")).unwrap();
+        fs::create_dir_all(project_root.join("引擎")).unwrap();
+        let relative_path = "客户端/dev/Quest/任务配置.txt";
+        fs::write(project_root.join(relative_path), "等级=1\r\n").unwrap();
+
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let opened = store
+            .safe_text_open(&project.id, relative_path, None)
+            .unwrap();
+        let error = store
+            .safe_text_patch(
+                &project.id,
+                &SafeTextPatch {
+                    relative_path: relative_path.to_string(),
+                    draft_id: None,
+                    expected_revision: 0,
+                    expected_sha256: opened.sha256,
+                    original_content: opened.content,
+                    new_content: "等级=2\r\n".to_string(),
+                    newline: None,
+                },
+            )
+            .unwrap_err();
+
+        assert!(error.starts_with("DOMAIN_DRAFT_SCOPE_REQUIRED:"));
+        assert!(store.list_drafts(&project.id).unwrap().is_empty());
+        assert_eq!(
+            fs::read_to_string(project_root.join(relative_path)).unwrap(),
+            "等级=1\r\n"
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn xls_cell_update_writes_only_the_scoped_draft() {
+        let base = std::env::temp_dir().join(format!("mir3-safe-xls-{}", std::process::id()));
+        let project_root = base.join("项目/木立");
+        let target = project_root.join("引擎/Mir200/Envir/Shop/商品表.xls");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
+        let mut sheet = Biff8Sheet::new("商品");
+        sheet
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("旧价格".to_string())),
+            )
+            .unwrap();
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        let original = book.to_cfb_bytes().unwrap();
+        fs::write(&target, &original).unwrap();
+
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let opened = store
+            .safe_xls_open(&project.id, "引擎/Mir200/Envir/Shop/商品表.xls")
+            .unwrap();
+        let draft = store.open_draft(&project.id, "修改商品价格").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.0.0", None)
+            .unwrap();
+        let result = store
+            .safe_xls_patch(
+                &project.id,
+                &SafeXlsDraftPatch {
+                    relative_path: "引擎/Mir200/Envir/Shop/商品表.xls".to_string(),
+                    draft_id: draft.id.clone(),
+                    expected_revision: 0,
+                    expected_sha256: opened.sha256,
+                    updates: vec![SafeXlsCellUpdate {
+                        sheet: "商品".to_string(),
+                        row: 0,
+                        column: 0,
+                        expected_value: Some("旧价格".to_string()),
+                        value: serde_json::json!("新价格"),
+                    }],
+                },
+            )
+            .unwrap();
+        assert_eq!(result.revision, 1);
+        assert_eq!(fs::read(&target).unwrap(), original);
+        let draft_bytes = store
+            .draft_change_bytes(&project.id, &draft.id, "引擎/Mir200/Envir/Shop/商品表.xls")
+            .unwrap()
+            .unwrap();
+        let mut parsed = Xls::new(Cursor::new(draft_bytes)).unwrap();
+        let range = parsed.worksheet_range("商品").unwrap();
+        assert_eq!(range.get_value((0, 0)).unwrap().to_string(), "新价格");
         fs::remove_dir_all(base).ok();
     }
 }

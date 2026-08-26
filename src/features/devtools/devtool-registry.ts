@@ -47,7 +47,7 @@ export const DEV_TOOL_CATEGORIES = [
 ] as const
 
 export type DevToolCategory = typeof DEV_TOOL_CATEGORIES[number]
-export type DevToolStatus = 'developing' | 'planned'
+export type DevToolStatus = 'ready'
 export type DevToolIcon = ComponentType<{ className?: string }>
 
 export interface DevToolDefinition {
@@ -59,7 +59,7 @@ export interface DevToolDefinition {
 }
 
 export const DEV_TOOLS = [
-  tool('map', 1, 'resources', Geo, 'developing'),
+  tool('map', 1, 'resources', Geo),
   tool('npc', 2, 'resources', Person),
   tool('monster', 3, 'resources', Skull),
   tool('equipment', 4, 'resources', Shield),
@@ -120,7 +120,7 @@ function tool<const TId extends string>(
   order: number,
   category: DevToolCategory,
   icon: DevToolIcon,
-  status: DevToolStatus = 'planned',
+  status: DevToolStatus = 'ready',
 ): DevToolDefinition & { id: TId } {
   return { id, order, category, icon, status }
 }

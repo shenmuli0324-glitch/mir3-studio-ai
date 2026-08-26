@@ -2,9 +2,13 @@
 
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
-    Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
-    Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult, SafeXlsSheet, SafeXlsWorkbook,
-    Snapshot, WorkspaceDirectory,
+    CompositeApplyResult, CompositeDraftConfirmation, DomainDependencyGraph, DomainFileQuery,
+    DomainFileRecord, DomainManifest, DomainMemory, DomainResourceRecord, DomainSystemDescription,
+    DomainValidationReport, Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
+    KnowledgeRecord, KnowledgeStatus, LegacyDraftCloneRequest, Mir3Project, SafeTextOpen,
+    SafeTextPatch, SafeTextPatchResult, SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet,
+    SafeXlsWorkbook, Snapshot, SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability,
+    WorkspaceDirectory,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -157,11 +161,314 @@ pub fn index_search(
 }
 
 #[tauri::command]
+pub fn domain_system_list(
+    service: State<'_, ProjectService>,
+) -> Result<Vec<DomainManifest>, String> {
+    service.store().list_domain_systems()
+}
+
+#[tauri::command]
+pub fn domain_system_describe(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+) -> Result<DomainSystemDescription, String> {
+    service
+        .store()
+        .describe_domain_system(&project_id, &system_id)
+}
+
+#[tauri::command]
+pub fn domain_file_query(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    query: DomainFileQuery,
+) -> Result<Vec<DomainFileRecord>, String> {
+    service
+        .store()
+        .query_domain_files(&project_id, &system_id, &query)
+}
+
+#[tauri::command]
+pub fn domain_unclaimed_file_query(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    query: DomainFileQuery,
+) -> Result<Vec<DomainFileRecord>, String> {
+    service
+        .store()
+        .query_unclaimed_domain_files(&project_id, &query)
+}
+
+#[tauri::command]
+pub fn domain_resource_get(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    resource_id: String,
+) -> Result<DomainResourceRecord, String> {
+    service
+        .store()
+        .get_domain_resource(&project_id, &system_id, &resource_id)
+}
+
+#[tauri::command]
+pub fn domain_dependency_resolve(
+    service: State<'_, ProjectService>,
+    system_id: String,
+) -> Result<DomainDependencyGraph, String> {
+    service.store().resolve_domain_dependencies(&system_id)
+}
+
+#[tauri::command]
+pub fn domain_validate(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+) -> Result<DomainValidationReport, String> {
+    service
+        .store()
+        .validate_domain_system(&project_id, &system_id)
+}
+
+#[tauri::command]
+pub fn task_receipt_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: Option<String>,
+) -> Result<Vec<TaskReceipt>, String> {
+    service
+        .store()
+        .list_task_receipts(&project_id, system_id.as_deref())
+}
+
+#[tauri::command]
+pub fn task_receipt_save(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    receipt: TaskReceipt,
+) -> Result<TaskReceipt, String> {
+    service.store().save_task_receipt(&project_id, &receipt)
+}
+
+#[tauri::command]
+pub fn user_capability_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: Option<String>,
+) -> Result<Vec<UserCapability>, String> {
+    service
+        .store()
+        .list_user_capabilities(&project_id, system_id.as_deref())
+}
+
+#[tauri::command]
+pub fn user_capability_save(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    mut capability: UserCapability,
+) -> Result<UserCapability, String> {
+    capability.scope = "project".to_string();
+    capability.status = "draft".to_string();
+    if capability.version.trim().is_empty() {
+        capability.version = "0.1.0".to_string();
+    }
+    service
+        .store()
+        .save_user_capability(&project_id, &capability)
+}
+
+#[tauri::command]
+pub fn user_capability_get(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    capability_id: String,
+    version: Option<String>,
+) -> Result<UserCapability, String> {
+    service
+        .store()
+        .get_user_capability(&project_id, &capability_id, version.as_deref())
+}
+
+#[tauri::command]
+pub fn user_capability_set_status(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    capability_id: String,
+    version: String,
+    status: String,
+    confirmed: bool,
+) -> Result<UserCapability, String> {
+    if status == "active" && !confirmed {
+        return Err(
+            "CAPABILITY_ACTIVATION_CONFIRMATION_REQUIRED: review and confirm before activation"
+                .to_string(),
+        );
+    }
+    service
+        .store()
+        .set_user_capability_status(&project_id, &capability_id, &version, &status)
+}
+
+#[tauri::command]
+pub fn domain_memory_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    active_only: bool,
+) -> Result<Vec<DomainMemory>, String> {
+    service
+        .store()
+        .list_domain_memories(&project_id, &system_id, active_only)
+}
+
+#[tauri::command]
+pub fn domain_memory_save(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    mut memory: DomainMemory,
+) -> Result<DomainMemory, String> {
+    memory.scope = "project".to_string();
+    memory.status = "candidate".to_string();
+    service.store().save_domain_memory(&project_id, &memory)
+}
+
+#[tauri::command]
+pub fn memory_candidate_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: Option<String>,
+) -> Result<Vec<DomainMemory>, String> {
+    service
+        .store()
+        .list_memory_candidates(&project_id, system_id.as_deref())
+}
+
+#[tauri::command]
+pub fn memory_candidate_activate(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    memory_id: String,
+    confirmed: bool,
+) -> Result<DomainMemory, String> {
+    if !confirmed {
+        return Err(
+            "MEMORY_ACTIVATION_CONFIRMATION_REQUIRED: review the proposed memory first".to_string(),
+        );
+    }
+    service
+        .store()
+        .set_domain_memory_status(&project_id, &memory_id, "active")
+}
+
+#[tauri::command]
+pub fn memory_candidate_contest(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    memory_id: String,
+) -> Result<DomainMemory, String> {
+    service
+        .store()
+        .set_domain_memory_status(&project_id, &memory_id, "contested")
+}
+
+#[tauri::command]
+pub fn memory_candidate_revoke(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    memory_id: String,
+) -> Result<DomainMemory, String> {
+    service
+        .store()
+        .set_domain_memory_status(&project_id, &memory_id, "revoked")
+}
+
+#[tauri::command]
+pub fn system_session_get(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    task_id: String,
+) -> Result<Option<SystemSessionBinding>, String> {
+    service.store().get_system_session(&project_id, &task_id)
+}
+
+#[tauri::command]
+pub fn system_session_bind(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    binding: SystemSessionBinding,
+) -> Result<SystemSessionBinding, String> {
+    service.store().bind_system_session(&project_id, &binding)
+}
+
+#[tauri::command]
+pub fn task_scope_issue(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    task_id: String,
+    read_systems: Vec<String>,
+    write_systems: Vec<String>,
+    draft_ids: Vec<String>,
+    plugin_versions: serde_json::Value,
+    expires_at: i64,
+) -> Result<TaskScopeLease, String> {
+    service.store().issue_task_scope(
+        &project_id,
+        &task_id,
+        &read_systems,
+        &write_systems,
+        &draft_ids,
+        plugin_versions,
+        expires_at,
+    )
+}
+
+#[tauri::command]
+pub fn task_scope_revoke(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    token: String,
+) -> Result<(), String> {
+    service.store().revoke_task_scope(&project_id, &token)
+}
+
+#[tauri::command]
 pub fn draft_list(
     service: State<'_, ProjectService>,
     project_id: String,
 ) -> Result<Vec<Draft>, String> {
     service.store().list_drafts(&project_id)
+}
+
+/// 为 Studio 人工编辑创建并绑定当前领域版本的外置 Draft。
+#[tauri::command]
+pub fn domain_draft_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    plugin_version: String,
+    intent: String,
+) -> Result<Draft, String> {
+    let description = service
+        .store()
+        .describe_domain_system(&project_id, &system_id)?;
+    if description.manifest.version != plugin_version {
+        return Err(format!(
+            "DOMAIN_DRAFT_PLUGIN_VERSION_MISMATCH: expected {}, got {plugin_version}",
+            description.manifest.version
+        ));
+    }
+    let draft = service.store().open_draft(&project_id, &intent)?;
+    if let Err(error) =
+        service
+            .store()
+            .bind_draft_domain(&project_id, &draft.id, &system_id, &plugin_version, None)
+    {
+        let _ = service.store().discard_draft(&project_id, &draft.id);
+        return Err(error);
+    }
+    Ok(draft)
 }
 
 #[tauri::command]
@@ -174,6 +481,16 @@ pub fn draft_preview(
 }
 
 #[tauri::command]
+pub fn draft_legacy_clone(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    request: LegacyDraftCloneRequest,
+) -> Result<DraftConfirmation, String> {
+    let preview = service.store().clone_legacy_draft(&project_id, &request)?;
+    service.create_confirmation(&project_id, &preview.draft.id)
+}
+
+#[tauri::command]
 pub fn draft_apply(
     service: State<'_, ProjectService>,
     project_id: String,
@@ -181,12 +498,68 @@ pub fn draft_apply(
     confirmation_token: String,
 ) -> Result<Snapshot, String> {
     let confirmation = service.consume_confirmation(&project_id, &draft_id, &confirmation_token)?;
-    service.store().apply_draft(
+    let snapshot = service.store().apply_draft(
         &project_id,
         &draft_id,
         confirmation.revision,
         &confirmation.diff_hash,
-    )
+    )?;
+    if let Err(error) = service.store().record_applied_draft_receipt(
+        &project_id,
+        &draft_id,
+        &confirmation.diff_hash,
+        &snapshot,
+    ) {
+        log::error!("Task receipt write failed after applying {draft_id}: {error}");
+    }
+    Ok(snapshot)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeDraftApplyInput {
+    pub draft_id: String,
+    pub confirmation_token: String,
+}
+
+#[tauri::command]
+pub fn draft_composite_apply(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    composite_id: String,
+    drafts: Vec<CompositeDraftApplyInput>,
+) -> Result<CompositeApplyResult, String> {
+    let mut confirmations = Vec::with_capacity(drafts.len());
+    for draft in drafts {
+        let confirmation = service.consume_confirmation(
+            &project_id,
+            &draft.draft_id,
+            &draft.confirmation_token,
+        )?;
+        confirmations.push(CompositeDraftConfirmation {
+            draft_id: draft.draft_id,
+            expected_revision: confirmation.revision,
+            expected_diff_hash: confirmation.diff_hash,
+        });
+    }
+    let result =
+        service
+            .store()
+            .apply_composite_drafts(&project_id, &composite_id, &confirmations)?;
+    for confirmation in &confirmations {
+        if let Err(error) = service.store().record_applied_draft_receipt(
+            &project_id,
+            &confirmation.draft_id,
+            &confirmation.expected_diff_hash,
+            &result.snapshot,
+        ) {
+            log::error!(
+                "Task receipt write failed after composite apply {}: {error}",
+                confirmation.draft_id
+            );
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -263,8 +636,13 @@ pub fn safe_xls_sheet_read(
 }
 
 #[tauri::command]
-pub fn safe_xls_patch() -> Result<(), String> {
-    Err("SAFE_XLS_READ_ONLY: structured XLS Draft editing is planned for plugin 0.2.0".to_string())
+pub fn safe_xls_patch(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    operation: SafeXlsDraftPatch,
+) -> Result<SafeXlsPatchResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().safe_xls_patch(&project_id, &operation)
 }
 
 #[derive(Debug, Serialize)]
@@ -279,8 +657,8 @@ pub struct SafeFileStatus {
 pub fn safe_file_status() -> SafeFileStatus {
     SafeFileStatus {
         available: true,
-        editable_extensions: vec!["txt", "lua"],
-        read_only_extensions: vec!["xls"],
+        editable_extensions: vec!["txt", "lua", "xls"],
+        read_only_extensions: Vec::new(),
     }
 }
 

@@ -1,0 +1,733 @@
+{
+  "kind": "domain",
+  "systemId": "checkin",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "activities",
+  "complexity": 1,
+  "renderer": "calendar-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "checkin",
+      "sign",
+      "签到"
+    ],
+    "ownedSelectors": [
+      "checkin",
+      "sign",
+      "签到"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "vip"
+      },
+      {
+        "systemId": "limited_event"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "checkin",
+        "caseSensitive": false
+      },
+      {
+        "contains": "sign",
+        "caseSensitive": false
+      },
+      {
+        "contains": "签到",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "checkin.checkin-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(checkin:cycleId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "checkin.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "rewardItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "cycleId",
+      "dayIndex"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "calendar-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "calendar-v1",
+    "safePrimitive": "timeline"
+  },
+  "dependencies": [
+    "item",
+    "vip",
+    "limited_event"
+  ],
+  "operations": [
+    {
+      "id": "inspect-checkin",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-checkin"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "inspect-checkin",
+          "operation": "inspect-checkin"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "fill-checkin-rewards",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "fill-checkin-rewards"
+          },
+          "cycleResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstSlot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366
+          },
+          "lastSlot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366
+          },
+          "rewardTemplate": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "dayIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "vipMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "cycleResourceId",
+          "firstSlot",
+          "lastSlot",
+          "rewardTemplate",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "fill-checkin-rewards"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-checkin-cycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-checkin-cycle"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "dayIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "vipMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-checkin-cycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-checkin",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-checkin"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "inspect-checkin",
+          "operation": "inspect-checkin"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "fill-checkin-rewards",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "fill-checkin-rewards"
+          },
+          "cycleResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstSlot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366
+          },
+          "lastSlot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366
+          },
+          "rewardTemplate": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "dayIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "vipMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "cycleResourceId",
+          "firstSlot",
+          "lastSlot",
+          "rewardTemplate",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "fill-checkin-rewards"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-checkin-cycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-checkin-cycle"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "dayIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "vipMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-checkin-cycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "checkin.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "checkin.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "checkin-record"
+    },
+    {
+      "id": "checkin.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "cycleId",
+        "dayIndex"
+      ],
+      "scope": "checkin.project"
+    },
+    {
+      "id": "checkin.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "dayIndex",
+          "minimum": 1,
+          "maximum": 31
+        },
+        {
+          "field": "rewardCount",
+          "minimum": 1,
+          "maximum": 999999
+        },
+        {
+          "field": "vipMultiplier",
+          "minimum": 1,
+          "maximum": 100
+        }
+      ]
+    },
+    {
+      "id": "checkin.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "rewardItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "checkin.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "cycleId",
+      "compareFields": [
+        "cycleId",
+        "dayIndex"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "checkin.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "checkin.days-contiguous",
+      "severity": "error",
+      "target": "checkin.checkin-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "systemId": "recycle",
+  "fixture": "valid",
+  "records": [
+    {
+      "ruleId": "recycle-ruleId-1",
+      "itemType": "equipment",
+      "minimumQuality": 1,
+      "maximumQuality": 1,
+      "currencyItemId": "item:fixture-1",
+      "returnValue": 1
+    },
+    {
+      "ruleId": "recycle-ruleId-2",
+      "itemType": "material",
+      "minimumQuality": 2,
+      "maximumQuality": 2,
+      "currencyItemId": "item:fixture-2",
+      "returnValue": 2
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

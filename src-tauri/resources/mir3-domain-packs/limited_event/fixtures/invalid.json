@@ -1,0 +1,27 @@
+{
+  "systemId": "limited_event",
+  "fixture": "invalid",
+  "records": [
+    {
+      "eventId": "limited_event-eventId-1",
+      "startEpochSeconds": 4102444801,
+      "endEpochSeconds": 2,
+      "eventMapId": "map:missing",
+      "questId": "quest:fixture-1"
+    },
+    {
+      "eventId": "limited_event-eventId-1",
+      "startEpochSeconds": 2,
+      "endEpochSeconds": 3,
+      "eventMapId": "map:fixture-2",
+      "questId": "quest:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "limited-event.start-before-end",
+      "expected": false
+    }
+  ]
+}

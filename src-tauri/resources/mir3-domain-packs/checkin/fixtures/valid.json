@@ -1,0 +1,26 @@
+{
+  "systemId": "checkin",
+  "fixture": "valid",
+  "records": [
+    {
+      "cycleId": "checkin-cycleId-1",
+      "dayIndex": 2,
+      "rewardItemId": "item:fixture-1",
+      "rewardCount": 2,
+      "vipMultiplier": 2
+    },
+    {
+      "cycleId": "checkin-cycleId-2",
+      "dayIndex": 3,
+      "rewardItemId": "item:fixture-2",
+      "rewardCount": 3,
+      "vipMultiplier": 3
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

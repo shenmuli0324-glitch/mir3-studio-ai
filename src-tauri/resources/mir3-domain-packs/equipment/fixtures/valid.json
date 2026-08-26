@@ -1,0 +1,26 @@
+{
+  "systemId": "equipment",
+  "fixture": "valid",
+  "records": [
+    {
+      "equipmentId": "equipment-equipmentId-1",
+      "slot": "weapon",
+      "baseItemId": "item:fixture-1",
+      "requiredLevel": 1,
+      "durability": 2
+    },
+    {
+      "equipmentId": "equipment-equipmentId-2",
+      "slot": "armor",
+      "baseItemId": "item:fixture-2",
+      "requiredLevel": 2,
+      "durability": 3
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

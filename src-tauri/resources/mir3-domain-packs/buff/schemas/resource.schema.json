@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/buff/resource.schema.json",
+  "title": "buff.buff-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "buffId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stackMode": {
+      "type": "string",
+      "enum": [
+        "replace",
+        "refresh",
+        "stack",
+        "independent"
+      ]
+    },
+    "maximumStacks": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999
+    },
+    "durationMilliseconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "effectSkillId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "skill"
+    }
+  },
+  "required": [
+    "buffId",
+    "stackMode",
+    "maximumStacks",
+    "durationMilliseconds",
+    "effectSkillId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "buffId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "buffId",
+      "compareFields": [
+        "buffId",
+        "stackMode"
+      ]
+    },
+    "runtimeRule": "buff.stack-mode-capacity-compatible"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/ranking/resource.schema.json",
+  "title": "ranking.ranking-board-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "boardId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metric": {
+      "type": "string",
+      "enum": [
+        "level",
+        "power",
+        "guild",
+        "wealth",
+        "season-points"
+      ]
+    },
+    "cycleSeconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 31536000
+    },
+    "rewardItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "seasonId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "season"
+    }
+  },
+  "required": [
+    "boardId",
+    "metric",
+    "cycleSeconds",
+    "rewardItemId",
+    "seasonId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "boardId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "boardId",
+      "compareFields": [
+        "boardId",
+        "metric"
+      ]
+    },
+    "runtimeRule": "ranking.settlement-within-cycle"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "systemId": "vip",
+  "fixture": "valid",
+  "records": [
+    {
+      "vipLevel": 1,
+      "requiredPoints": 1,
+      "shopDiscountBasisPoints": 1,
+      "grantedTitleId": "title:fixture-1"
+    },
+    {
+      "vipLevel": 2,
+      "requiredPoints": 2,
+      "shopDiscountBasisPoints": 2,
+      "grantedTitleId": "title:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "title": [
+      "title:fixture-1",
+      "title:fixture-2"
+    ]
+  }
+}

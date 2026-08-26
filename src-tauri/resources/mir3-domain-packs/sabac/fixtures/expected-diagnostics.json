@@ -1,0 +1,22 @@
+[
+  {
+    "code": "sabac.unique",
+    "severity": "error",
+    "field": "phaseId"
+  },
+  {
+    "code": "sabac.range",
+    "severity": "error",
+    "field": "startMinute"
+  },
+  {
+    "code": "sabac.reference",
+    "severity": "error",
+    "field": "battleMapId"
+  },
+  {
+    "code": "sabac.runtime",
+    "severity": "error",
+    "rule": "sabac.phases-ordered-and-regions-contained"
+  }
+]

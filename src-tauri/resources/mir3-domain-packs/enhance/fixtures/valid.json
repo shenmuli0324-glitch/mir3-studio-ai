@@ -1,0 +1,26 @@
+{
+  "systemId": "enhance",
+  "fixture": "valid",
+  "records": [
+    {
+      "enhanceTier": 2,
+      "equipmentClass": "weapon",
+      "successRateBasisPoints": 1,
+      "materialItemId": "item:fixture-1",
+      "failureMode": "none"
+    },
+    {
+      "enhanceTier": 3,
+      "equipmentClass": "armor",
+      "successRateBasisPoints": 2,
+      "materialItemId": "item:fixture-2",
+      "failureMode": "downgrade"
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

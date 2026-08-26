@@ -1,0 +1,898 @@
+{
+  "kind": "domain",
+  "systemId": "crafting",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "equipment",
+  "complexity": 3,
+  "renderer": "graph-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "craft",
+      "compose",
+      "recipe",
+      "合成",
+      "配方"
+    ],
+    "ownedSelectors": [
+      "craft",
+      "compose",
+      "recipe",
+      "合成",
+      "配方"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "equipment"
+      },
+      {
+        "systemId": "shop"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "craft",
+        "caseSensitive": false
+      },
+      {
+        "contains": "compose",
+        "caseSensitive": false
+      },
+      {
+        "contains": "recipe",
+        "caseSensitive": false
+      },
+      {
+        "contains": "合成",
+        "caseSensitive": false
+      },
+      {
+        "contains": "配方",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "crafting.recipe-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(crafting:recipeId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "crafting.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "outputItemId",
+        "systemId": "item",
+        "required": true
+      },
+      {
+        "field": "materialItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "recipeId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "graph-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "graph-v1",
+    "safePrimitive": "graph"
+  },
+  "dependencies": [
+    "item",
+    "equipment",
+    "shop"
+  ],
+  "operations": [
+    {
+      "id": "inspect-recipe",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-recipe"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-recipe",
+          "operation": "inspect-recipe"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-recipe",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-recipe"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "outputCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "materialItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "materialCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-recipe"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-recipe-material",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-recipe-material"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "outputItemId",
+              "materialItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-recipe-material"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "scale-recipe",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "scale-recipe"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "rounding": {
+            "enum": [
+              "nearest",
+              "floor",
+              "ceil"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "outputCount",
+                "materialCount"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "factor",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "scale-recipe"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-recipe",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-recipe"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "inspect-recipe",
+          "operation": "inspect-recipe"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-recipe",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-recipe"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "outputCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "materialItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "materialCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-recipe"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-recipe-material",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-recipe-material"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "outputItemId",
+              "materialItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-recipe-material"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "scale-recipe",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "scale-recipe"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "rounding": {
+            "enum": [
+              "nearest",
+              "floor",
+              "ceil"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "outputCount",
+                "materialCount"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "factor",
+          "fields",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "scale-recipe"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "crafting.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "crafting.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "recipe-record"
+    },
+    {
+      "id": "crafting.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "recipeId"
+      ],
+      "scope": "crafting.project"
+    },
+    {
+      "id": "crafting.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "outputCount",
+          "minimum": 1,
+          "maximum": 999999
+        },
+        {
+          "field": "materialCount",
+          "minimum": 1,
+          "maximum": 999999
+        }
+      ]
+    },
+    {
+      "id": "crafting.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "outputItemId",
+          "systemId": "item",
+          "required": true
+        },
+        {
+          "field": "materialItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "crafting.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "recipeId",
+      "compareFields": [
+        "recipeId",
+        "outputItemId"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "crafting.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "crafting.no-self-consuming-cycle",
+      "severity": "error",
+      "target": "crafting.recipe-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

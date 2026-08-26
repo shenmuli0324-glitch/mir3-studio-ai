@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/online_reward/resource.schema.json",
+  "title": "online_reward.online-reward-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rewardId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 604800
+    },
+    "rewardItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "rewardCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999999
+    },
+    "minimumVipLevel": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 99
+    }
+  },
+  "required": [
+    "rewardId",
+    "durationSeconds",
+    "rewardItemId",
+    "rewardCount",
+    "minimumVipLevel"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "rewardId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "rewardId",
+      "compareFields": [
+        "rewardId",
+        "durationSeconds"
+      ]
+    },
+    "runtimeRule": "online-reward.duration-monotonic"
+  }
+}

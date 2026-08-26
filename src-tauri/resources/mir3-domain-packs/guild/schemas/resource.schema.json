@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/guild/resource.schema.json",
+  "title": "guild.guild-level-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "guildLevel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 99
+    },
+    "requiredContribution": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2000000000
+    },
+    "maximumMembers": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "rankingBoardId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "ranking"
+    }
+  },
+  "required": [
+    "guildLevel",
+    "requiredContribution",
+    "maximumMembers",
+    "rankingBoardId"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "guildLevel"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "guildLevel",
+      "compareFields": [
+        "guildLevel",
+        "requiredContribution"
+      ]
+    },
+    "runtimeRule": "guild.members-and-contribution-monotonic"
+  }
+}

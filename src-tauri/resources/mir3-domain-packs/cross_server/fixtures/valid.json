@@ -1,0 +1,30 @@
+{
+  "systemId": "cross_server",
+  "fixture": "valid",
+  "records": [
+    {
+      "routeId": "cross_server-routeId-1",
+      "sourceShard": "cross_server-sourceShard-1",
+      "targetShard": "cross_server-targetShard-1",
+      "minimumEngineVersion": "1.8",
+      "maximumEngineVersion": "1.8",
+      "maximumConcurrentPlayers": 2,
+      "seasonId": "season:fixture-1"
+    },
+    {
+      "routeId": "cross_server-routeId-2",
+      "sourceShard": "cross_server-sourceShard-2",
+      "targetShard": "cross_server-targetShard-2",
+      "minimumEngineVersion": "2.0",
+      "maximumEngineVersion": "2.0",
+      "maximumConcurrentPlayers": 3,
+      "seasonId": "season:fixture-2"
+    }
+  ],
+  "referenceCatalog": {
+    "season": [
+      "season:fixture-1",
+      "season:fixture-2"
+    ]
+  }
+}

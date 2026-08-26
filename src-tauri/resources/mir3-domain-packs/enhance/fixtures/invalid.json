@@ -1,0 +1,27 @@
+{
+  "systemId": "enhance",
+  "fixture": "invalid",
+  "records": [
+    {
+      "enhanceTier": 100,
+      "equipmentClass": "weapon",
+      "successRateBasisPoints": 1,
+      "materialItemId": "item:missing",
+      "failureMode": "none"
+    },
+    {
+      "enhanceTier": 100,
+      "equipmentClass": "weapon",
+      "successRateBasisPoints": 2,
+      "materialItemId": "item:fixture-2",
+      "failureMode": "downgrade"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "enhance.probability-budget-valid",
+      "expected": false
+    }
+  ]
+}

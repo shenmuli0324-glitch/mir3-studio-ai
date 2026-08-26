@@ -1,0 +1,22 @@
+[
+  {
+    "code": "cross_server.unique",
+    "severity": "error",
+    "field": "routeId"
+  },
+  {
+    "code": "cross_server.range",
+    "severity": "error",
+    "field": "maximumConcurrentPlayers"
+  },
+  {
+    "code": "cross_server.reference",
+    "severity": "error",
+    "field": "seasonId"
+  },
+  {
+    "code": "cross_server.runtime",
+    "severity": "error",
+    "rule": "cross-server.route-and-engine-range-compatible"
+  }
+]

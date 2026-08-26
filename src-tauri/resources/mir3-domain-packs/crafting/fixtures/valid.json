@@ -1,0 +1,26 @@
+{
+  "systemId": "crafting",
+  "fixture": "valid",
+  "records": [
+    {
+      "recipeId": "crafting-recipeId-1",
+      "outputItemId": "item:fixture-1",
+      "outputCount": 2,
+      "materialItemId": "item:fixture-1",
+      "materialCount": 2
+    },
+    {
+      "recipeId": "crafting-recipeId-2",
+      "outputItemId": "item:fixture-2",
+      "outputCount": 3,
+      "materialItemId": "item:fixture-2",
+      "materialCount": 3
+    }
+  ],
+  "referenceCatalog": {
+    "item": [
+      "item:fixture-1",
+      "item:fixture-2"
+    ]
+  }
+}

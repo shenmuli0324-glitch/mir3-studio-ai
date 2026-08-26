@@ -36,7 +36,7 @@ export function DevToolCard({ tool, onOpen }: {
 
 function statusClass(status: DevToolDefinition['status']): string {
   const base = 'rounded-full border px-2 py-1 text-[10px] font-medium'
-  if (status === 'developing')
+  if (status === 'ready')
     return `${base} border-accent/30 bg-accent/10 text-accent`
   return `${base} border-line bg-panel2 text-muted`
 }

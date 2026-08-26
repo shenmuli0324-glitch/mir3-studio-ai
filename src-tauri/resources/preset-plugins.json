@@ -1,16 +1,4 @@
 [
-
-  {
-    "id": "mir3-safe-files",
-    "spec": "bundled:mir3-safe-files-plugin",
-    "package": "@mir3-studio/dsh-mir3-safe-files",
-    "name": "MIR3 Safe Files",
-    "description": "Optional Draft-only TXT/Lua editor and read-only BIFF XLS viewer. Disable or uninstall it to return to the native Harness file editor.",
-    "repoUrl": "https://github.com/shenmuli0324-glitch/mir3-studio-ai",
-    "recommended": false,
-    "defaultChecked": false
-  },
-
   {
     "id": "dsh-win-terminal-inspector",
     "spec": "github:clearkurt/dsh-win-terminal-inspector",

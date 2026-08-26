@@ -1,0 +1,952 @@
+{
+  "kind": "domain",
+  "systemId": "equipment",
+  "version": "1.0.0",
+  "kernelApiRange": "^1.0.0",
+  "supportedEngineRange": "*",
+  "manifestSchemaVersion": 1,
+  "resourceSchemaVersion": 1,
+  "capabilitySchemaVersion": 1,
+  "memorySchemaVersion": 1,
+  "category": "resources",
+  "complexity": 2,
+  "renderer": "table-v1",
+  "documentation": {
+    "readme": "README.md",
+    "changelog": "CHANGELOG.md"
+  },
+  "requiredKernelPrimitives": [
+    "resource-index-v1",
+    "draft-v1",
+    "diff-v1",
+    "validation-v1",
+    "capability-v1"
+  ],
+  "fileProjection": {
+    "keywords": [
+      "equipment",
+      "equip",
+      "装备"
+    ],
+    "ownedSelectors": [
+      "equipment",
+      "equip",
+      "装备"
+    ],
+    "dependencySelectors": [
+      {
+        "systemId": "item"
+      },
+      {
+        "systemId": "enhance"
+      },
+      {
+        "systemId": "gem"
+      },
+      {
+        "systemId": "refine"
+      },
+      {
+        "systemId": "skill"
+      },
+      {
+        "systemId": "buff"
+      }
+    ],
+    "excludes": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/.mir3-studio/**"
+    ],
+    "contentFingerprints": [
+      {
+        "contains": "equipment",
+        "caseSensitive": false
+      },
+      {
+        "contains": "equip",
+        "caseSensitive": false
+      },
+      {
+        "contains": "装备",
+        "caseSensitive": false
+      }
+    ],
+    "pathAliases": [
+      {
+        "from": "client",
+        "to": "客户端"
+      },
+      {
+        "from": "engine",
+        "to": "引擎"
+      }
+    ],
+    "roles": [
+      "client",
+      "engine",
+      "shared",
+      "generated",
+      "readonly"
+    ],
+    "editableExtensions": [
+      "txt",
+      "lua"
+    ],
+    "structuredExtensions": [
+      "xls"
+    ],
+    "readonlyExtensions": [
+      "png",
+      "plist",
+      "json",
+      "ini",
+      "cfg"
+    ],
+    "unknownFormatPolicy": "readonly"
+  },
+  "resources": {
+    "resourceTypes": [
+      "equipment.equipment-record"
+    ],
+    "schema": "schemas/resource.schema.json",
+    "stableResourceId": "sha256(equipment:equipmentId:normalizedRelativePath)",
+    "mappings": [
+      "file-projection",
+      "equipment.field-mapping-v1"
+    ],
+    "dependencyEdges": [
+      {
+        "field": "baseItemId",
+        "systemId": "item",
+        "required": true
+      }
+    ],
+    "uniqueKey": [
+      "equipmentId"
+    ]
+  },
+  "presentation": {
+    "views": [
+      "table-v1",
+      "source-v1",
+      "diff-v1",
+      "validation-v1"
+    ],
+    "primaryView": "table-v1",
+    "safePrimitive": "xls"
+  },
+  "dependencies": [
+    "item",
+    "enhance",
+    "gem",
+    "refine",
+    "skill",
+    "buff"
+  ],
+  "operations": [
+    {
+      "id": "inspect-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-equipment"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-equipment",
+          "operation": "inspect-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      }
+    },
+    {
+      "id": "clone-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-equipment"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "helmet",
+                  "ring",
+                  "bracelet",
+                  "necklace",
+                  "boots"
+                ]
+              },
+              "baseItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "durability": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-tune-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-tune-equipment"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "helmet",
+                  "ring",
+                  "bracelet",
+                  "necklace",
+                  "boots"
+                ]
+              },
+              "baseItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "durability": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-tune-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-equipment-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-equipment-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "baseItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-equipment-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "inspect-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "inspect-equipment"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "includeDependencies": {
+            "type": "boolean",
+            "default": true
+          },
+          "projection": {
+            "enum": [
+              "merged",
+              "client",
+              "engine"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-read",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "inspect-equipment",
+          "operation": "inspect-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": false
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-equipment"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "helmet",
+                  "ring",
+                  "bracelet",
+                  "necklace",
+                  "boots"
+                ]
+              },
+              "baseItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "durability": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-tune-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-tune-equipment"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "helmet",
+                  "ring",
+                  "bracelet",
+                  "necklace",
+                  "boots"
+                ]
+              },
+              "baseItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "durability": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-tune-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-equipment-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-equipment-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "baseItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-equipment-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.0.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    }
+  ],
+  "validators": [
+    {
+      "id": "equipment.syntax",
+      "kind": "syntax",
+      "extensions": [
+        "txt",
+        "lua",
+        "xls"
+      ],
+      "encoding": "project-detected"
+    },
+    {
+      "id": "equipment.schema",
+      "kind": "schema",
+      "schema": "schemas/resource.schema.json",
+      "resourceType": "equipment-record"
+    },
+    {
+      "id": "equipment.unique",
+      "kind": "uniqueness",
+      "fields": [
+        "equipmentId"
+      ],
+      "scope": "equipment.project"
+    },
+    {
+      "id": "equipment.range",
+      "kind": "range",
+      "fields": [
+        {
+          "field": "requiredLevel",
+          "minimum": 0,
+          "maximum": 255
+        },
+        {
+          "field": "durability",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      ]
+    },
+    {
+      "id": "equipment.reference",
+      "kind": "reference-integrity",
+      "references": [
+        {
+          "field": "baseItemId",
+          "systemId": "item",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "equipment.client-engine",
+      "kind": "client-engine-consistency",
+      "matchBy": "equipmentId",
+      "compareFields": [
+        "equipmentId",
+        "slot"
+      ],
+      "missingProjection": "error"
+    },
+    {
+      "id": "equipment.runtime",
+      "kind": "runtime-diagnostics",
+      "rule": "equipment.slot-matches-item-mode",
+      "severity": "error",
+      "target": "equipment.equipment-record"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid.json",
+    "invalid": "fixtures/invalid.json",
+    "expectedDiagnostics": "fixtures/expected-diagnostics.json"
+  }
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "buff.unique",
+    "severity": "error",
+    "field": "buffId"
+  },
+  {
+    "code": "buff.range",
+    "severity": "error",
+    "field": "maximumStacks"
+  },
+  {
+    "code": "buff.reference",
+    "severity": "error",
+    "field": "effectSkillId"
+  },
+  {
+    "code": "buff.runtime",
+    "severity": "error",
+    "rule": "buff.stack-mode-capacity-compatible"
+  }
+]

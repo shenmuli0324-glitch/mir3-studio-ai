@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/crafting/resource.schema.json",
+  "title": "crafting.recipe-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "recipeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "outputItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "outputCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999999
+    },
+    "materialItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "materialCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999999
+    }
+  },
+  "required": [
+    "recipeId",
+    "outputItemId",
+    "outputCount",
+    "materialItemId",
+    "materialCount"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "recipeId"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "recipeId",
+      "compareFields": [
+        "recipeId",
+        "outputItemId"
+      ]
+    },
+    "runtimeRule": "crafting.no-self-consuming-cycle"
+  }
+}

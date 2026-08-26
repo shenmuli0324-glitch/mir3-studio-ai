@@ -1,0 +1,27 @@
+{
+  "systemId": "skill",
+  "fixture": "invalid",
+  "records": [
+    {
+      "skillId": "skill-skillId-1",
+      "skillLevel": 100,
+      "manaCost": 1,
+      "cooldownMilliseconds": 1,
+      "appliedBuffId": "buff:missing"
+    },
+    {
+      "skillId": "skill-skillId-1",
+      "skillLevel": 100,
+      "manaCost": 2,
+      "cooldownMilliseconds": 2,
+      "appliedBuffId": "buff:fixture-2"
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "skill.level-curve-contiguous",
+      "expected": false
+    }
+  ]
+}

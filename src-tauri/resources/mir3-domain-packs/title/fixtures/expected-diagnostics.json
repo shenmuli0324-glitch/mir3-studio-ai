@@ -1,0 +1,22 @@
+[
+  {
+    "code": "title.unique",
+    "severity": "error",
+    "field": "titleId"
+  },
+  {
+    "code": "title.range",
+    "severity": "error",
+    "field": "durationSeconds"
+  },
+  {
+    "code": "title.reference",
+    "severity": "error",
+    "field": "grantedBuffId"
+  },
+  {
+    "code": "title.runtime",
+    "severity": "error",
+    "rule": "title.permanent-duration-zero"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "code": "recycle.unique",
+    "severity": "error",
+    "field": "ruleId"
+  },
+  {
+    "code": "recycle.range",
+    "severity": "error",
+    "field": "minimumQuality"
+  },
+  {
+    "code": "recycle.reference",
+    "severity": "error",
+    "field": "currencyItemId"
+  },
+  {
+    "code": "recycle.runtime",
+    "severity": "error",
+    "rule": "recycle.quality-range-ordered"
+  }
+]

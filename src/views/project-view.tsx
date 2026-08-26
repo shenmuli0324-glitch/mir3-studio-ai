@@ -35,9 +35,9 @@ export function ProjectView() {
   }
 
   async function handleActivate(projectId: string) {
-    // 切换当前项目会销毁 GUI Working Copy，只在确有修改时追加保护。
+    // 切换当前项目会销毁编辑器 Working Copy，只在确有修改时追加保护。
     // eslint-disable-next-line no-alert
-    if (projectId !== activeProject?.id && isGuiDesignerDirty() && !window.confirm(t('studio.gui.leave_warning')))
+    if (projectId !== activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
       return
     // eslint-disable-next-line no-alert
     if (!window.confirm(t('studio.project.switch_confirm')))
@@ -46,9 +46,9 @@ export function ProjectView() {
   }
 
   async function handleRemove(projectId: string) {
-    // 删除当前项目会销毁 GUI Working Copy，删除其他项目不额外拦截。
+    // 删除当前项目会销毁编辑器 Working Copy，删除其他项目不额外拦截。
     // eslint-disable-next-line no-alert
-    if (projectId === activeProject?.id && isGuiDesignerDirty() && !window.confirm(t('studio.gui.leave_warning')))
+    if (projectId === activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
       return
     // eslint-disable-next-line no-alert
     if (!window.confirm(t('studio.project.remove_confirm')))
@@ -57,9 +57,9 @@ export function ProjectView() {
   }
 
   async function handleRelink(projectId: string) {
-    // 重绑定会销毁当前项目的 GUI Working Copy，只在确有修改时额外确认。
+    // 重绑定会销毁当前项目的编辑器 Working Copy，只在确有修改时额外确认。
     // eslint-disable-next-line no-alert
-    if (projectId === activeProject?.id && isGuiDesignerDirty() && !window.confirm(t('studio.gui.leave_warning')))
+    if (projectId === activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
       return
     await relinkProject(projectId)
   }
@@ -101,4 +101,8 @@ export function ProjectView() {
           )}
     </ViewFrame>
   )
+}
+
+function hasDirtyStudioEditor(): boolean {
+  return isGuiDesignerDirty()
 }

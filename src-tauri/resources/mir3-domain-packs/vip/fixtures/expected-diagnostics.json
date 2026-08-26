@@ -1,0 +1,22 @@
+[
+  {
+    "code": "vip.unique",
+    "severity": "error",
+    "field": "vipLevel"
+  },
+  {
+    "code": "vip.range",
+    "severity": "error",
+    "field": "vipLevel"
+  },
+  {
+    "code": "vip.reference",
+    "severity": "error",
+    "field": "grantedTitleId"
+  },
+  {
+    "code": "vip.runtime",
+    "severity": "error",
+    "rule": "vip.points-monotonic"
+  }
+]

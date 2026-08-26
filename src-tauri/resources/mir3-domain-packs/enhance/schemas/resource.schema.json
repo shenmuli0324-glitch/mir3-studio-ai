@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mir3://domain/enhance/resource.schema.json",
+  "title": "enhance.enhance-record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enhanceTier": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 99
+    },
+    "equipmentClass": {
+      "type": "string",
+      "enum": [
+        "weapon",
+        "armor",
+        "accessory"
+      ]
+    },
+    "successRateBasisPoints": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "materialItemId": {
+      "type": "string",
+      "minLength": 1,
+      "x-mir3-reference-system": "item"
+    },
+    "failureMode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "downgrade",
+        "break"
+      ]
+    }
+  },
+  "required": [
+    "enhanceTier",
+    "equipmentClass",
+    "successRateBasisPoints",
+    "materialItemId",
+    "failureMode"
+  ],
+  "x-mir3": {
+    "uniqueKey": [
+      "enhanceTier",
+      "equipmentClass"
+    ],
+    "clientEngineConsistency": {
+      "matchBy": "enhanceTier",
+      "compareFields": [
+        "enhanceTier",
+        "equipmentClass"
+      ]
+    },
+    "runtimeRule": "enhance.probability-budget-valid"
+  }
+}

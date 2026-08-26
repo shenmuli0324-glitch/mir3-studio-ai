@@ -1,0 +1,27 @@
+{
+  "systemId": "online_reward",
+  "fixture": "invalid",
+  "records": [
+    {
+      "rewardId": "online_reward-rewardId-1",
+      "durationSeconds": 604801,
+      "rewardItemId": "item:missing",
+      "rewardCount": 2,
+      "minimumVipLevel": 1
+    },
+    {
+      "rewardId": "online_reward-rewardId-1",
+      "durationSeconds": 3,
+      "rewardItemId": "item:fixture-2",
+      "rewardCount": 3,
+      "minimumVipLevel": 2
+    }
+  ],
+  "referenceCatalog": {},
+  "runtimeAssertions": [
+    {
+      "rule": "online-reward.duration-monotonic",
+      "expected": false
+    }
+  ]
+}
