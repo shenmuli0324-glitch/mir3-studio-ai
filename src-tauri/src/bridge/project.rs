@@ -2,13 +2,13 @@
 
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
-    CompositeApplyResult, CompositeDraftConfirmation, DomainDependencyGraph, DomainFileQuery,
-    DomainFileRecord, DomainManifest, DomainMemory, DomainResourceRecord, DomainSystemDescription,
-    DomainValidationReport, Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
-    KnowledgeRecord, KnowledgeStatus, LegacyDraftCloneRequest, Mir3Project, SafeTextOpen,
-    SafeTextPatch, SafeTextPatchResult, SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet,
-    SafeXlsWorkbook, Snapshot, SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability,
-    WorkspaceDirectory,
+    CapabilityCompileRequest, CompositeApplyResult, CompositeDraftConfirmation,
+    DomainDependencyGraph, DomainFileQuery, DomainFileRecord, DomainManifest, DomainMemory,
+    DomainResourceQuery, DomainResourceRecord, DomainSystemDescription, DomainValidationReport,
+    Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
+    LegacyDraftCloneRequest, Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult,
+    SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet, SafeXlsWorkbook, Snapshot,
+    SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability, WorkspaceDirectory,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -214,6 +214,18 @@ pub fn domain_resource_get(
 }
 
 #[tauri::command]
+pub fn domain_resource_query(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    query: DomainResourceQuery,
+) -> Result<Vec<DomainResourceRecord>, String> {
+    service
+        .store()
+        .query_domain_resources(&project_id, &system_id, &query)
+}
+
+#[tauri::command]
 pub fn domain_dependency_resolve(
     service: State<'_, ProjectService>,
     system_id: String,
@@ -230,6 +242,17 @@ pub fn domain_validate(
     service
         .store()
         .validate_domain_system(&project_id, &system_id)
+}
+
+#[tauri::command]
+pub fn domain_draft_validate(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    draft_id: String,
+) -> Result<DomainValidationReport, String> {
+    service
+        .store()
+        .validate_domain_draft(&project_id, &draft_id)
 }
 
 #[tauri::command]
@@ -264,19 +287,14 @@ pub fn user_capability_list(
 }
 
 #[tauri::command]
-pub fn user_capability_save(
+pub fn user_capability_compile(
     service: State<'_, ProjectService>,
     project_id: String,
-    mut capability: UserCapability,
+    request: CapabilityCompileRequest,
 ) -> Result<UserCapability, String> {
-    capability.scope = "project".to_string();
-    capability.status = "draft".to_string();
-    if capability.version.trim().is_empty() {
-        capability.version = "0.1.0".to_string();
-    }
     service
         .store()
-        .save_user_capability(&project_id, &capability)
+        .compile_user_capability(&project_id, &request)
 }
 
 #[tauri::command]
@@ -449,6 +467,7 @@ pub fn domain_draft_open(
     system_id: String,
     plugin_version: String,
     intent: String,
+    composite_id: Option<String>,
 ) -> Result<Draft, String> {
     let description = service
         .store()
@@ -460,15 +479,36 @@ pub fn domain_draft_open(
         ));
     }
     let draft = service.store().open_draft(&project_id, &intent)?;
-    if let Err(error) =
-        service
-            .store()
-            .bind_draft_domain(&project_id, &draft.id, &system_id, &plugin_version, None)
-    {
+    if let Err(error) = service.store().bind_draft_domain(
+        &project_id,
+        &draft.id,
+        &system_id,
+        &plugin_version,
+        composite_id.as_deref(),
+    ) {
         let _ = service.store().discard_draft(&project_id, &draft.id);
         return Err(error);
     }
     Ok(draft)
+}
+
+/// 将已有的领域 Draft 安全关联到全局组合任务。
+#[tauri::command]
+pub fn domain_draft_composite_associate(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    draft_id: String,
+    system_id: String,
+    plugin_version: String,
+    composite_id: String,
+) -> Result<(), String> {
+    service.store().associate_draft_composite(
+        &project_id,
+        &draft_id,
+        &system_id,
+        &plugin_version,
+        &composite_id,
+    )
 }
 
 #[tauri::command]
@@ -498,7 +538,7 @@ pub fn draft_apply(
     confirmation_token: String,
 ) -> Result<Snapshot, String> {
     let confirmation = service.consume_confirmation(&project_id, &draft_id, &confirmation_token)?;
-    let snapshot = service.store().apply_draft(
+    let snapshot = service.store().apply_validated_domain_draft(
         &project_id,
         &draft_id,
         confirmation.revision,
@@ -542,10 +582,11 @@ pub fn draft_composite_apply(
             expected_diff_hash: confirmation.diff_hash,
         });
     }
-    let result =
-        service
-            .store()
-            .apply_composite_drafts(&project_id, &composite_id, &confirmations)?;
+    let result = service.store().apply_validated_composite_drafts(
+        &project_id,
+        &composite_id,
+        &confirmations,
+    )?;
     for confirmation in &confirmations {
         if let Err(error) = service.store().record_applied_draft_receipt(
             &project_id,

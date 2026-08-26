@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import type { Mir3Project } from './types'
 import { getIframeOrigin } from '@/utils/iframe-origin'
+import { BridgeSequenceRegistry } from './bridge-sequence'
 
 export const MIR3_BRIDGE_PROTOCOL_VERSION = 2
 
@@ -21,6 +22,8 @@ type BridgeListener = (message: Mir3BridgeEnvelope) => void
 
 let activeIframeRef: RefObject<HTMLIFrameElement | null> | null = null
 const bridgeListeners = new Set<BridgeListener>()
+const outgoingSequences = new BridgeSequenceRegistry()
+const incomingSequences = new BridgeSequenceRegistry()
 
 export function connectHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | null>) {
   activeIframeRef = iframeRef
@@ -29,6 +32,10 @@ export function connectHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | nu
     if (!origin || event.origin !== origin || event.source !== iframeRef.current?.contentWindow)
       return
     if (!isBridgeEnvelope(event.data) || event.data.source !== 'mir3-core-plugin')
+      return
+    if (event.data.type === 'mir3/plugin.ready')
+      incomingSequences.clear()
+    if (!incomingSequences.accept(event.data, event.data.sequence))
       return
     bridgeListeners.forEach(listener => listener(event.data))
   }
@@ -66,7 +73,6 @@ export function waitForHarnessBridge(predicate: (message: Mir3BridgeEnvelope) =>
 
 export function postHarnessBridge<T>(message: Omit<Mir3BridgeEnvelope<T>, 'source' | 'protocolVersion' | 'requestId' | 'sequence'> & {
   requestId?: string
-  sequence?: number
 }) {
   const iframeRef = activeIframeRef
   if (!iframeRef)
@@ -79,7 +85,7 @@ export function postHarnessBridge<T>(message: Omit<Mir3BridgeEnvelope<T>, 'sourc
     source: 'mir3-studio',
     protocolVersion: MIR3_BRIDGE_PROTOCOL_VERSION,
     requestId: message.requestId ?? bridgeRequestId(),
-    sequence: message.sequence ?? 0,
+    sequence: outgoingSequences.next(message),
   } satisfies Mir3BridgeEnvelope<T>, origin)
   return true
 }
@@ -101,7 +107,7 @@ export function postProjectActivation(
       systemId: '',
       taskId: '',
       sessionId: '',
-      sequence: 0,
+      sequence: outgoingSequences.next({ projectId: project.id, taskId: '', sessionId: '' }),
       payload: {
         projectId: project.id,
         projectRoot: project.root,
@@ -132,5 +138,6 @@ function isBridgeEnvelope(value: unknown): value is Mir3BridgeEnvelope {
     && typeof message.taskId === 'string'
     && typeof message.sessionId === 'string'
     && Number.isSafeInteger(message.sequence)
+    && message.sequence! > 0
     && 'payload' in message
 }

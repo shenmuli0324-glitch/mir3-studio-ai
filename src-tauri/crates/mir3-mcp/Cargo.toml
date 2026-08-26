@@ -7,3 +7,6 @@ edition = "2021"
 mir3-domain = { path = "../mir3-domain" }
 serde = { version = "1", features = [ "derive" ] }
 serde_json = "1"
+
+[dev-dependencies]
+easyexcel-xls = "0.1.3"

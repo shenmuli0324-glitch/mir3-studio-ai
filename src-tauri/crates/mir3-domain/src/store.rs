@@ -2,7 +2,7 @@ use crate::{
     now_millis, path_string, project_from_validation, validate_project_root,
     validate_workspace_path, Mir3Project, ProjectStatus,
 };
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -18,6 +18,7 @@ const SCHEMA_VERSION: i64 = 2;
 pub struct DomainStore {
     data_root: PathBuf,
     domain_pack_root: PathBuf,
+    read_only_reason: Option<Arc<str>>,
     pub(crate) xls_cache: Arc<Mutex<HashMap<String, Arc<CachedXlsWorkbook>>>>,
 }
 
@@ -41,15 +42,25 @@ impl DomainStore {
         data_root: impl Into<PathBuf>,
         domain_pack_root: impl Into<PathBuf>,
     ) -> Result<Self, String> {
-        let store = Self {
+        let mut store = Self {
             data_root: data_root.into(),
             domain_pack_root: domain_pack_root.into(),
+            read_only_reason: None,
             xls_cache: Arc::new(Mutex::new(HashMap::new())),
         };
         fs::create_dir_all(&store.data_root)
             .map_err(|e| format!("PROJECT_DATA_CREATE_FAILED: {e}"))?;
-        store.init_registry()?;
-        store.migrate_existing_projects()?;
+        let registry_existed = store.data_root.join("registry.sqlite").is_file();
+        if let Err(error) = store.init_registry() {
+            if !registry_existed {
+                return Err(error);
+            }
+            store.read_only_reason = Some(Arc::from(error));
+            return Ok(store);
+        }
+        if let Err(error) = store.migrate_existing_projects() {
+            store.read_only_reason = Some(Arc::from(error));
+        }
         Ok(store)
     }
 
@@ -59,6 +70,18 @@ impl DomainStore {
 
     pub fn domain_pack_root(&self) -> &Path {
         &self.domain_pack_root
+    }
+
+    /// 未知 Schema 或迁移失败时保留读取能力，同时由同一连接层拒绝全部写入。
+    pub fn read_only_reason(&self) -> Option<&str> {
+        self.read_only_reason.as_deref()
+    }
+
+    pub(crate) fn ensure_writable(&self) -> Result<(), String> {
+        match &self.read_only_reason {
+            Some(reason) => Err(format!("DOMAIN_KERNEL_READONLY: {reason}")),
+            None => Ok(()),
+        }
     }
 
     pub fn project_dir(&self, project_id: &str) -> Result<PathBuf, String> {
@@ -71,6 +94,7 @@ impl DomainStore {
     }
 
     pub fn import_project(&self, path: &Path) -> Result<Mir3Project, String> {
+        self.ensure_writable()?;
         let validation = validate_project_root(path)?;
         let mut project = project_from_validation(validation)?;
         if let Some(existing) = self.project_by_root(&project.root)? {
@@ -124,6 +148,7 @@ impl DomainStore {
     }
 
     pub fn activate_project(&self, project_id: &str) -> Result<Mir3Project, String> {
+        self.ensure_writable()?;
         let project = self.get_project(project_id)?;
         self.registry()?
             .execute(
@@ -135,6 +160,7 @@ impl DomainStore {
     }
 
     pub fn relink_project(&self, project_id: &str, path: &Path) -> Result<Mir3Project, String> {
+        self.ensure_writable()?;
         let existing = self.get_project(project_id)?;
         let validation = validate_project_root(path)?;
         let mut project = project_from_validation(validation)?;
@@ -146,6 +172,7 @@ impl DomainStore {
     }
 
     pub fn remove_project(&self, project_id: &str) -> Result<(), String> {
+        self.ensure_writable()?;
         validate_id(project_id)?;
         let connection = self.registry()?;
         let changed = connection
@@ -164,6 +191,7 @@ impl DomainStore {
     }
 
     pub fn validate_project(&self, project_id: &str) -> Result<Mir3Project, String> {
+        self.ensure_writable()?;
         let existing = self.get_project(project_id)?;
         match validate_project_root(Path::new(&existing.root)) {
             Ok(validation) => {
@@ -187,6 +215,7 @@ impl DomainStore {
     }
 
     pub fn select_workspace(&self, project_id: &str, path: &Path) -> Result<Mir3Project, String> {
+        self.ensure_writable()?;
         let mut project = self.get_project(project_id)?;
         let selected = validate_workspace_path(Path::new(&project.root), path)?;
         project.active_workspace_root = path_string(&selected);
@@ -246,14 +275,17 @@ impl DomainStore {
 
     pub(crate) fn project_connection(&self, project_id: &str) -> Result<Connection, String> {
         let path = self.project_db_path(project_id)?;
-        let connection = Connection::open(path).map_err(db_error)?;
-        connection
-            .execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")
-            .map_err(db_error)?;
+        let connection = if self.read_only_reason.is_some() {
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?
+        } else {
+            Connection::open(path).map_err(db_error)?
+        };
+        configure_connection(&connection, self.read_only_reason.is_some())?;
         Ok(connection)
     }
 
     pub(crate) fn update_last_scan(&self, project_id: &str, at: i64) -> Result<(), String> {
+        self.ensure_writable()?;
         self.registry()?
             .execute(
                 "UPDATE projects SET last_scan_at=?2, updated_at=?2 WHERE id=?1",
@@ -303,6 +335,7 @@ impl DomainStore {
     }
 
     fn prepare_project_storage(&self, project_id: &str) -> Result<(), String> {
+        self.ensure_writable()?;
         let dir = self.project_dir(project_id)?;
         for name in ["wiki", "drafts", "snapshots", "logs"] {
             fs::create_dir_all(dir.join(name))
@@ -322,11 +355,13 @@ impl DomainStore {
     }
 
     fn registry(&self) -> Result<Connection, String> {
-        let connection =
-            Connection::open(self.data_root.join("registry.sqlite")).map_err(db_error)?;
-        connection
-            .execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")
-            .map_err(db_error)?;
+        let path = self.data_root.join("registry.sqlite");
+        let connection = if self.read_only_reason.is_some() {
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?
+        } else {
+            Connection::open(path).map_err(db_error)?
+        };
+        configure_connection(&connection, self.read_only_reason.is_some())?;
         Ok(connection)
     }
 
@@ -403,6 +438,22 @@ CREATE TABLE IF NOT EXISTS draft_changes(
   content BLOB,
   deleted INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(draft_id,path),
+  FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS draft_operation_evidence(
+  draft_id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  system_id TEXT NOT NULL,
+  plugin_version TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  parameters TEXT NOT NULL,
+  parameter_schema_hash TEXT NOT NULL,
+  revision_before INTEGER NOT NULL,
+  revision_after INTEGER NOT NULL,
+  replay_change_hash TEXT NOT NULL DEFAULT '',
+  replay_evidence_hash TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(draft_id,sequence),
   FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS snapshots(
@@ -537,23 +588,56 @@ fn db_error(error: rusqlite::Error) -> String {
     format!("PROJECT_DATABASE_FAILED: {error}")
 }
 
+fn configure_connection(connection: &Connection, read_only: bool) -> Result<(), String> {
+    if read_only {
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys=ON; PRAGMA query_only=ON; PRAGMA busy_timeout=5000;",
+            )
+            .map_err(db_error)
+    } else {
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
+            )
+            .map_err(db_error)
+    }
+}
+
 fn migrate_database(path: &Path, schema: &str, prefix: &str) -> Result<(), String> {
     let existed = path.is_file();
     let mut connection = Connection::open(path).map_err(db_error)?;
     connection
         .execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")
         .map_err(db_error)?;
-    let current = connection
+    let current = match connection
         .query_row(
             "SELECT value FROM metadata WHERE key='schema_version'",
             [],
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .ok()
-        .flatten()
-        .and_then(|value| value.parse::<i64>().ok())
-        .unwrap_or(1);
+    {
+        Ok(Some(value)) => value
+            .parse::<i64>()
+            .map_err(|_| format!("{prefix}_SCHEMA_INVALID: schema_version is not an integer"))?,
+        Ok(None) => {
+            if existed {
+                return Err(format!(
+                    "{prefix}_SCHEMA_INVALID: schema_version metadata is missing"
+                ));
+            }
+            0
+        }
+        Err(rusqlite::Error::SqliteFailure(_, Some(message)))
+            if !existed && message.contains("no such table") =>
+        {
+            0
+        }
+        Err(error) => {
+            return Err(format!("{prefix}_SCHEMA_READ_FAILED: {error}"));
+        }
+    };
     if current > SCHEMA_VERSION {
         return Err(format!(
             "{prefix}_SCHEMA_NEWER: database schema {current} is newer than supported {SCHEMA_VERSION}"
@@ -685,6 +769,60 @@ mod tests {
             )
             .unwrap();
         assert_eq!(legacy, 1);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn newer_registry_schema_starts_readonly_without_hiding_projects() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-readonly-schema-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("项目/木立");
+        let data = base.join("data");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200")).unwrap();
+        fs::write(project.join("引擎/Mir200/Quest.txt"), "questId=Q1\n").unwrap();
+        let store = DomainStore::new(&data).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+        store
+            .registry()
+            .unwrap()
+            .execute(
+                "UPDATE metadata SET value='999' WHERE key='schema_version'",
+                [],
+            )
+            .unwrap();
+        drop(store);
+
+        let reopened = DomainStore::new(&data).unwrap();
+        assert!(reopened
+            .read_only_reason()
+            .is_some_and(|reason| reason.starts_with("REGISTRY_DATABASE_SCHEMA_NEWER:")));
+        assert_eq!(reopened.list_projects().unwrap().len(), 1);
+        let files = reopened
+            .query_domain_files(
+                &imported.id,
+                "quest",
+                &crate::DomainFileQuery {
+                    text: String::new(),
+                    limit: Some(10),
+                    offset: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].access, "readonly");
+        assert!(reopened
+            .describe_domain_system(&imported.id, "quest")
+            .unwrap()
+            .diagnostics
+            .iter()
+            .any(|value| value.starts_with("DOMAIN_KERNEL_READONLY:")));
+        let denied = reopened.import_project(&project).unwrap_err();
+        assert!(denied.starts_with("DOMAIN_KERNEL_READONLY:"));
         fs::remove_dir_all(base).ok();
     }
 }

@@ -3,7 +3,7 @@ import type { DomainResourceProjection, DomainTextProjection, DomainXlsSheetProj
 export interface ProjectionTable {
   columns: string[]
   rows: string[][]
-  source: 'json' | 'delimited' | 'key-value' | 'lines' | 'xls'
+  source: 'json' | 'delimited' | 'key-value' | 'lines' | 'xls' | 'record'
   totalRows: number
   totalColumns: number
 }
@@ -20,6 +20,16 @@ export function projectionTable(projection: DomainResourceProjection, sheetIndex
   }
   if (projection.kind === 'text')
     return textProjectionTable(projection)
+  if (projection.kind === 'record') {
+    const columns = Object.keys(projection.fields).slice(0, MAX_STRUCTURED_COLUMNS)
+    return {
+      columns,
+      rows: [columns.map(column => displayValue(projection.fields[column]))],
+      source: 'record',
+      totalRows: 1,
+      totalColumns: columns.length,
+    }
+  }
   return null
 }
 

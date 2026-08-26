@@ -8,8 +8,33 @@ window.__ModuleLoader__.load({
     const PROTOCOL_VERSION = 2
     const SOURCE = 'mir3-core-plugin'
     const SYSTEM_SESSION_PREFIX = 'mir3-system-'
+    const GLOBAL_SESSION_PREFIX = 'global-'
     const activeBindings = new Map()
+    const bindingActivity = new Map()
+    const returnTargets = new Map()
+    const inboundSequences = new Map()
+    const outboundSequences = new Map()
     const parentOrigin = resolveParentOrigin()
+
+    function sequenceKey(message) {
+      return `${message.projectId}\u241F${message.taskId}\u241F${message.sessionId}`
+    }
+
+    function acceptInboundSequence(message) {
+      const key = sequenceKey(message)
+      const previous = inboundSequences.get(key) || 0
+      if (message.sequence <= previous)
+        return false
+      inboundSequences.set(key, message.sequence)
+      return true
+    }
+
+    function nextOutboundSequence(message) {
+      const key = sequenceKey(message)
+      const sequence = (outboundSequences.get(key) || 0) + 1
+      outboundSequences.set(key, sequence)
+      return sequence
+    }
 
     function resolveParentOrigin() {
       try {
@@ -33,7 +58,7 @@ window.__ModuleLoader__.load({
           systemId: request.systemId,
           taskId: request.taskId,
           sessionId: request.sessionId,
-          sequence: request.sequence || 0,
+          sequence: nextOutboundSequence(request),
           payload,
         }, parentOrigin)
       }
@@ -51,8 +76,9 @@ window.__ModuleLoader__.load({
           && typeof message.projectId === 'string'
           && typeof message.systemId === 'string'
           && typeof message.taskId === 'string'
+          && typeof message.sessionId === 'string'
           && Number.isSafeInteger(message.sequence)
-          && message.sequence >= 0
+          && message.sequence > 0
       }
 
       async function describe(request) {
@@ -95,7 +121,7 @@ window.__ModuleLoader__.load({
         await ctx.workspaces.archiveSession(request.sessionId)
         const session = requireSession(request.sessionId)
         await session.open()
-        bindSession(request, session)
+        bindSession(request, session, 'mir3/systemSession')
         post('mir3/systemSession.created', request, { archived: true, created: true })
         if (typeof payload.prompt === 'string' && payload.prompt.trim())
           requireResult(await session.prompt(textContent(payload.prompt), 'queue'), 'SYSTEM_SESSION_PROMPT_FAILED')
@@ -104,18 +130,23 @@ window.__ModuleLoader__.load({
       async function resumeSystemSession(request) {
         const session = requireSystemSession(request.sessionId)
         await session.open()
-        bindSession(request, session)
-        post('mir3/systemSession.resumed', request, projectSnapshot(session.getSnapshot()))
+        bindSession(request, session, 'mir3/systemSession')
+        post('mir3/systemSession.resumed', request, projectSnapshot(session.getSnapshot(), request))
       }
 
-      function bindSession(request, session) {
+      function bindSession(request, session, eventPrefix) {
         const old = activeBindings.get(request.taskId)
         if (typeof old === 'function')
           old()
-        let sequence = 0
+        bindingActivity.set(request.taskId, Boolean(session.getSnapshot()?.running))
         const dispose = session.subscribe(() => {
-          sequence += 1
-          post('mir3/systemSession.snapshot', { ...request, sequence }, projectSnapshot(session.getSnapshot()))
+          const snapshot = session.getSnapshot()
+          const wasRunning = bindingActivity.get(request.taskId) === true
+          const running = Boolean(snapshot?.running)
+          bindingActivity.set(request.taskId, running)
+          post(`${eventPrefix}.snapshot`, request, projectSnapshot(snapshot, request))
+          if (wasRunning && !running)
+            post(`${eventPrefix}.completed`, request, projectSnapshot(snapshot, request))
         })
         activeBindings.set(request.taskId, dispose)
       }
@@ -152,27 +183,31 @@ window.__ModuleLoader__.load({
 
       async function snapshotSystemSession(request) {
         const session = requireSystemSession(request.sessionId)
-        post('mir3/systemSession.snapshot', request, projectSnapshot(session.getSnapshot()))
+        post('mir3/systemSession.snapshot', request, projectSnapshot(session.getSnapshot(), request))
       }
 
       async function completeSystemSession(request) {
         if (!isSystemSessionId(request.sessionId))
           throw new Error('SYSTEM_SESSION_SCOPE_UNVERIFIED: reserved Studio session id is required')
+        const session = requireSystemSession(request.sessionId)
+        const snapshot = projectSnapshot(session.getSnapshot(), request)
         const dispose = activeBindings.get(request.taskId)
         if (typeof dispose === 'function')
           dispose()
         activeBindings.delete(request.taskId)
-        post('mir3/systemSession.completed', request, {})
+        bindingActivity.delete(request.taskId)
+        returnTargets.delete(request.taskId)
+        post('mir3/systemSession.completed', request, snapshot)
       }
 
       async function createGlobalSession(request) {
         const payload = request.payload || {}
         if (typeof payload.cwd !== 'string' || !payload.cwd.trim())
           throw new Error('GLOBAL_SESSION_INVALID: cwd is required')
+        if (!isGlobalSessionId(request.sessionId))
+          throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
         const workspace = await ctx.workspaces.create({ path: payload.cwd })
-        const globalSessionId = typeof payload.sessionId === 'string' && payload.sessionId
-          ? payload.sessionId
-          : `global-${request.requestId}`
+        const globalSessionId = request.sessionId
         requireResult(
           await ctx.sessions.create({ workspaceId: workspace.workspaceId, sessionId: globalSessionId }),
           'GLOBAL_SESSION_CREATE_FAILED',
@@ -180,12 +215,47 @@ window.__ModuleLoader__.load({
         ctx.sessions.open(globalSessionId)
         const session = requireSession(globalSessionId)
         await session.open()
-        if (typeof payload.prompt === 'string' && payload.prompt.trim())
-          requireResult(await session.prompt(textContent(payload.prompt), 'queue'), 'GLOBAL_SESSION_PROMPT_FAILED')
+        returnTargets.set(request.taskId, cloneable(payload.structuredContext?.returnTo || null))
+        bindSession(request, session, 'mir3/globalSession')
         post('mir3/globalSession.created', { ...request, sessionId: globalSessionId }, {
           workspaceId: workspace.workspaceId,
           sessionId: globalSessionId,
         })
+        if (typeof payload.prompt === 'string' && payload.prompt.trim())
+          requireResult(await session.prompt(textContent(payload.prompt), 'queue'), 'GLOBAL_SESSION_PROMPT_FAILED')
+      }
+
+      async function promptGlobalSession(request) {
+        if (!isGlobalSessionId(request.sessionId))
+          throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        const session = requireSession(request.sessionId)
+        const content = String(request.payload?.content || '').trim()
+        if (!content)
+          throw new Error('GLOBAL_SESSION_PROMPT_INVALID: content is required')
+        requireResult(await session.prompt(textContent(content), request.payload?.mode === 'steer' ? 'steer' : 'queue'), 'GLOBAL_SESSION_PROMPT_FAILED')
+        post('mir3/globalSession.prompted', request, {})
+      }
+
+      async function cancelGlobalSession(request) {
+        if (!isGlobalSessionId(request.sessionId))
+          throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        const session = requireSession(request.sessionId)
+        requireResult(await session.cancel(), 'GLOBAL_SESSION_CANCEL_FAILED')
+        post('mir3/globalSession.cancelled', request, projectSnapshot(session.getSnapshot(), request))
+      }
+
+      async function completeGlobalSession(request) {
+        if (!isGlobalSessionId(request.sessionId))
+          throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        const session = requireSession(request.sessionId)
+        const snapshot = projectSnapshot(session.getSnapshot(), request)
+        const dispose = activeBindings.get(request.taskId)
+        if (typeof dispose === 'function')
+          dispose()
+        activeBindings.delete(request.taskId)
+        bindingActivity.delete(request.taskId)
+        returnTargets.delete(request.taskId)
+        post('mir3/globalSession.completed', request, snapshot)
       }
 
       function requireSession(sessionId) {
@@ -197,6 +267,10 @@ window.__ModuleLoader__.load({
 
       function isSystemSessionId(sessionId) {
         return typeof sessionId === 'string' && sessionId.startsWith(SYSTEM_SESSION_PREFIX)
+      }
+
+      function isGlobalSessionId(sessionId) {
+        return typeof sessionId === 'string' && sessionId.startsWith(GLOBAL_SESSION_PREFIX)
       }
 
       function requireSystemSession(sessionId) {
@@ -217,6 +291,9 @@ window.__ModuleLoader__.load({
           case 'mir3/systemSession.snapshot': return snapshotSystemSession(message)
           case 'mir3/systemSession.complete': return completeSystemSession(message)
           case 'mir3/globalSession.create': return createGlobalSession(message)
+          case 'mir3/globalSession.prompt': return promptGlobalSession(message)
+          case 'mir3/globalSession.cancel': return cancelGlobalSession(message)
+          case 'mir3/globalSession.complete': return completeGlobalSession(message)
           default: throw new Error(`BRIDGE_MESSAGE_UNKNOWN: ${message.type}`)
         }
       }
@@ -225,6 +302,8 @@ window.__ModuleLoader__.load({
         if (event.source !== window.parent || !parentOrigin || event.origin !== parentOrigin)
           return
         if (!validate(event.data))
+          return
+        if (!acceptInboundSequence(event.data))
           return
         void dispatch(event.data).catch(error => postError(event.data, 'BRIDGE_REQUEST_FAILED', error))
       }
@@ -248,15 +327,20 @@ window.__ModuleLoader__.load({
             dispose()
         }
         activeBindings.clear()
+        bindingActivity.clear()
+        returnTargets.clear()
+        inboundSequences.clear()
+        outboundSequences.clear()
       }
     }
 
-    function projectSnapshot(snapshot) {
+    function projectSnapshot(snapshot, request) {
       if (!snapshot || typeof snapshot !== 'object')
-        return { nodes: [], runningCalls: [], running: false }
+        return { nodes: [], runningCalls: [], running: false, domainResults: [], returnTo: cloneable(returnTargets.get(request?.taskId) || null) }
+      const nodes = cloneable(Array.isArray(snapshot.nodes) ? snapshot.nodes : [])
       return {
         sessionId: snapshot.sessionId || null,
-        nodes: cloneable(Array.isArray(snapshot.nodes) ? snapshot.nodes : []),
+        nodes,
         partial: cloneable(snapshot.partial || null),
         runningCalls: cloneable(Array.isArray(snapshot.runningCalls) ? snapshot.runningCalls : []),
         pending: projectPending(snapshot.pending),
@@ -268,7 +352,134 @@ window.__ModuleLoader__.load({
         openError: projectError(snapshot.openError),
         promptError: projectError(snapshot.promptError),
         lastAgentError: projectError(snapshot.lastAgentError),
+        domainResults: projectDomainResults(nodes, request?.systemId),
+        returnTo: projectReturnTarget(nodes) || cloneable(returnTargets.get(request?.taskId) || null),
       }
+    }
+
+    function projectReturnTarget(nodes) {
+      if (!Array.isArray(nodes))
+        return null
+      for (const node of nodes) {
+        if (!isToolNode(node))
+          continue
+        const candidates = []
+        collectStructuredValues(node, candidates, new Set(), 0)
+        for (const candidate of candidates) {
+          const target = candidate?.returnTo
+          if (target && typeof target === 'object' && target.view === 'devtools')
+            return cloneable(target)
+        }
+      }
+      return null
+    }
+
+    function projectDomainResults(nodes, fallbackSystemId) {
+      if (!Array.isArray(nodes))
+        return []
+      const results = new Map()
+      for (const node of nodes) {
+        if (!isToolNode(node))
+          continue
+        const candidates = []
+        collectStructuredValues(node, candidates, new Set(), 0)
+        const nodeSystemId = findStringField(node, 'systemId') || fallbackSystemId
+        for (const candidate of candidates) {
+          const projected = projectDomainResult(candidate, nodeSystemId)
+          if (!projected)
+            continue
+          results.set(`${projected.systemId}\u241F${projected.draftId}`, projected)
+        }
+      }
+      return [...results.values()]
+    }
+
+    function projectDomainResult(value, fallbackSystemId) {
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        return null
+      const draft = value.draft && typeof value.draft === 'object' ? value.draft : null
+      const previewDraft = value.preview?.draft && typeof value.preview.draft === 'object' ? value.preview.draft : null
+      const draftId = value.draftId || draft?.id || previewDraft?.id
+      const revision = value.revision ?? draft?.revision ?? previewDraft?.revision
+      const systemId = value.systemId || fallbackSystemId
+      if (typeof draftId !== 'string' || typeof systemId !== 'string' || !Number.isSafeInteger(revision) || revision < 0)
+        return null
+      const validation = projectValidation(value.validation || value.draftValidation || value.report)
+      const changedResources = uniqueStrings([
+        ...stringArray(value.changedResources),
+        ...stringArray(value.resourceIds),
+        typeof value.resourceId === 'string' ? value.resourceId : null,
+      ].filter(Boolean))
+      return {
+        draftId,
+        revision,
+        systemId,
+        validation,
+        changedResources,
+        resourceId: typeof value.resourceId === 'string' ? value.resourceId : null,
+      }
+    }
+
+    function projectValidation(value) {
+      if (!value || typeof value !== 'object' || typeof value.valid !== 'boolean')
+        return null
+      return {
+        valid: value.valid,
+        diagnostics: stringArray(value.diagnostics).slice(0, 500),
+      }
+    }
+
+    function collectStructuredValues(value, output, visited, depth) {
+      if (depth > 12 || value === null || value === undefined)
+        return
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          try {
+            collectStructuredValues(JSON.parse(trimmed), output, visited, depth + 1)
+          }
+          catch {}
+        }
+        return
+      }
+      if (typeof value !== 'object' || visited.has(value))
+        return
+      visited.add(value)
+      if (!Array.isArray(value))
+        output.push(value)
+      for (const item of Array.isArray(value) ? value : Object.values(value))
+        collectStructuredValues(item, output, visited, depth + 1)
+    }
+
+    function findStringField(value, field, visited = new Set(), depth = 0) {
+      if (!value || typeof value !== 'object' || visited.has(value) || depth > 10)
+        return null
+      visited.add(value)
+      if (!Array.isArray(value) && typeof value[field] === 'string')
+        return value[field]
+      for (const item of Array.isArray(value) ? value : Object.values(value)) {
+        const found = findStringField(item, field, visited, depth + 1)
+        if (found)
+          return found
+      }
+      return null
+    }
+
+    function isToolNode(value) {
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        return false
+      const type = String(value.type || value.kind || '').toLowerCase()
+      return type.includes('tool') || typeof value.tool === 'string' || typeof value.toolName === 'string'
+    }
+
+    function stringArray(value) {
+      if (!Array.isArray(value))
+        return []
+      return value.filter(item => typeof item === 'string')
+    }
+
+    function uniqueStrings(values) {
+      return [...new Set(values)]
     }
 
     function projectPending(pending) {

@@ -169,28 +169,30 @@ pub fn domain_pack_rollback(
 }
 
 #[tauri::command]
-pub fn domain_pack_mark_lkg(
+pub fn domain_pack_set_enabled(
     app_handle: AppHandle,
     system_id: String,
-    canary_passed: bool,
+    enabled: bool,
     confirmed: bool,
 ) -> Result<plugin::system::DomainPackStateView, String> {
-    if !canary_passed || !confirmed {
+    if !confirmed {
         return Err(
-            "DOMAIN_PACK_LKG_CANARY_REQUIRED: all contract and runtime canaries must pass first"
+            "DOMAIN_PACK_ENABLE_CONFIRMATION_REQUIRED: confirm before changing package state"
                 .to_string(),
         );
     }
     let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
-    let state = plugin::system::domain_pack_state(&root, &system_id)?;
-    let expected = state
-        .state
-        .current
-        .as_ref()
-        .map(|release| release.version.as_str())
-        .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
-    assert_runtime_domain_version(&app_handle, &system_id, expected)?;
-    plugin::system::mark_domain_pack_lkg(&root, &system_id)?;
+    plugin::system::set_domain_pack_enabled(&root, &system_id, enabled)?;
+    if enabled {
+        let state = plugin::system::domain_pack_state(&root, &system_id)?;
+        let expected = state
+            .state
+            .current
+            .as_ref()
+            .map(|release| release.version.as_str())
+            .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+        assert_runtime_domain_version(&app_handle, &system_id, expected)?;
+    }
     plugin::system::domain_pack_state(&root, &system_id)
 }
 

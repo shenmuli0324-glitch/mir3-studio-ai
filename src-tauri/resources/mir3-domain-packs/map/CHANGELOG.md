@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Added the closed, structured `edit-map-region` parameter contract for scoped binary map Draft edits.
+
 ## 1.0.0
 
 - Added the map-record resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.

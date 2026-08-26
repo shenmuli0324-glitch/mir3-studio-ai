@@ -674,6 +674,59 @@ pub(crate) fn decode_supported_text(bytes: &[u8]) -> Option<String> {
     detect_text(bytes).ok().map(|value| value.content)
 }
 
+/// Draft 校验需要保留具体解码错误，不能像索引摘录那样把未知编码静默当成无内容。
+pub(crate) fn decode_supported_text_checked(bytes: &[u8]) -> Result<String, String> {
+    detect_text(bytes).map(|value| value.content)
+}
+
+/// 将 BIFF8 Draft 安全解析为领域校验可消费的 `字段=值` 投影。
+/// 这里只读取受限有效区域，不缓存、不写文件，也不接受伪装成 XLS 的其他容器。
+pub(crate) fn project_xls_validation_content(bytes: &[u8]) -> Result<String, String> {
+    if bytes.len() as u64 > MAX_XLS_FILE_BYTES {
+        return Err("SAFE_XLS_TOO_LARGE: XLS exceeds 20 MiB".to_string());
+    }
+    ensure_ole2(bytes)?;
+    let mut source =
+        Xls::new(Cursor::new(bytes.to_vec())).map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
+    let sheet_names = source.sheet_names().to_vec();
+    if sheet_names.is_empty() {
+        return Err("SAFE_XLS_SHEET_MISSING: workbook contains no sheets".to_string());
+    }
+    let mut projection = String::new();
+    for name in sheet_names {
+        let range = source
+            .worksheet_range(&name)
+            .map_err(|e| format!("SAFE_XLS_SHEET_FAILED: {e}"))?;
+        let rows = crop_effective_rows(
+            range
+                .rows()
+                .map(|row| row.iter().map(ToString::to_string).collect()),
+        );
+        let row_count = rows.len();
+        let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
+        validate_xls_dimensions(&name, row_count, column_count)?;
+        projection.push_str("sheet=");
+        projection.push_str(&name);
+        projection.push('\n');
+        let Some(headers) = rows.first() else {
+            continue;
+        };
+        for row in rows.iter().skip(1) {
+            for column in 0..column_count {
+                let header = headers.get(column).map(String::as_str).unwrap_or_default();
+                let value = row.get(column).map(String::as_str).unwrap_or_default();
+                if !header.is_empty() && !value.is_empty() {
+                    projection.push_str(header);
+                    projection.push('=');
+                    projection.push_str(value);
+                    projection.push('\n');
+                }
+            }
+        }
+    }
+    Ok(projection)
+}
+
 fn decode_as(payload: &[u8], encoding: TextEncoding) -> Result<String, String> {
     match encoding {
         TextEncoding::Ascii | TextEncoding::Utf8 => std::str::from_utf8(payload)

@@ -1386,14 +1386,20 @@ fn hash_bytes(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     fn fixture_service() -> (PathBuf, ProjectService, String) {
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let base =
-            std::env::temp_dir().join(format!("mir3-gui-service-{}-{nonce}", std::process::id()));
+        let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let base = std::env::temp_dir().join(format!(
+            "mir3-gui-service-{}-{nonce}-{sequence}",
+            std::process::id()
+        ));
         let project = base.join("project");
         fs::create_dir_all(project.join("客户端/dev/GUIExport/demo")).unwrap();
         fs::create_dir_all(project.join("客户端/dev/GUIData")).unwrap();

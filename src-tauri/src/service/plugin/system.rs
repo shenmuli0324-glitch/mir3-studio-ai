@@ -35,6 +35,8 @@ pub struct DomainPackRelease {
 pub struct DomainPackState {
     pub schema_version: u32,
     pub system_id: String,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
     pub candidate: Option<DomainPackRelease>,
     pub current: Option<DomainPackRelease>,
     pub previous: Option<DomainPackRelease>,
@@ -235,6 +237,7 @@ pub fn activate_domain_pack_candidate(
         state.previous = state.current.clone();
         state.current = Some(candidate.clone());
     }
+    state.enabled = true;
     state.candidate = None;
     persist_domain_pack_state(&system_root, &state)?;
     Ok(state)
@@ -276,6 +279,29 @@ pub fn rollback_domain_pack(
     state.current = Some(target.clone());
     state.previous = failed.filter(|release| release != &target);
     state.candidate = None;
+    state.enabled = true;
+    persist_domain_pack_state(&system_root, &state)?;
+    Ok(state)
+}
+
+/// 用户禁用只改变原子状态指针，不删除任何版本；运行中固定版本仍可由 Kernel 完成，
+/// 新任务和领域入口不再取得 current。重新启用前再次校验当前版本完整性。
+pub fn set_domain_pack_enabled(
+    destination_root: &Path,
+    system_id: &str,
+    enabled: bool,
+) -> Result<DomainPackState, String> {
+    validate_system_id(system_id)?;
+    let system_root = destination_root.join(system_id);
+    let mut state = read_domain_pack_state(&system_root, system_id)?;
+    if enabled {
+        let current = state
+            .current
+            .as_ref()
+            .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+        validate_installed_release(&system_root, system_id, current)?;
+    }
+    state.enabled = enabled;
     persist_domain_pack_state(&system_root, &state)?;
     Ok(state)
 }
@@ -499,6 +525,7 @@ fn read_domain_pack_state(system_root: &Path, system_id: &str) -> Result<DomainP
         return Ok(DomainPackState {
             schema_version: DOMAIN_PACK_STATE_SCHEMA,
             system_id: system_id.to_string(),
+            enabled: true,
             candidate: None,
             current: None,
             previous: None,
@@ -514,6 +541,10 @@ fn read_domain_pack_state(system_root: &Path, system_id: &str) -> Result<DomainP
         return Err(format!("DOMAIN_PACK_STATE_INCOMPATIBLE: {system_id}"));
     }
     Ok(state)
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 fn persist_domain_pack_state(system_root: &Path, state: &DomainPackState) -> Result<(), String> {
@@ -915,6 +946,11 @@ mod tests {
         assert!(active.candidate.is_none());
         let stable = mark_domain_pack_lkg(&root, "level").unwrap();
         assert_eq!(stable.lkg, stable.current);
+        let disabled = set_domain_pack_enabled(&root, "level", false).unwrap();
+        assert!(!disabled.enabled);
+        assert!(disabled.current.is_some());
+        let enabled = set_domain_pack_enabled(&root, "level", true).unwrap();
+        assert!(enabled.enabled);
 
         let next_source = root.join("next-source");
         copy_directory(&source, &next_source).unwrap();
@@ -977,6 +1013,7 @@ mod tests {
         let state = DomainPackState {
             schema_version: DOMAIN_PACK_STATE_SCHEMA,
             system_id: "level".to_string(),
+            enabled: true,
             candidate: None,
             current: None,
             previous: None,
@@ -1012,6 +1049,108 @@ mod tests {
             assert!(state.candidate.is_none());
         }
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn all_33_domain_packs_support_disable_upgrade_and_rollback() {
+        let base = test_directory("domain-pack-full-matrix");
+        let installed = base.join("installed");
+        let candidates = base.join("candidates");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs");
+        ensure_domain_pack_root(&source, &installed).unwrap();
+        fs::create_dir_all(&candidates).unwrap();
+        let registry: Value =
+            serde_json::from_str(&fs::read_to_string(source.join("registry.json")).unwrap())
+                .unwrap();
+        let packs = registry["packs"].as_array().unwrap();
+        assert_eq!(packs.len(), 33);
+
+        for pack in packs {
+            let system_id = pack["systemId"].as_str().unwrap();
+            let original_version = Version::parse(pack["version"].as_str().unwrap()).unwrap();
+            let next_version = Version::new(
+                original_version.major,
+                original_version.minor,
+                original_version.patch + 1,
+            )
+            .to_string();
+            let disabled = set_domain_pack_enabled(&installed, system_id, false).unwrap();
+            assert!(!disabled.enabled, "{system_id} did not disable");
+            let enabled = set_domain_pack_enabled(&installed, system_id, true).unwrap();
+            assert!(enabled.enabled, "{system_id} did not re-enable");
+
+            let candidate = candidates.join(system_id);
+            copy_directory(&source.join(system_id), &candidate).unwrap();
+            set_test_pack_version(&candidate, &next_version);
+            let staged = stage_domain_pack_candidate(&installed, &candidate).unwrap();
+            assert_eq!(staged.candidate.as_ref().unwrap().version, next_version);
+            let upgraded = activate_domain_pack_candidate(&installed, system_id).unwrap();
+            assert_eq!(upgraded.current.as_ref().unwrap().version, next_version);
+            assert_eq!(
+                upgraded.previous.as_ref().unwrap().version,
+                original_version.to_string()
+            );
+            let rolled_back = rollback_domain_pack(&installed, system_id).unwrap();
+            assert_eq!(
+                rolled_back.current.as_ref().unwrap().version,
+                original_version.to_string()
+            );
+            assert_eq!(rolled_back.previous.as_ref().unwrap().version, next_version);
+        }
+        assert_eq!(list_domain_pack_states(&installed).unwrap().len(), 33);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn corrupt_or_disabled_pack_is_isolated_and_reported_as_a_missing_dependency() {
+        let base = test_directory("domain-pack-isolation");
+        let installed = base.join("installed");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs");
+        ensure_domain_pack_root(&source, &installed).unwrap();
+
+        let monster = read_domain_pack_state(&installed.join("monster"), "monster").unwrap();
+        let release = monster.current.unwrap();
+        fs::write(
+            installed
+                .join("monster/releases")
+                .join(release.directory)
+                .join("README.md"),
+            "corrupted",
+        )
+        .unwrap();
+        let store = mir3_domain::DomainStore::new_with_domain_pack_root(
+            base.join("data-corrupt"),
+            &installed,
+        )
+        .unwrap();
+        let active = store.list_domain_systems().unwrap();
+        assert_eq!(active.len(), 32);
+        assert!(!active.iter().any(|pack| pack.system_id == "monster"));
+        assert!(active.iter().any(|pack| pack.system_id == "shop"));
+        let dependency = store.resolve_domain_dependencies("level").unwrap();
+        assert!(dependency.missing.contains(&"monster".to_string()));
+        assert!(!dependency.cycles.is_empty());
+        assert!(store.resolve_domain_dependencies("shop").is_ok());
+
+        let clean_installed = base.join("installed-disabled");
+        ensure_domain_pack_root(&source, &clean_installed).unwrap();
+        set_domain_pack_enabled(&clean_installed, "monster", false).unwrap();
+        let disabled_store = mir3_domain::DomainStore::new_with_domain_pack_root(
+            base.join("data-disabled"),
+            &clean_installed,
+        )
+        .unwrap();
+        assert_eq!(disabled_store.list_domain_systems().unwrap().len(), 32);
+        assert!(disabled_store
+            .resolve_domain_dependencies("level")
+            .unwrap()
+            .missing
+            .contains(&"monster".to_string()));
+        fs::remove_dir_all(base).ok();
     }
 
     fn test_directory(label: &str) -> PathBuf {

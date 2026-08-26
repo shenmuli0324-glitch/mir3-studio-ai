@@ -205,12 +205,17 @@ impl DomainStore {
                 .map_err(|e| format!("DRAFT_PATCH_FAILED: {e}"))?;
         }
         let next_revision = draft.revision + 1;
-        transaction
+        let updated = transaction
             .execute(
-                "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1",
-                params![draft_id, next_revision, now_millis()],
+                "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1 AND revision=?4 AND status='open'",
+                params![draft_id, next_revision, now_millis(), expected_revision],
             )
             .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
+        if updated != 1 {
+            return Err(format!(
+                "DRAFT_REVISION_CONFLICT: expected {expected_revision}, Draft changed concurrently"
+            ));
+        }
         transaction
             .commit()
             .map_err(|e| format!("DRAFT_COMMIT_FAILED: {e}"))?;
@@ -271,12 +276,17 @@ impl DomainStore {
                 .map_err(|e| format!("DRAFT_PATCH_FAILED: {e}"))?;
         }
         let next_revision = draft.revision + 1;
-        transaction
+        let updated = transaction
             .execute(
-                "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1",
-                params![draft_id, next_revision, now_millis()],
+                "UPDATE drafts SET revision=?2,updated_at=?3 WHERE id=?1 AND revision=?4 AND status='open'",
+                params![draft_id, next_revision, now_millis(), expected_revision],
             )
             .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
+        if updated != 1 {
+            return Err(format!(
+                "DRAFT_REVISION_CONFLICT: expected {expected_revision}, Draft changed concurrently"
+            ));
+        }
         transaction
             .commit()
             .map_err(|e| format!("DRAFT_COMMIT_FAILED: {e}"))?;
@@ -351,6 +361,25 @@ impl DomainStore {
     }
 
     /// 仅供 Tauri 人工确认路径调用；MCP 不暴露此方法。
+    pub fn apply_validated_domain_draft(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        expected_revision: i64,
+        expected_diff_hash: &str,
+    ) -> Result<Snapshot, String> {
+        let report = self.validate_domain_draft(project_id, draft_id)?;
+        if !report.valid {
+            return Err(format!(
+                "DRAFT_VALIDATION_FAILED: {}: {}",
+                report.system_id,
+                report.diagnostics.join(" | ")
+            ));
+        }
+        self.apply_draft(project_id, draft_id, expected_revision, expected_diff_hash)
+    }
+
+    /// 低层 Apply 保留给已完成独立校验的内部事务；桌面确认入口必须调用上层校验门禁。
     pub fn apply_draft(
         &self,
         project_id: &str,
@@ -358,6 +387,7 @@ impl DomainStore {
         expected_revision: i64,
         expected_diff_hash: &str,
     ) -> Result<Snapshot, String> {
+        self.ensure_writable()?;
         let preview = self.preview_draft(project_id, draft_id)?;
         if preview.draft.status != DraftStatus::Open {
             return Err("DRAFT_NOT_OPEN: draft is no longer open".to_string());
@@ -411,22 +441,48 @@ impl DomainStore {
                 }
             } else {
                 if let Some(parent) = target.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| format!("DRAFT_APPLY_FAILED: {}: {e}", parent.display()))?;
+                    if let Err(error) = fs::create_dir_all(parent) {
+                        return Err(self.restore_after_apply_failure(
+                            project_id,
+                            &snapshot.id,
+                            format!("DRAFT_APPLY_FAILED: {}: {error}", parent.display()),
+                        ));
+                    }
                 }
                 replace_file_safely(&target, &content.unwrap_or_default())
             };
             if let Err(error) = result {
-                let _ = self.restore_snapshot(project_id, &snapshot.id);
-                return Err(format!("DRAFT_APPLY_FAILED: {}: {error}", target.display()));
+                return Err(self.restore_after_apply_failure(
+                    project_id,
+                    &snapshot.id,
+                    format!("DRAFT_APPLY_FAILED: {}: {error}", target.display()),
+                ));
             }
         }
-        self.project_connection(project_id)?
-            .execute(
-                "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1",
-                params![draft_id, now_millis()],
-            )
-            .map_err(|e| format!("DRAFT_UPDATE_FAILED: {e}"))?;
+        let connection = self
+            .project_connection(project_id)
+            .map_err(|error| self.restore_after_apply_failure(project_id, &snapshot.id, error))?;
+        let update = connection.execute(
+            "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1 AND status='open' AND revision=?3",
+            params![draft_id, now_millis(), expected_revision],
+        );
+        match update {
+            Ok(1) => {}
+            Ok(rows) => {
+                return Err(self.restore_after_apply_failure(
+                    project_id,
+                    &snapshot.id,
+                    format!("DRAFT_STATUS_CONFLICT: expected one open draft, updated {rows}"),
+                ));
+            }
+            Err(error) => {
+                return Err(self.restore_after_apply_failure(
+                    project_id,
+                    &snapshot.id,
+                    format!("DRAFT_UPDATE_FAILED: {error}"),
+                ));
+            }
+        }
         Ok(snapshot)
     }
 
@@ -434,12 +490,33 @@ impl DomainStore {
     ///
     /// 全部基线和确认信息会在第一次写入前完成检查；任意写入或数据库提交失败时，
     /// 使用同一组合快照恢复全部文件，避免跨系统任务只提交一部分。
+    pub fn apply_validated_composite_drafts(
+        &self,
+        project_id: &str,
+        composite_id: &str,
+        confirmations: &[CompositeDraftConfirmation],
+    ) -> Result<CompositeApplyResult, String> {
+        for confirmation in confirmations {
+            let report = self.validate_domain_draft(project_id, &confirmation.draft_id)?;
+            if !report.valid {
+                return Err(format!(
+                    "DRAFT_VALIDATION_FAILED: {}: {}",
+                    report.system_id,
+                    report.diagnostics.join(" | ")
+                ));
+            }
+        }
+        self.apply_composite_drafts(project_id, composite_id, confirmations)
+    }
+
+    /// 组合 Apply 的低层实现只接受已经通过上层领域校验门禁的调用。
     pub fn apply_composite_drafts(
         &self,
         project_id: &str,
         composite_id: &str,
         confirmations: &[CompositeDraftConfirmation],
     ) -> Result<CompositeApplyResult, String> {
+        self.ensure_writable()?;
         if composite_id.trim().is_empty() || confirmations.len() < 2 {
             return Err(
                 "COMPOSITE_DRAFT_INVALID: composite id and at least two drafts are required"
@@ -455,6 +532,22 @@ impl DomainStore {
             if draft_ids.contains(&confirmation.draft_id) {
                 return Err(format!(
                     "COMPOSITE_DRAFT_DUPLICATE: {}",
+                    confirmation.draft_id
+                ));
+            }
+            let binding = self
+                .project_connection(project_id)?
+                .query_row(
+                    "SELECT composite_id FROM draft_domains WHERE draft_id=?1 AND legacy=0",
+                    [&confirmation.draft_id],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .optional()
+                .map_err(|error| format!("COMPOSITE_BINDING_READ_FAILED: {error}"))?
+                .flatten();
+            if binding.as_deref() != Some(composite_id) {
+                return Err(format!(
+                    "COMPOSITE_BINDING_MISMATCH: {} is not bound to {composite_id}",
                     confirmation.draft_id
                 ));
             }
@@ -525,36 +618,78 @@ impl DomainStore {
                 replace_file_safely(&target, &content.unwrap_or_default())
             };
             if let Err(error) = result {
-                let _ = self.restore_snapshot(project_id, &snapshot.id);
-                return Err(format!(
-                    "COMPOSITE_APPLY_FAILED: {}: {error}",
-                    target.display()
+                return Err(self.restore_after_apply_failure(
+                    project_id,
+                    &snapshot.id,
+                    format!("COMPOSITE_APPLY_FAILED: {}: {error}", target.display()),
                 ));
             }
         }
-        let mut connection = self.project_connection(project_id)?;
-        let transaction = connection
-            .transaction()
-            .map_err(|error| format!("COMPOSITE_TRANSACTION_FAILED: {error}"))?;
+        let mut connection = self
+            .project_connection(project_id)
+            .map_err(|error| self.restore_after_apply_failure(project_id, &snapshot.id, error))?;
+        let transaction = connection.transaction().map_err(|error| {
+            self.restore_after_apply_failure(
+                project_id,
+                &snapshot.id,
+                format!("COMPOSITE_TRANSACTION_FAILED: {error}"),
+            )
+        })?;
         for draft_id in &draft_ids {
-            if let Err(error) = transaction.execute(
+            let updated = transaction.execute(
                 "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1 AND status='open'",
                 params![draft_id, now_millis()],
-            ) {
-                drop(transaction);
-                let _ = self.restore_snapshot(project_id, &snapshot.id);
-                return Err(format!("COMPOSITE_STATUS_FAILED: {error}"));
+            );
+            match updated {
+                Ok(1) => {}
+                Ok(rows) => {
+                    drop(transaction);
+                    return Err(self.restore_after_apply_failure(
+                        project_id,
+                        &snapshot.id,
+                        format!(
+                            "COMPOSITE_STATUS_CONFLICT: {draft_id} expected one open draft, updated {rows}"
+                        ),
+                    ));
+                }
+                Err(error) => {
+                    drop(transaction);
+                    return Err(self.restore_after_apply_failure(
+                        project_id,
+                        &snapshot.id,
+                        format!("COMPOSITE_STATUS_FAILED: {error}"),
+                    ));
+                }
             }
         }
         if let Err(error) = transaction.commit() {
-            let _ = self.restore_snapshot(project_id, &snapshot.id);
-            return Err(format!("COMPOSITE_COMMIT_FAILED: {error}"));
+            return Err(self.restore_after_apply_failure(
+                project_id,
+                &snapshot.id,
+                format!("COMPOSITE_COMMIT_FAILED: {error}"),
+            ));
         }
         Ok(CompositeApplyResult {
             composite_id: composite_id.to_string(),
             draft_ids,
             snapshot,
         })
+    }
+
+    /// 文件系统与 SQLite 无法共享事务；因此数据库状态提交失败时必须把同一快照
+    /// 恢复结果合并进错误，不能吞掉二次失败后继续声称已原子回滚。
+    fn restore_after_apply_failure(
+        &self,
+        project_id: &str,
+        snapshot_id: &str,
+        original: String,
+    ) -> String {
+        match self.restore_snapshot(project_id, snapshot_id) {
+            Ok(_) => original,
+            Err(restore_error) => {
+                format!("{original}; SNAPSHOT_RESTORE_AFTER_APPLY_FAILED: {restore_error}")
+            }
+        }
     }
 
     pub fn discard_draft(&self, project_id: &str, draft_id: &str) -> Result<Draft, String> {
@@ -649,6 +784,7 @@ impl DomainStore {
         project_id: &str,
         snapshot_id: &str,
     ) -> Result<Snapshot, String> {
+        self.ensure_writable()?;
         let snapshot = self
             .list_snapshots(project_id)?
             .into_iter()
@@ -926,6 +1062,78 @@ mod tests {
             )
             .unwrap();
 
+        let wrong_binding = store
+            .apply_composite_drafts(
+                &imported.id,
+                "release-wrong",
+                &[
+                    CompositeDraftConfirmation {
+                        draft_id: quest.id.clone(),
+                        expected_revision: quest_preview.draft.revision,
+                        expected_diff_hash: quest_preview.diff_hash.clone(),
+                    },
+                    CompositeDraftConfirmation {
+                        draft_id: shop.id.clone(),
+                        expected_revision: shop_preview.draft.revision,
+                        expected_diff_hash: shop_preview.diff_hash.clone(),
+                    },
+                ],
+            )
+            .unwrap_err();
+        assert!(wrong_binding.starts_with("COMPOSITE_BINDING_MISMATCH:"));
+        assert_eq!(
+            fs::read_to_string(project.join(quest_path)).unwrap(),
+            "quest=1\n"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(shop_path)).unwrap(),
+            "shop=1\n"
+        );
+
+        // 即使 SQLite 静默忽略状态更新，也必须把已经写入的两个文件整体恢复。
+        store
+            .project_connection(&imported.id)
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER ignore_composite_apply
+                 BEFORE UPDATE OF status ON drafts
+                 WHEN NEW.status='applied'
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+        let status_conflict = store
+            .apply_composite_drafts(
+                &imported.id,
+                "release-1",
+                &[
+                    CompositeDraftConfirmation {
+                        draft_id: quest.id.clone(),
+                        expected_revision: quest_preview.draft.revision,
+                        expected_diff_hash: quest_preview.diff_hash.clone(),
+                    },
+                    CompositeDraftConfirmation {
+                        draft_id: shop.id.clone(),
+                        expected_revision: shop_preview.draft.revision,
+                        expected_diff_hash: shop_preview.diff_hash.clone(),
+                    },
+                ],
+            )
+            .unwrap_err();
+        assert!(status_conflict.starts_with("COMPOSITE_STATUS_CONFLICT:"));
+        assert_eq!(
+            fs::read_to_string(project.join(quest_path)).unwrap(),
+            "quest=1\n"
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(shop_path)).unwrap(),
+            "shop=1\n"
+        );
+        store
+            .project_connection(&imported.id)
+            .unwrap()
+            .execute_batch("DROP TRIGGER ignore_composite_apply;")
+            .unwrap();
+
         let applied = store
             .apply_composite_drafts(
                 &imported.id,
@@ -963,6 +1171,177 @@ mod tests {
         assert_eq!(
             fs::read_to_string(project.join(shop_path)).unwrap(),
             "shop=1\n"
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn composite_preflight_scales_across_three_eight_and_all_domains() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-composite-matrix-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("全领域项目");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir")).unwrap();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let manifests = store.list_domain_systems().unwrap();
+        assert_eq!(manifests.len(), 33);
+        let mut relative_by_system = std::collections::BTreeMap::new();
+        for manifest in &manifests {
+            let selector = manifest
+                .file_projection
+                .keywords
+                .iter()
+                .find(|selector| {
+                    !selector.is_empty()
+                        && selector
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                })
+                .unwrap();
+            let relative = format!("引擎/Mir200/Envir/{selector}/{}.txt", manifest.system_id);
+            let path = project.join(&relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, format!("{}=0\n", manifest.system_id)).unwrap();
+            relative_by_system.insert(manifest.system_id.clone(), relative);
+        }
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+
+        for count in [3_usize, 8, 33] {
+            let composite_id = format!("g4-{count}");
+            let mut confirmations = Vec::new();
+            let mut paths = Vec::new();
+            for manifest in manifests.iter().take(count) {
+                let relative = relative_by_system[&manifest.system_id].clone();
+                let draft = store
+                    .open_draft(&imported.id, &format!("G4 {}", manifest.system_id))
+                    .unwrap();
+                store
+                    .bind_draft_domain(
+                        &imported.id,
+                        &draft.id,
+                        &manifest.system_id,
+                        &manifest.version,
+                        Some(&composite_id),
+                    )
+                    .unwrap();
+                let preview = store
+                    .patch_draft(
+                        &imported.id,
+                        &draft.id,
+                        0,
+                        &[DraftChangeInput {
+                            path: relative.clone(),
+                            content: Some(format!("{}={count}\n", manifest.system_id)),
+                            deleted: false,
+                            expected_sha256: None,
+                        }],
+                    )
+                    .unwrap();
+                confirmations.push(CompositeDraftConfirmation {
+                    draft_id: draft.id,
+                    expected_revision: preview.draft.revision,
+                    expected_diff_hash: preview.diff_hash,
+                });
+                paths.push((relative, manifest.system_id.clone()));
+            }
+
+            let mut stale = confirmations.clone();
+            stale[count / 2].expected_revision += 1;
+            let error = store
+                .apply_composite_drafts(&imported.id, &composite_id, &stale)
+                .unwrap_err();
+            assert!(error.starts_with("COMPOSITE_CONFIRMATION_STALE:"));
+            for (relative, system_id) in &paths {
+                assert_eq!(
+                    fs::read_to_string(project.join(relative)).unwrap(),
+                    format!("{system_id}=0\n")
+                );
+            }
+
+            let applied = store
+                .apply_composite_drafts(&imported.id, &composite_id, &confirmations)
+                .unwrap();
+            assert_eq!(applied.draft_ids.len(), count);
+            for (relative, system_id) in &paths {
+                assert_eq!(
+                    fs::read_to_string(project.join(relative)).unwrap(),
+                    format!("{system_id}={count}\n")
+                );
+            }
+            store
+                .restore_snapshot(&imported.id, &applied.snapshot.id)
+                .unwrap();
+        }
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn concurrent_writers_cannot_both_commit_the_same_expected_revision() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-draft-concurrency-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("并发项目");
+        let relative = "引擎/Mir200/Envir/Quest/quest.txt";
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir/Quest")).unwrap();
+        fs::write(project.join(relative), "quest=0\n").unwrap();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+        let draft = store.open_draft(&imported.id, "并发修改").unwrap();
+        store
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.0.0", None)
+            .unwrap();
+
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let mut workers = Vec::new();
+        for value in ["quest=1\n", "quest=2\n"] {
+            let worker_store = store.clone();
+            let worker_project = imported.id.clone();
+            let worker_draft = draft.id.clone();
+            let worker_barrier = barrier.clone();
+            workers.push(std::thread::spawn(move || {
+                worker_barrier.wait();
+                worker_store.patch_draft(
+                    &worker_project,
+                    &worker_draft,
+                    0,
+                    &[DraftChangeInput {
+                        path: relative.to_string(),
+                        content: Some(value.to_string()),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )
+            }));
+        }
+        barrier.wait();
+        let outcomes = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+        let rejected = outcomes
+            .iter()
+            .find_map(|outcome| outcome.as_ref().err())
+            .unwrap();
+        assert!(
+            rejected.starts_with("DRAFT_REVISION_CONFLICT:"),
+            "unexpected concurrent rejection: {rejected}"
+        );
+        assert_eq!(
+            store.get_draft(&imported.id, &draft.id).unwrap().revision,
+            1
+        );
+        assert_eq!(
+            fs::read_to_string(project.join(relative)).unwrap(),
+            "quest=0\n"
         );
         fs::remove_dir_all(base).ok();
     }

@@ -452,6 +452,7 @@ pub fn project_path_string(root: &str, relative: &str) -> Result<String, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DomainFileQuery;
 
     #[test]
     fn scan_indexes_domain_text_without_loading_binary_content() {
@@ -507,5 +508,96 @@ mod tests {
     fn unicode_excerpt_never_uses_lowercased_byte_offsets() {
         let result = excerpt(Some("İstanbul\n传奇项目"), "传奇").unwrap();
         assert_eq!(result, "传奇项目");
+    }
+
+    #[test]
+    fn ten_thousand_file_index_has_bounded_queries_and_stable_pagination() {
+        const FILE_COUNT: usize = 10_025;
+        let base = std::env::temp_dir().join(format!(
+            "mir3-large-index-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project_root = base.join("大型项目");
+        fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
+        let item_root = project_root.join("引擎/Mir200/Envir/Item");
+        fs::create_dir_all(&item_root).unwrap();
+        for group in 0..101 {
+            let directory = item_root.join(format!("group-{group:03}"));
+            fs::create_dir_all(&directory).unwrap();
+            for index in 0..100 {
+                let ordinal = group * 100 + index;
+                if ordinal >= FILE_COUNT {
+                    break;
+                }
+                fs::write(
+                    directory.join(format!("item-{ordinal:05}.txt")),
+                    format!("itemId={ordinal}\tprice={}\n", ordinal + 1),
+                )
+                .unwrap();
+            }
+        }
+
+        let started = std::time::Instant::now();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let summary = store.scan_project(&project.id, || false).unwrap();
+        assert_eq!(summary.scanned_files, FILE_COUNT);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(60),
+            "10k-file fixture indexing exceeded the 60 second G4 gate"
+        );
+
+        let bounded = store
+            .query_index(
+                &project.id,
+                &IndexQuery {
+                    text: String::new(),
+                    categories: Vec::new(),
+                    role: None,
+                    limit: Some(usize::MAX),
+                },
+            )
+            .unwrap();
+        assert_eq!(bounded.len(), 200);
+
+        let first_page = store
+            .query_domain_files(
+                &project.id,
+                "item",
+                &DomainFileQuery {
+                    text: String::new(),
+                    limit: Some(125),
+                    offset: Some(0),
+                },
+            )
+            .unwrap();
+        let last_page = store
+            .query_domain_files(
+                &project.id,
+                "item",
+                &DomainFileQuery {
+                    text: String::new(),
+                    limit: Some(125),
+                    offset: Some(10_000),
+                },
+            )
+            .unwrap();
+        let clamped = store
+            .query_domain_files(
+                &project.id,
+                "item",
+                &DomainFileQuery {
+                    text: String::new(),
+                    limit: Some(usize::MAX),
+                    offset: Some(0),
+                },
+            )
+            .unwrap();
+        assert_eq!(first_page.len(), 125);
+        assert_eq!(last_page.len(), 25);
+        assert_eq!(clamped.len(), 10_000);
+        assert!(first_page.last().unwrap().path < last_page.first().unwrap().path);
+        fs::remove_dir_all(base).ok();
     }
 }

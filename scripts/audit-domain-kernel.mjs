@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
@@ -82,7 +83,7 @@ for (const pack of registry.packs) {
     if (!existsSync(join(directory, file)))
       failures.push(`${pack.systemId}: missing ${file}`)
   }
-  if (pack.kind !== 'domain' || pack.version !== '1.0.0' || pack.kernelApiRange !== '^1.0.0')
+  if (pack.kind !== 'domain' || !/^\d+\.\d+\.\d+$/.test(pack.version || '') || pack.kernelApiRange !== '^1.0.0')
     failures.push(`${pack.systemId}: invalid kind/version/kernelApiRange`)
   if (!pack.renderer || !Array.isArray(pack.dependencies) || !Array.isArray(pack.capabilities))
     failures.push(`${pack.systemId}: renderer, dependencies, and capabilities are required`)
@@ -142,6 +143,8 @@ for (const pack of registry.packs) {
       failures.push(`${pack.systemId}: package domain metadata is invalid`)
     if (!/^\d+\.\d+\.\d+$/.test(manifest.version || ''))
       failures.push(`${pack.systemId}: package version is not stable SemVer`)
+    if (manifest.version !== pack.version)
+      failures.push(`${pack.systemId}: package version differs from registry version`)
     if (!readFileSync(join(directory, 'CHANGELOG.md'), 'utf8').includes(`## ${manifest.version}`))
       failures.push(`${pack.systemId}: CHANGELOG has no ${manifest.version} entry`)
     for (const file of ['domain.json', 'schemas/', 'fixtures/', 'README.md', 'CHANGELOG.md']) {
@@ -200,12 +203,61 @@ for (const tool of expectedTools) {
   if (!mcp.includes(`"${tool}"`))
     failures.push(`MCP is missing ${tool}`)
 }
+if (!mcp.includes('MCP_MAX_QUERY_ITEMS') || !mcp.includes('MCP_MAX_RESULT_BYTES') || !mcp.includes('MCP_MAX_SCHEMA_BYTES'))
+  failures.push('MCP must expose quantified query, result, and schema context budgets')
+if (!mcp.includes('.map(system_list_payload)') || !mcp.includes('MCP_RESULT_BUDGET_EXCEEDED:'))
+  failures.push('MCP list output must use summaries and fail closed when the result budget is exceeded')
+
+const systemSummaryBytes = Buffer.byteLength(JSON.stringify({
+  systems: registry.packs.map(pack => ({
+    systemId: pack.systemId,
+    version: pack.version,
+    category: pack.category,
+    renderer: pack.renderer,
+    dependencies: pack.dependencies,
+    capabilityCount: pack.capabilities.length,
+  })),
+}))
+if (systemSummaryBytes >= 32 * 1024)
+  failures.push(`MCP 33-system summary exceeds 32 KiB: ${systemSummaryBytes}`)
+const cyclicComponents = dependencyCycleComponents(registry.packs)
 
 if (failures.length) {
   process.stderr.write(`${failures.join('\n')}\n`)
   process.exit(1)
 }
-process.stdout.write(`Domain Kernel audit passed (33 packs, ${capabilityIds.size} official capabilities, 11 MCP tools)\n`)
+process.stdout.write(`Domain Kernel audit passed (33 packs, ${capabilityIds.size} official capabilities, 11 MCP tools, ${systemSummaryBytes}B system summary, ${cyclicComponents.length} cyclic dependency components reported)\n`)
+
+function dependencyCycleComponents(packs) {
+  const dependencies = new Map(packs.map(pack => [pack.systemId, pack.dependencies || []]))
+  const reaches = (start, target) => {
+    const pending = [...(dependencies.get(start) || [])]
+    const seen = new Set()
+    while (pending.length) {
+      const current = pending.pop()
+      if (current === target)
+        return true
+      if (seen.has(current))
+        continue
+      seen.add(current)
+      pending.push(...(dependencies.get(current) || []))
+    }
+    return false
+  }
+  const remaining = new Set(dependencies.keys())
+  const components = []
+  while (remaining.size) {
+    const [first] = remaining
+    const component = [...remaining].filter(candidate => reaches(first, candidate) && reaches(candidate, first))
+    for (const systemId of component)
+      remaining.delete(systemId)
+    if (component.length > 1 || (dependencies.get(first) || []).includes(first))
+      components.push(component.sort())
+    else
+      remaining.delete(first)
+  }
+  return components
+}
 
 function auditSemanticContract(pack, directory, failures, semanticFingerprints, runtimeRules) {
   const schemaPath = join(directory, 'schemas', 'resource.schema.json')

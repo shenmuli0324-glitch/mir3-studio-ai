@@ -1,6 +1,6 @@
 # map
 
-MIR3 Studio map domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio map domain pack for MIR3 System Kernel v1. Pack version: `1.0.1`; compiler compatibility: MIR3 System Kernel `^1.0.0`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 

@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const outputRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-packs')
 
 const packDefinitions = [
-  pack('map', 'resources', 5, 'map-canvas-v1', ['mapinfo', '/map/', '.map', '地图'], ['npc', 'monster', 'quest', 'manor', 'sabac'], ['inspect-map', 'clone-map', 'edit-map-config', 'edit-map-region']),
+  pack('map', 'resources', 5, 'map-canvas-v1', ['mapinfo', '/map/', '.map', '地图'], ['npc', 'monster', 'quest', 'manor', 'sabac'], ['inspect-map', 'clone-map', 'edit-map-config', 'edit-map-region'], '1.0.1'),
   pack('npc', 'resources', 3, 'flow-v1', ['npc', 'market_def', 'merchant', '商人'], ['map', 'quest', 'shop', 'item'], ['inspect-npc', 'move-npc', 'edit-dialogue', 'replace-npc-reference']),
   pack('monster', 'resources', 2, 'graph-v1', ['monster', 'mongen', 'monitems', '怪物'], ['map', 'item', 'quest'], ['inspect-monster', 'clone-monster', 'tune-monster', 'edit-drop-table']),
   pack('equipment', 'resources', 2, 'table-v1', ['equipment', 'equip', '装备'], ['item', 'enhance', 'gem', 'refine', 'skill', 'buff'], ['inspect-equipment', 'clone-equipment', 'batch-tune-equipment', 'replace-equipment-reference']),
@@ -100,12 +100,12 @@ const compoundUniqueKeys = {
   talent: ['treeId', 'nodeId'],
 }
 
-function pack(id, category, complexity, renderer, keywords, dependencies, capabilities) {
-  return { id, category, complexity, renderer, keywords, dependencies, capabilities }
+function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.0.0') {
+  return { id, category, complexity, renderer, keywords, dependencies, capabilities, version }
 }
 
 function createPack(definition) {
-  const { id, category, complexity, renderer, keywords, dependencies, capabilities } = definition
+  const { id, category, complexity, renderer, keywords, dependencies, capabilities, version } = definition
   const spec = domainSpecs[id]
   const primitive = primitiveForRenderer(renderer)
   const uniqueKey = compoundUniqueKeys[id] || [spec.fields[0].name]
@@ -119,7 +119,7 @@ function createPack(definition) {
   return {
     kind: 'domain',
     systemId: id,
-    version: '1.0.0',
+    version,
     kernelApiRange: '^1.0.0',
     supportedEngineRange: '*',
     manifestSchemaVersion: 1,
@@ -161,7 +161,7 @@ function createPack(definition) {
     operations,
     capabilities: operations.map(entry => ({
       ...entry,
-      version: '1.0.0',
+      version,
       previewRequired: true,
       validationRequired: true,
       confirmationRequired: true,
@@ -265,7 +265,52 @@ function operationSchema(capabilityId, spec, readonly) {
   }
   const properties = { operation: { const: capabilityId } }
   const required = ['operation']
-  if (capabilityId.startsWith('inspect-')) {
+  if (capabilityId === 'edit-map-region') {
+    const coordinateProperties = {
+      x: { type: 'integer', minimum: 0, maximum: 4095 },
+      y: { type: 'integer', minimum: 0, maximum: 4095 },
+    }
+    const mapEdit = (type, extraProperties, extraRequired) => ({
+      type: 'object',
+      additionalProperties: false,
+      properties: { type: { const: type }, ...coordinateProperties, ...extraProperties },
+      required: ['type', 'x', 'y', ...extraRequired],
+    })
+    Object.assign(properties, {
+      resourceId: id,
+      operations: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20000,
+        items: {
+          oneOf: [
+            mapEdit('setSprite', {
+              layer: { enum: ['background', 'middle', 'front'] },
+              library: { type: 'integer', minimum: -1, maximum: 32767 },
+              image: { type: 'integer', minimum: 0, maximum: 65535 },
+            }, ['layer', 'library', 'image']),
+            mapEdit('clearSprite', {
+              layer: { enum: ['background', 'middle', 'front'] },
+            }, ['layer']),
+            mapEdit('setCollision', {
+              walkable: { type: 'boolean' },
+              frontBlocked: { type: 'boolean' },
+            }, ['walkable', 'frontBlocked']),
+            mapEdit('setDoor', {
+              doorIndex: { type: 'integer', minimum: 0, maximum: 255 },
+              doorOffset: { type: 'integer', minimum: 0, maximum: 255 },
+            }, ['doorIndex', 'doorOffset']),
+            mapEdit('setAnimation', {
+              middleFrames: { type: 'integer', minimum: 0, maximum: 255 },
+              frontFrames: { type: 'integer', minimum: 0, maximum: 255 },
+            }, ['middleFrames', 'frontFrames']),
+          ],
+        },
+      },
+    })
+    required.push('resourceId', 'operations')
+  }
+  else if (capabilityId.startsWith('inspect-')) {
     Object.assign(properties, { resourceId: id, includeDependencies: { type: 'boolean', default: true }, projection: { enum: ['merged', 'client', 'engine'] } })
   }
   else if (capabilityId.startsWith('validate-')) {
@@ -431,8 +476,10 @@ for (const entry of packs) {
   writeFileSync(join(fixtureDirectory, 'valid.json'), `${JSON.stringify(examples.valid, null, 2)}\n`)
   writeFileSync(join(fixtureDirectory, 'invalid.json'), `${JSON.stringify(examples.invalid, null, 2)}\n`)
   writeFileSync(join(fixtureDirectory, 'expected-diagnostics.json'), `${JSON.stringify(examples.expectedDiagnostics, null, 2)}\n`)
-  writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
-  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+  const compatibility = entry.systemId === 'map' ? ` Pack version: \`${entry.version}\`; compiler compatibility: MIR3 System Kernel \`${entry.kernelApiRange}\`.` : ''
+  writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1.${compatibility} Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
+  const mapChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
+  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
 }
 
 process.stdout.write(`Generated ${packs.length} MIR3 domain packs with schemas and contract fixtures.\n`)

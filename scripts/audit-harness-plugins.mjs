@@ -95,17 +95,20 @@ for (const pluginRoot of pluginRoots) {
     if (!server.includes('export default') || !server.includes('apply'))
       failures.push(`${manifest.name}: server entry must default-export a Harness apply plugin`)
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
+      const policyPath = join(pluginRoot, 'lib', 'policy.js')
+      const serverPolicy = `${server}\n${existsSync(policyPath) ? readFileSync(policyPath, 'utf8') : ''}`
       for (const contract of [
         'inject: [\'sessions\', \'sandboxPolicy\']',
-        'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',
+        'isMir3ManagedSession',
         'ctx.on(\'session/created\'',
         'ctx.on(\'fs/write-intent\'',
         'ctx.on(\'fs/edit-intent\'',
         'exec?.agent?.session',
         'MIR3_SYSTEM_SESSION_SCOPE_UNAVAILABLE',
         'MIR3_SYSTEM_SESSION_DRAFT_REQUIRED',
+        'isWithin(projectRoot, path)',
       ]) {
-        if (!server.includes(contract))
+        if (!serverPolicy.includes(contract))
           failures.push(`${manifest.name}: scoped system-session policy is missing ${contract}`)
       }
       for (const peer of ['@deepseek-ai/cordis', '@deepseek-ai/dsh-client-runtime', '@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-session']) {
@@ -121,11 +124,12 @@ for (const pluginRoot of pluginRoots) {
         failures.push(`${manifest.name}: client entry is missing ${contract}`)
     }
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
-      if (manifest.version !== '1.0.0')
-        failures.push(`${manifest.name}: compatibility adapter must be version 1.0.0`)
+      if (manifest.version !== '1.0.1')
+        failures.push(`${manifest.name}: compatibility adapter must be version 1.0.1`)
       for (const contract of [
         'const PROTOCOL_VERSION = 2',
         'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',
+        'const GLOBAL_SESSION_PREFIX = \'global-\'',
         'event.source !== window.parent',
         'event.origin !== parentOrigin',
         'ctx.sessions.create',
@@ -138,7 +142,16 @@ for (const pluginRoot of pluginRoots) {
         'case \'mir3/systemSession.respond\'',
         'case \'mir3/systemSession.snapshot\'',
         'case \'mir3/systemSession.complete\'',
+        'case \'mir3/globalSession.prompt\'',
+        'case \'mir3/globalSession.cancel\'',
+        'case \'mir3/globalSession.complete\'',
+        'domainResults: projectDomainResults',
+        'returnTo: projectReturnTarget',
         'SYSTEM_SESSION_SCOPE_UNVERIFIED',
+        'GLOBAL_SESSION_SCOPE_UNVERIFIED',
+        'typeof message.sessionId === \'string\'',
+        'nextOutboundSequence',
+        'acceptInboundSequence',
       ]) {
         if (!client.includes(contract))
           failures.push(`${manifest.name}: protocol v2 client is missing ${contract}`)

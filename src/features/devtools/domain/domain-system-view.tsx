@@ -1,10 +1,11 @@
 import type { DevToolDefinition } from '../devtool-registry'
 import type { DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainValidationReport, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
+import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { CircleCheck, CircleExclamation, Magnifier } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { SystemAiPanel } from '@/features/system-ai/system-ai-panel'
@@ -24,9 +25,12 @@ import {
   patchDomainText,
   previewDomainDraft,
   queryDomainFiles,
+  queryDomainResources,
   queryUnclaimedDomainFiles,
   rollbackDomainPack,
+  setDomainPackEnabled,
   stageDomainPackUpdate,
+  validateDomainDraft,
   validateDomainSystem,
 } from './api'
 import { ResourceRenderer } from './renderers/resource-renderer'
@@ -34,10 +38,11 @@ import { ResourceRenderer } from './renderers/resource-renderer'
 type ResourceTab = 'resources' | 'files' | 'dependencies'
 type CenterTab = 'domain' | 'source' | 'diff' | 'validation'
 
-export function DomainSystemView({ tool, project, onBack }: {
+export function DomainSystemView({ tool, project, onBack, target }: {
   tool: DevToolDefinition
   project: Mir3Project | null
   onBack: () => void
+  target?: VerifiedDevtoolsTarget | null
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -45,9 +50,11 @@ export function DomainSystemView({ tool, project, onBack }: {
   const [centerTab, setCenterTab] = useState<CenterTab>('domain')
   const [search, setSearch] = useState('')
   const [selectedFile, setSelectedFile] = useState<DomainFileRecord | null>(null)
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [editedContent, setEditedContent] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<DomainDraftConfirmation | null>(null)
   const [validation, setValidation] = useState<DomainValidationReport | null>(null)
+  const handledTargetRef = useRef('')
 
   const manifests = useQuery({
     queryKey: ['domain-systems'],
@@ -79,6 +86,14 @@ export function DomainSystemView({ tool, project, onBack }: {
       void queryClient.invalidateQueries({ queryKey: ['domain-systems'] })
     },
   })
+  const togglePack = useMutation({
+    mutationFn: (enabled: boolean) => setDomainPackEnabled(tool.id, enabled),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-systems'] })
+    },
+    onError: reason => toast(String(reason), { variant: 'danger' }),
+  })
   const checkPackUpdates = useMutation({
     mutationFn: () => checkDomainPackUpdates(tool.id),
     onSuccess: (result) => {
@@ -106,10 +121,16 @@ export function DomainSystemView({ tool, project, onBack }: {
     queryFn: () => queryUnclaimedDomainFiles(project!.id, search),
     enabled: project != null && resourceTab === 'files',
   })
+  const resources = useQuery({
+    queryKey: ['domain-resources', project?.id, tool.id, search],
+    queryFn: () => queryDomainResources(project!.id, tool.id, search, 10_000),
+    enabled: project != null && resourceTab === 'resources',
+  })
+  const selectedResourceKey = selectedResourceId ?? selectedFile?.resourceId
   const selectedResource = useQuery({
-    queryKey: ['domain-resource', project?.id, tool.id, selectedFile?.resourceId],
-    queryFn: () => getDomainResource(project!.id, tool.id, selectedFile!.resourceId),
-    enabled: project != null && selectedFile != null,
+    queryKey: ['domain-resource', project?.id, tool.id, selectedResourceKey],
+    queryFn: () => getDomainResource(project!.id, tool.id, selectedResourceKey!),
+    enabled: project != null && selectedResourceKey != null,
   })
   const drafts = useQuery({
     queryKey: ['domain-drafts', project?.id],
@@ -144,7 +165,7 @@ export function DomainSystemView({ tool, project, onBack }: {
   })
   const applyDraft = useMutation({
     mutationFn: async (confirmation: DomainDraftConfirmation) => {
-      const report = await validateDomainSystem(project!.id, tool.id)
+      const report = await validateDomainDraft(project!.id, confirmation.preview.draft.id)
       setValidation(report)
       if (!report.valid)
         throw new Error('DOMAIN_VALIDATION_FAILED')
@@ -155,14 +176,31 @@ export function DomainSystemView({ tool, project, onBack }: {
       setEditedContent(null)
       void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
       void queryClient.invalidateQueries({ queryKey: ['domain-files', project?.id, tool.id] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-resources', project?.id, tool.id] })
       void queryClient.invalidateQueries({ queryKey: ['domain-source', project?.id] })
       toast(t('studio.devtools.diff.applied'), {})
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
 
+  useEffect(() => {
+    if (!project || !target || files.isLoading || target.projectId !== project.id || target.systemId !== tool.id || handledTargetRef.current === target.nonce)
+      return
+    handledTargetRef.current = target.nonce
+    void consumeNavigationTarget(project, target, files.data ?? [], selectFile, setDraftPreview, setValidation, setCenterTab)
+      .catch(reason => toast(String(reason), { variant: 'danger' }))
+  }, [files.data, files.isLoading, project, target, tool.id])
+
   function selectFile(file: DomainFileRecord) {
     setSelectedFile(file)
+    setSelectedResourceId(null)
+    setEditedContent(null)
+    setCenterTab('domain')
+  }
+
+  function selectResource(resource: DomainResourceRecord) {
+    setSelectedResourceId(resource.id)
+    setSelectedFile(resource.files[0] ?? null)
     setEditedContent(null)
     setCenterTab('domain')
   }
@@ -191,6 +229,31 @@ export function DomainSystemView({ tool, project, onBack }: {
     }
   }
 
+  async function handleAiDraftHandoff(handoff: DomainDraftHandoff) {
+    if (!project || handoff.systemId !== tool.id)
+      throw new Error('AI_DRAFT_SCOPE_MISMATCH')
+    const [preview, report] = await Promise.all([
+      previewDomainDraft(project.id, handoff.draftId),
+      validateDomainDraft(project.id, handoff.draftId),
+    ])
+    if (report.systemId !== tool.id || preview.preview.draft.revision < handoff.revision)
+      throw new Error('AI_DRAFT_BINDING_MISMATCH')
+    setDraftPreview(preview)
+    setValidation(report)
+    if (handoff.resourceId) {
+      const resource = await getDomainResource(project.id, tool.id, handoff.resourceId)
+      selectResource(resource)
+    }
+    setCenterTab(report.valid ? 'diff' : 'validation')
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['domain-drafts', project.id] }),
+      queryClient.invalidateQueries({ queryKey: ['domain-files', project.id, tool.id] }),
+      queryClient.invalidateQueries({ queryKey: ['domain-resources', project.id, tool.id] }),
+      queryClient.invalidateQueries({ queryKey: ['domain-resource', project.id, tool.id] }),
+      queryClient.invalidateQueries({ queryKey: ['domain-source', project.id] }),
+    ])
+  }
+
   function saveSource() {
     if (!canEditSource(selectedFile) || !openedFile.data || editedContent == null || editedContent === openedFile.data.content)
       return
@@ -208,11 +271,14 @@ export function DomainSystemView({ tool, project, onBack }: {
           search={search}
           onSearch={setSearch}
           files={files.data ?? []}
+          resources={resources.data ?? []}
           unclaimedFiles={unclaimedFiles.data ?? []}
           manifest={manifest}
           selectedPath={selectedFile?.path}
+          selectedResourceId={selectedResourceId}
           onSelectFile={selectFile}
-          loading={files.isLoading || unclaimedFiles.isLoading}
+          onSelectResource={selectResource}
+          loading={files.isLoading || unclaimedFiles.isLoading || resources.isLoading}
         />
       )}
       toolbar={(
@@ -224,7 +290,7 @@ export function DomainSystemView({ tool, project, onBack }: {
           onValidate={() => void runValidation()}
           packState={packState.data}
           remoteCandidate={remoteCandidate}
-          busy={activatePack.isPending || rollbackPack.isPending || checkPackUpdates.isPending || stagePackUpdate.isPending}
+          busy={activatePack.isPending || rollbackPack.isPending || togglePack.isPending || checkPackUpdates.isPending || stagePackUpdate.isPending}
           onCheckUpdate={() => checkPackUpdates.mutate()}
           onStageUpdate={() => {
             if (remoteCandidate)
@@ -240,9 +306,15 @@ export function DomainSystemView({ tool, project, onBack }: {
             if (window.confirm(t('studio.devtools.pack.rollback_confirm')))
               rollbackPack.mutate()
           }}
+          onToggleEnabled={() => {
+            const enabled = packState.data?.enabled !== false
+            // eslint-disable-next-line no-alert
+            if (window.confirm(t(packToggleConfirmationKey(enabled))))
+              togglePack.mutate(!enabled)
+          }}
         />
       )}
-      rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, draftPreview?.preview.draft.id)}
+      rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedResourceKey, draftPreview?.preview.draft.id, handleAiDraftHandoff)}
     >
       <If cond={project != null} else={<NoProject />}>
         <CenterWorkspace
@@ -277,16 +349,19 @@ export function DomainSystemView({ tool, project, onBack }: {
   )
 }
 
-function ResourceSidebar({ activeTab, onTab, search, onSearch, files, unclaimedFiles, manifest, selectedPath, onSelectFile, loading }: {
+function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources, unclaimedFiles, manifest, selectedPath, selectedResourceId, onSelectFile, onSelectResource, loading }: {
   activeTab: ResourceTab
   onTab: (tab: ResourceTab) => void
   search: string
   onSearch: (value: string) => void
   files: DomainFileRecord[]
+  resources: DomainResourceRecord[]
   unclaimedFiles: DomainFileRecord[]
   manifest: DomainManifest
   selectedPath?: string
+  selectedResourceId: string | null
   onSelectFile: (file: DomainFileRecord) => void
+  onSelectResource: (resource: DomainResourceRecord) => void
   loading: boolean
 }) {
   const { t } = useTranslation()
@@ -304,12 +379,72 @@ function ResourceSidebar({ activeTab, onTab, search, onSearch, files, unclaimedF
         </div>
       </If>
       <div className="min-h-0 flex-1 overflow-auto p-2">
-        <If cond={activeTab === 'dependencies'} else={<FileProjectionList files={activeTab === 'files' ? [...files, ...unclaimedFiles] : files.filter(file => file.ownership !== 'dependency')} resourceMode={activeTab === 'resources'} selectedPath={selectedPath} onSelect={onSelectFile} loading={loading} />}>
+        <If cond={activeTab === 'dependencies'} else={renderResourceOrFileList(activeTab, resources, files, unclaimedFiles, selectedResourceId, selectedPath, onSelectResource, onSelectFile, loading)}>
           <DependencyList manifest={manifest} files={files.filter(file => file.ownership === 'dependency')} selectedPath={selectedPath} onSelect={onSelectFile} loading={loading} />
         </If>
       </div>
     </div>
   )
+}
+
+function renderResourceOrFileList(
+  activeTab: ResourceTab,
+  resources: DomainResourceRecord[],
+  files: DomainFileRecord[],
+  unclaimedFiles: DomainFileRecord[],
+  selectedResourceId: string | null,
+  selectedPath: string | undefined,
+  onSelectResource: (resource: DomainResourceRecord) => void,
+  onSelectFile: (file: DomainFileRecord) => void,
+  loading: boolean,
+) {
+  if (activeTab === 'resources')
+    return <ResourceRecordList resources={resources} selectedId={selectedResourceId} onSelect={onSelectResource} loading={loading} />
+  return <FileProjectionList files={[...files, ...unclaimedFiles]} resourceMode={false} selectedPath={selectedPath} onSelect={onSelectFile} loading={loading} />
+}
+
+function ResourceRecordList({ resources, selectedId, onSelect, loading }: {
+  resources: DomainResourceRecord[]
+  selectedId: string | null
+  onSelect: (resource: DomainResourceRecord) => void
+  loading: boolean
+}) {
+  const { t } = useTranslation()
+  if (loading)
+    return <p className="p-4 text-center text-xs text-muted">{t('studio.devtools.resources.loading')}</p>
+  if (resources.length === 0)
+    return <p className="p-4 text-center text-xs leading-5 text-muted">{t('studio.devtools.resources.empty')}</p>
+  return (
+    <div className="space-y-1">
+      {resources.map(resource => (
+        <button key={resource.id} type="button" className={projectionButtonClass(selectedId === resource.id)} onClick={() => onSelect(resource)}>
+          <strong className="block truncate text-[11px] font-medium text-ink">{resource.label}</strong>
+          <span className="mt-0.5 block truncate text-[9px] text-muted">{resource.source.path}</span>
+          <span className="mt-1 flex gap-1">
+            <small className={accessBadgeClass(resourceAccess(resource))}>{t(resourceAccessKey(resource))}</small>
+            <small className="rounded bg-accent/10 px-1 text-[8px] text-accent">{resource.resourceType}</small>
+            <If cond={hasUnresolvedDependency(resource)}><small className="rounded bg-danger/10 px-1 text-[8px] text-danger">{t('studio.devtools.resources.unresolved')}</small></If>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function hasUnresolvedDependency(resource: DomainResourceRecord) {
+  return resource.dependencies.some(dependency => dependency.required && dependency.resolvedResourceId == null)
+}
+
+function resourceAccess(resource: DomainResourceRecord) {
+  if (resource.writable)
+    return 'editable'
+  return 'readonly'
+}
+
+function resourceAccessKey(resource: DomainResourceRecord) {
+  if (resource.writable)
+    return 'studio.devtools.access.editable'
+  return 'studio.devtools.access.readonly'
 }
 
 function SidebarTab({ tab, active, onPress }: { tab: ResourceTab, active: boolean, onPress: () => void }) {
@@ -411,7 +546,7 @@ function DependencyList({ manifest, files, selectedPath, onSelect, loading }: {
   )
 }
 
-function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, packState, remoteCandidate, busy, onCheckUpdate, onStageUpdate, onActivate, onRollback }: {
+function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, packState, remoteCandidate, busy, onCheckUpdate, onStageUpdate, onActivate, onRollback, onToggleEnabled }: {
   manifest: DomainManifest
   project: Mir3Project | null
   activeTab: CenterTab
@@ -424,6 +559,7 @@ function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, pac
   onStageUpdate: () => void
   onActivate: () => void
   onRollback: () => void
+  onToggleEnabled: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -453,6 +589,9 @@ function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, pac
         <If cond={packState?.previous != null || packState?.lkg != null}>
           <Button size="sm" variant="ghost" isDisabled={busy} onPress={onRollback}>{t('studio.devtools.pack.rollback')}</Button>
         </If>
+        <Button size="sm" variant="ghost" isDisabled={busy} onPress={onToggleEnabled}>
+          {t(packToggleLabelKey(packState?.enabled !== false))}
+        </Button>
         <details className="group relative shrink-0">
           <summary className="cursor-pointer list-none rounded-lg px-2 py-1.5 text-[10px] text-muted hover:bg-panel2 hover:text-ink">{t('studio.devtools.pack.changelog')}</summary>
           <div className="absolute right-0 top-9 z-30 w-[420px] max-w-[70vw] rounded-xl border border-line bg-panel p-4 shadow-2xl">
@@ -709,10 +848,45 @@ function fallbackManifest(tool: DevToolDefinition): DomainManifest {
   }
 }
 
-function renderSystemAiPanel(project: Mir3Project | null, manifest: DomainManifest, selectedPath?: string, draftId?: string) {
+function renderSystemAiPanel(
+  project: Mir3Project | null,
+  manifest: DomainManifest,
+  selectedPath?: string,
+  selectedResourceId?: string,
+  draftId?: string,
+  onDraftHandoff?: (handoff: DomainDraftHandoff) => Promise<void>,
+) {
   if (!project)
     return null
-  return <SystemAiPanel project={project} manifest={manifest} selectedPath={selectedPath} draftId={draftId} />
+  return <SystemAiPanel project={project} manifest={manifest} selectedPath={selectedPath} selectedResourceId={selectedResourceId} draftId={draftId} onDraftHandoff={onDraftHandoff} />
+}
+
+async function consumeNavigationTarget(
+  project: Mir3Project,
+  target: VerifiedDevtoolsTarget,
+  files: DomainFileRecord[],
+  selectFile: (file: DomainFileRecord) => void,
+  setDraftPreview: (preview: DomainDraftConfirmation | null) => void,
+  setValidation: (report: DomainValidationReport | null) => void,
+  setCenterTab: (tab: CenterTab) => void,
+): Promise<void> {
+  if (target.relativePath) {
+    const file = files.find(item => item.path === target.relativePath)
+    if (!file)
+      throw new Error('DEVTOOLS_RETURN_RESOURCE_NOT_PROJECTED')
+    selectFile(file)
+  }
+  if (!target.draftId)
+    return
+  const [preview, report] = await Promise.all([
+    previewDomainDraft(project.id, target.draftId),
+    validateDomainDraft(project.id, target.draftId),
+  ])
+  if (report.systemId !== target.systemId || (target.revision != null && preview.preview.draft.revision < target.revision))
+    throw new Error('DEVTOOLS_RETURN_DRAFT_SCOPE_MISMATCH')
+  setDraftPreview(preview)
+  setValidation(report)
+  setCenterTab(report.valid ? 'diff' : 'validation')
 }
 
 function sidebarTabClass(active: boolean) {
@@ -755,4 +929,16 @@ function validationTitleKey(valid: boolean) {
   if (valid)
     return 'studio.devtools.validation.passed'
   return 'studio.devtools.validation.failed'
+}
+
+function packToggleLabelKey(enabled: boolean) {
+  if (enabled)
+    return 'studio.devtools.pack.disable'
+  return 'studio.devtools.pack.enable'
+}
+
+function packToggleConfirmationKey(enabled: boolean) {
+  if (enabled)
+    return 'studio.devtools.pack.disable_confirm'
+  return 'studio.devtools.pack.enable_confirm'
 }

@@ -75,6 +75,17 @@ export interface DomainXlsProjection {
   truncated: boolean
 }
 
+export interface DomainRecordProjection {
+  kind: 'record'
+  fields: Record<string, unknown>
+  source: {
+    path: string
+    sheet: string | null
+    row: number | null
+    headers: string[]
+  }
+}
+
 export interface DomainMapSpriteRef {
   library: number
   image: number
@@ -116,7 +127,7 @@ export interface DomainMapProjection {
   }
 }
 
-export type DomainResourceProjection = DomainTextProjection | DomainXlsProjection | DomainMapProjection
+export type DomainResourceProjection = DomainTextProjection | DomainXlsProjection | DomainMapProjection | DomainRecordProjection
 
 export interface DomainResourceRecord {
   id: string
@@ -128,6 +139,22 @@ export interface DomainResourceRecord {
   writable: boolean
   projection: DomainResourceProjection | null
   diagnostics: string[]
+  fields: Record<string, unknown>
+  source: {
+    path: string
+    sheet: string | null
+    row: number | null
+    headers: string[]
+  }
+  dependencies: Array<{
+    field: string
+    value: string
+    systemId: string
+    required: boolean
+    resolvedResourceId: string | null
+    diagnostics: string[]
+  }>
+  mappingsApplied: string[]
 }
 
 export interface DomainValidationReport {
@@ -264,6 +291,7 @@ interface DomainPackRelease {
 export interface DomainPackState {
   schemaVersion: number
   systemId: string
+  enabled: boolean
   candidate?: DomainPackRelease | null
   current?: DomainPackRelease | null
   previous?: DomainPackRelease | null

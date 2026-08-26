@@ -60,8 +60,20 @@ export function getDomainResource(projectId: string, systemId: string, resourceI
   return invoke<DomainResourceRecord>('domain_resource_get', { projectId, systemId, resourceId })
 }
 
+export function queryDomainResources(projectId: string, systemId: string, text = '', limit = 250, offset = 0) {
+  return invoke<DomainResourceRecord[]>('domain_resource_query', {
+    projectId,
+    systemId,
+    query: { text, limit, offset },
+  })
+}
+
 export function validateDomainSystem(projectId: string, systemId: string) {
   return invoke<DomainValidationReport>('domain_validate', { projectId, systemId })
+}
+
+export function validateDomainDraft(projectId: string, draftId: string) {
+  return invoke<DomainValidationReport>('domain_draft_validate', { projectId, draftId })
 }
 
 export function openDomainText(projectId: string, relativePath: string, draftId?: string | null) {
@@ -87,8 +99,12 @@ export function listDomainDrafts(projectId: string) {
   return invoke<DomainDraft[]>('draft_list', { projectId })
 }
 
-export function openDomainDraft(projectId: string, systemId: string, pluginVersion: string, intent: string) {
-  return invoke<DomainDraft>('domain_draft_open', { projectId, systemId, pluginVersion, intent })
+export function openDomainDraft(projectId: string, systemId: string, pluginVersion: string, intent: string, compositeId?: string | null) {
+  return invoke<DomainDraft>('domain_draft_open', { projectId, systemId, pluginVersion, intent, compositeId })
+}
+
+export function associateDomainDraftComposite(projectId: string, draftId: string, systemId: string, pluginVersion: string, compositeId: string) {
+  return invoke<void>('domain_draft_composite_associate', { projectId, draftId, systemId, pluginVersion, compositeId })
 }
 
 export function previewDomainDraft(projectId: string, draftId: string) {
@@ -111,6 +127,10 @@ export function saveTaskReceipt(projectId: string, receipt: TaskReceipt) {
   return invoke<TaskReceipt>('task_receipt_save', { projectId, receipt })
 }
 
+export function listTaskReceipts(projectId: string, systemId?: string | null) {
+  return invoke<TaskReceipt[]>('task_receipt_list', { projectId, systemId })
+}
+
 export function issueTaskScope(projectId: string, taskId: string, readSystems: string[], writeSystems: string[], draftIds: string[], pluginVersions: Record<string, string>) {
   return invoke<TaskScopeLease>('task_scope_issue', {
     projectId,
@@ -123,8 +143,12 @@ export function issueTaskScope(projectId: string, taskId: string, readSystems: s
   })
 }
 
-export function saveUserCapability(projectId: string, capability: UserCapability) {
-  return invoke<UserCapability>('user_capability_save', { projectId, capability })
+export function revokeTaskScope(projectId: string, token: string) {
+  return invoke<void>('task_scope_revoke', { projectId, token })
+}
+
+export function compileUserCapability(projectId: string, request: { receiptId: string, id: string, name: string, description: string }) {
+  return invoke<UserCapability>('user_capability_compile', { projectId, request })
 }
 
 export function setUserCapabilityStatus(projectId: string, capabilityId: string, version: string, status: UserCapability['status'], confirmed: boolean) {
@@ -165,4 +189,8 @@ export function activateDomainPack(systemId: string) {
 
 export function rollbackDomainPack(systemId: string) {
   return invoke<DomainPackState>('domain_pack_rollback', { systemId, confirmed: true })
+}
+
+export function setDomainPackEnabled(systemId: string, enabled: boolean) {
+  return invoke<DomainPackState>('domain_pack_set_enabled', { systemId, enabled, confirmed: true })
 }

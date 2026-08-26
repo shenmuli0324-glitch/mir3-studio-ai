@@ -94,7 +94,11 @@ pub enum MapLayer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum MapEditOperation {
     SetSprite {
         x: u16,
@@ -570,6 +574,20 @@ mod tests {
             let document = MapDocument::parse(bytes.clone()).unwrap();
             assert_eq!(document.header().format, format);
             assert_eq!(document.into_bytes(), bytes);
+        }
+    }
+
+    #[test]
+    fn map_edit_dto_uses_camel_case_fields() {
+        for value in [
+            serde_json::json!({"type":"setSprite","x":1,"y":2,"layer":"front","library":3,"image":4}),
+            serde_json::json!({"type":"clearSprite","x":1,"y":2,"layer":"middle"}),
+            serde_json::json!({"type":"setCollision","x":1,"y":2,"walkable":true,"frontBlocked":false}),
+            serde_json::json!({"type":"setDoor","x":1,"y":2,"doorIndex":3,"doorOffset":4}),
+            serde_json::json!({"type":"setAnimation","x":1,"y":2,"middleFrames":3,"frontFrames":4}),
+        ] {
+            let operation: MapEditOperation = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(operation).unwrap(), value);
         }
     }
 

@@ -3,7 +3,7 @@
 import type { DomainMapProjection, DomainResourceRecord } from '../src/features/devtools/domain/types'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getDomainResource } from '../src/features/devtools/domain/api'
+import { getDomainResource, queryDomainResources } from '../src/features/devtools/domain/api'
 import { projectionTable } from '../src/features/devtools/domain/projection-model'
 import { ResourceRenderer } from '../src/features/devtools/domain/renderers/resource-renderer'
 import '../src/i18n'
@@ -27,6 +27,16 @@ describe('domain resource projection', () => {
       projectId: 'project-1',
       systemId: 'quest',
       resourceId: 'resource-1',
+    })
+  })
+
+  it('queries paged record resources instead of treating files as the resource list', async () => {
+    mocks.invoke.mockResolvedValueOnce([])
+    await queryDomainResources('project-1', 'shop', 'potion', 50, 100)
+    expect(mocks.invoke).toHaveBeenCalledWith('domain_resource_query', {
+      projectId: 'project-1',
+      systemId: 'shop',
+      query: { text: 'potion', limit: 50, offset: 100 },
     })
   })
 
@@ -57,6 +67,24 @@ describe('domain resource projection', () => {
     rendered.rerender(<ResourceRenderer renderer="flow-v1" resource={resourceWithProjection({ kind: 'text', content: '[{"id":"q1","name":"Quest Alpha","state":"open"}]', truncated: false })} loading={false} error={null} />)
     expect(screen.getByText('Quest Alpha')).toBeTruthy()
     expect(screen.getByText('open')).toBeTruthy()
+  })
+
+  it('uses distinct semantic views for curves, calendars, rankings, timelines, and topology', () => {
+    const rows = resourceWithProjection({
+      kind: 'text',
+      content: 'id\tname\tvalue\tnext\ttime\n1\tAlpha\t10\t2\t08:00\n2\tBeta\t25\t\t09:00',
+      truncated: false,
+    })
+    const rendered = render(<ResourceRenderer renderer="chart-v1" resource={rows} loading={false} error={null} />)
+    expect(screen.getByRole('img', { name: 'Domain progression curve' })).toBeTruthy()
+    rendered.rerender(<ResourceRenderer renderer="calendar-v1" resource={rows} loading={false} error={null} />)
+    expect(screen.getByText('Day 1')).toBeTruthy()
+    rendered.rerender(<ResourceRenderer renderer="ranking-v1" resource={rows} loading={false} error={null} />)
+    expect(screen.getByText('#1')).toBeTruthy()
+    rendered.rerender(<ResourceRenderer renderer="timeline-v1" resource={rows} loading={false} error={null} />)
+    expect(screen.getByText('08:00')).toBeTruthy()
+    rendered.rerender(<ResourceRenderer renderer="topology-v1" resource={rows} loading={false} error={null} />)
+    expect(rendered.container.querySelectorAll('svg path')).toHaveLength(1)
   })
 
   it('draws map cells and exposes dimensions, coordinates, layers, and walkability', () => {
