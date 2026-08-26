@@ -1,6 +1,6 @@
 # level
 
-MIR3 Studio level domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio level domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -16,6 +16,9 @@ Unique key: `level`. Runtime rule: `level.experience-monotonic`.
 - `inspect-level-curve` via `xls`
 - `scale-experience` via `xls`
 - `interpolate-levels` via `xls`
+- `add-level` via `xls`
+- `clone-level` via `xls`
+- `replace-level-reference` via `text`
 
 ## Contract fixtures
 

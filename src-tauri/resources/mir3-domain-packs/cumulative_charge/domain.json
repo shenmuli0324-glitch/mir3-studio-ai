@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "cumulative_charge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -386,6 +386,183 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "batch-update-cumulative_charge",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-cumulative_charge"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chargeThreshold": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100000000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-cumulative_charge"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-cumulative_charge-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-cumulative_charge-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-cumulative_charge-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -448,7 +625,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -555,7 +732,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -649,7 +826,192 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-cumulative_charge",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-cumulative_charge"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chargeThreshold": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100000000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-cumulative_charge"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-cumulative_charge-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-cumulative_charge-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cumulative_charge",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "cumulative_charge"
+      ],
+      "preconditions": [
+        "cumulative_charge.resource-index-ready",
+        "cumulative_charge.schema-loaded",
+        "cumulative_charge.draft-open",
+        "cumulative_charge.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-cumulative_charge-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

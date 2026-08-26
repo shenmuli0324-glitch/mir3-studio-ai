@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "cross_server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -372,6 +372,405 @@
         "validationRequired": true,
         "confirmationRequired": false
       }
+    },
+    {
+      "id": "add-cross_server",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-cross_server"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "routeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minimumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumConcurrentPlayers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            },
+            "required": [
+              "routeId",
+              "sourceShard",
+              "targetShard",
+              "minimumEngineVersion",
+              "maximumEngineVersion",
+              "maximumConcurrentPlayers",
+              "seasonId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-cross_server"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-cross_server",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-cross_server"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "sourceShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minimumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumConcurrentPlayers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-cross_server"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-cross_server",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-cross_server"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "sourceShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minimumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumConcurrentPlayers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-cross_server"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-cross_server-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-cross_server-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "seasonId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-cross_server-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -436,7 +835,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -543,7 +942,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -614,7 +1013,422 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-cross_server",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-cross_server"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "routeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minimumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumConcurrentPlayers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            },
+            "required": [
+              "routeId",
+              "sourceShard",
+              "targetShard",
+              "minimumEngineVersion",
+              "maximumEngineVersion",
+              "maximumConcurrentPlayers",
+              "seasonId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-cross_server"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-cross_server",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-cross_server"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "sourceShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minimumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumConcurrentPlayers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-cross_server"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-cross_server",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-cross_server"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "sourceShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetShard": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minimumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumEngineVersion": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\d+\\.\\d+$"
+              },
+              "maximumConcurrentPlayers": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-cross_server"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-cross_server-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-cross_server-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "seasonId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "cross_server",
+        "season",
+        "ranking",
+        "guild",
+        "sabac",
+        "shop"
+      ],
+      "writeSystems": [
+        "cross_server"
+      ],
+      "preconditions": [
+        "cross_server.resource-index-ready",
+        "cross_server.schema-loaded",
+        "cross_server.draft-open",
+        "cross_server.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-cross_server-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

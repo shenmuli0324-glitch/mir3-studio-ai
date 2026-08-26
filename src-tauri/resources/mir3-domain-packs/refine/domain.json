@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "refine",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -391,6 +391,298 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-refine",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-refine"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "poolId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "poolId",
+              "equipmentId",
+              "attributeKey",
+              "weight",
+              "minimumValue",
+              "maximumValue"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-refine"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-refine",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-refine"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-refine"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-refine-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-refine-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "equipmentId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-refine-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -452,7 +744,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -558,7 +850,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -662,7 +954,311 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-refine",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-refine"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "poolId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "poolId",
+              "equipmentId",
+              "attributeKey",
+              "weight",
+              "minimumValue",
+              "maximumValue"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-refine"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-refine",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-refine"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "equipment"
+              },
+              "attributeKey": {
+                "type": "string",
+                "enum": [
+                  "attack",
+                  "defense",
+                  "health",
+                  "speed",
+                  "critical"
+                ]
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "minimumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "maximumValue": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-refine"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-refine-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-refine-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "equipmentId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "refine",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "refine"
+      ],
+      "preconditions": [
+        "refine.resource-index-ready",
+        "refine.schema-loaded",
+        "refine.draft-open",
+        "refine.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-refine-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

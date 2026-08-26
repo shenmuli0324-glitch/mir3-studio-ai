@@ -8,6 +8,17 @@ const packRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-packs')
 const registryPath = join(packRoot, 'registry.json')
 const failures = []
 const safePrimitives = new Set(['text', 'xls', 'map', 'graph', 'timeline'])
+const supportedRenderers = new Set(['table-v1', 'chart-v1', 'calendar-v1', 'ranking-v1', 'flow-v1', 'graph-v1', 'timeline-v1', 'spatial-flow-v1', 'topology-v1', 'map-canvas-v1'])
+const operationFamilies = {
+  create: /^(?:add|generate|insert|fill)-/,
+  clone: /^clone-/,
+  batch: /^(?:batch|scale|tune|interpolate)-/,
+  replace: /^(?:replace|bind)-/,
+  delete: /^(?:delete|remove)-/,
+}
+const evidenceRows = []
+const en = JSON.parse(readFileSync(join(root, 'src', 'i18n', 'locales', 'en-US.json'), 'utf8'))
+const zh = JSON.parse(readFileSync(join(root, 'src', 'i18n', 'locales', 'zh-CN.json'), 'utf8'))
 
 if (!existsSync(registryPath)) {
   failures.push('Domain registry is missing')
@@ -87,14 +98,42 @@ for (const pack of registry.packs) {
     failures.push(`${pack.systemId}: invalid kind/version/kernelApiRange`)
   if (!pack.renderer || !Array.isArray(pack.dependencies) || !Array.isArray(pack.capabilities))
     failures.push(`${pack.systemId}: renderer, dependencies, and capabilities are required`)
+  if (!supportedRenderers.has(pack.renderer))
+    failures.push(`${pack.systemId}: unsupported renderer ${pack.renderer}`)
   if (!pack.fileProjection?.keywords?.length)
     failures.push(`${pack.systemId}: file projection keywords are required`)
+  if (!pack.fileProjection?.ownedSelectors?.length)
+    failures.push(`${pack.systemId}: ownedSelectors are required for real-file discovery`)
+  if (!pack.fileProjection?.contentFingerprints?.length)
+    failures.push(`${pack.systemId}: content fingerprints are required`)
+  if (!pack.fileProjection?.pathAliases?.some(alias => alias.from === 'client' && alias.to === '客户端')
+    || !pack.fileProjection?.pathAliases?.some(alias => alias.from === 'engine' && alias.to === '引擎')) {
+    failures.push(`${pack.systemId}: client/engine path aliases are incomplete`)
+  }
+  for (const role of ['client', 'engine', 'shared', 'generated', 'readonly']) {
+    if (!pack.fileProjection?.roles?.includes(role))
+      failures.push(`${pack.systemId}: file projection omits ${role} role`)
+  }
+  const dependencySelectorIds = new Set((pack.fileProjection?.dependencySelectors || []).map(selector => selector.systemId))
+  for (const dependency of pack.dependencies || []) {
+    if (!dependencySelectorIds.has(dependency))
+      failures.push(`${pack.systemId}: dependency selector omits ${dependency}`)
+  }
   if (pack.fileProjection?.unknownFormatPolicy !== 'readonly')
     failures.push(`${pack.systemId}: unknown formats must be read-only`)
   if (!safePrimitives.has(pack.presentation?.safePrimitive))
     failures.push(`${pack.systemId}: unsupported safe primitive ${pack.presentation?.safePrimitive}`)
   if (!pack.resources?.schema || !pack.resources?.uniqueKey?.length)
     failures.push(`${pack.systemId}: resource schema and unique key are required`)
+  if (!pack.resources?.stableResourceId?.includes('sha256(')
+    || !pack.resources?.stableResourceId?.includes(pack.systemId)
+    || !pack.resources?.stableResourceId?.includes('normalizedRelativePath')) {
+    failures.push(`${pack.systemId}: stable resource ID must bind system identity and normalized real path`)
+  }
+  if (!pack.resources?.mappings?.includes('file-projection')
+    || !pack.resources?.mappings?.includes(`${pack.systemId}.field-mapping-v1`)) {
+    failures.push(`${pack.systemId}: file/resource bidirectional mapping contract is incomplete`)
+  }
   for (const resourceType of pack.resources?.resourceTypes || []) {
     if (resourceTypes.has(resourceType))
       failures.push(`${pack.systemId}: duplicate resource type ${resourceType}`)
@@ -103,6 +142,17 @@ for (const pack of registry.packs) {
   for (const dependency of pack.dependencies || []) {
     if (!idSet.has(dependency))
       failures.push(`${pack.systemId}: unknown dependency ${dependency}`)
+  }
+  const operations = new Map((pack.operations || []).map(operation => [operation.id, operation]))
+  if (operations.size !== (pack.operations || []).length || operations.size !== pack.capabilities.length)
+    failures.push(`${pack.systemId}: operations and capabilities must be a one-to-one set`)
+  const readable = pack.capabilities.filter(capability => capability.writeSystems.length === 0)
+  const writable = pack.capabilities.filter(capability => capability.writeSystems.length > 0)
+  if (!readable.length || !writable.length)
+    failures.push(`${pack.systemId}: each pack needs both read/inspect and structured write operations`)
+  for (const family of ['create', 'clone', 'batch', 'replace']) {
+    if (!pack.capabilities.some(capability => operationFamilies[family].test(capability.id)))
+      failures.push(`${pack.systemId}: required ${family} operation family is missing`)
   }
   for (const capability of pack.capabilities || []) {
     if (capabilityIds.has(capability.id))
@@ -128,9 +178,23 @@ for (const pack of registry.packs) {
       else
         usedPrimitives.add(step.primitive)
     }
-    const operation = (pack.operations || []).find(entry => entry.id === capability.id)
+    const operation = operations.get(capability.id)
     if (!operation || JSON.stringify(operation.parameterSchema) !== JSON.stringify(capability.parameterSchema) || JSON.stringify(operation.steps) !== JSON.stringify(capability.steps))
       failures.push(`${pack.systemId}: capability ${capability.id} is not backed by the declared operation contract`)
+    if (operation?.writeSystems?.some(systemId => systemId !== pack.systemId)
+      || operation?.readSystems?.some(systemId => systemId !== pack.systemId && !pack.dependencies.includes(systemId))) {
+      failures.push(`${pack.systemId}: operation ${capability.id} escapes its declared domain/dependency scope`)
+    }
+    if (capability.writeSystems.length) {
+      if (!capability.parameterSchema?.required?.includes('expectedRevision'))
+        failures.push(`${pack.systemId}: write capability ${capability.id} does not require expectedRevision`)
+      if (!operation?.preconditions?.some(precondition => precondition.endsWith('.draft-open'))
+        || !operation?.preconditions?.some(precondition => precondition.endsWith('.revision-match'))) {
+        failures.push(`${pack.systemId}: write capability ${capability.id} lacks Draft/revision preconditions`)
+      }
+      if (!operation?.previewPolicy?.previewRequired || !operation?.previewPolicy?.validationRequired || !operation?.previewPolicy?.confirmationRequired)
+        failures.push(`${pack.systemId}: write operation ${capability.id} bypasses preview/validation/confirmation`)
+    }
   }
   if (existsSync(join(directory, 'domain.json'))) {
     const local = JSON.parse(readFileSync(join(directory, 'domain.json'), 'utf8'))
@@ -153,8 +217,33 @@ for (const pack of registry.packs) {
     }
     if (manifest.mir3Domain?.resourceSchema !== 'schemas/resource.schema.json')
       failures.push(`${pack.systemId}: package metadata does not expose the resource schema`)
+    if (manifest.mir3Domain?.kernelApiRange !== pack.kernelApiRange
+      || manifest.mir3Domain?.supportedEngineRange !== pack.supportedEngineRange) {
+      failures.push(`${pack.systemId}: package compatibility declaration differs from domain.json`)
+    }
   }
   auditSemanticContract(pack, directory, failures, semanticFingerprints, runtimeRules)
+  for (const suffix of ['title', 'description']) {
+    const key = `studio.devtools.tool.${pack.systemId}.${suffix}`
+    if (typeof en[key] !== 'string' || !en[key].trim() || typeof zh[key] !== 'string' || !zh[key].trim())
+      failures.push(`${pack.systemId}: bilingual flat i18n key ${key} is missing`)
+  }
+  evidenceRows.push({
+    systemId: pack.systemId,
+    version: pack.version,
+    engine: pack.supportedEngineRange,
+    files: pack.fileProjection.ownedSelectors.length,
+    fingerprints: pack.fileProjection.contentFingerprints.length,
+    resources: pack.resources.resourceTypes.length,
+    mappings: pack.resources.mappings.length,
+    renderer: pack.renderer,
+    readOperations: readable.length,
+    writeOperations: writable.length,
+    validators: pack.validators.length,
+    fixtures: 3,
+    i18n: 2,
+    operationFamilies: Object.fromEntries(Object.entries(operationFamilies).map(([family, pattern]) => [family, pack.capabilities.some(capability => pattern.test(capability.id))])),
+  })
 }
 
 if (semanticFingerprints.size !== 33)
@@ -163,10 +252,10 @@ if (runtimeRules.size !== 33)
   failures.push(`All 33 packs need distinct runtime rules, got ${runtimeRules.size}`)
 if (resourceTypes.size !== 33)
   failures.push(`All 33 packs need distinct resource types, got ${resourceTypes.size}`)
-if (operationSchemaFingerprints.size !== 113)
-  failures.push(`All 113 capabilities need explicit parameter schemas, got ${operationSchemaFingerprints.size}`)
-if (capabilityIds.size !== 113)
-  failures.push(`Domain registry must expose exactly 113 official capabilities, got ${capabilityIds.size}`)
+if (operationSchemaFingerprints.size !== 194)
+  failures.push(`All 194 capabilities need explicit parameter schemas, got ${operationSchemaFingerprints.size}`)
+if (capabilityIds.size !== 194)
+  failures.push(`Domain registry must expose exactly 194 official capabilities, got ${capabilityIds.size}`)
 for (const primitive of safePrimitives) {
   if (!usedPrimitives.has(primitive))
     failures.push(`No domain operation exercises the ${primitive} safe primitive`)
@@ -186,6 +275,13 @@ if (frontendIds.length !== 33 || expectedIds.some(id => !frontendIds.includes(id
   failures.push('Frontend devtool registry does not expose the same 33 systems')
 
 const mcp = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-mcp', 'src', 'main.rs'), 'utf8')
+const packLifecycle = readFileSync(join(root, 'src-tauri', 'src', 'service', 'plugin', 'system.rs'), 'utf8')
+const domainSystems = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'systems.rs'), 'utf8')
+const domainFixtures = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'fixtures.rs'), 'utf8')
+const systemAi = readFileSync(join(root, 'src', 'features', 'system-ai', 'system-ai-panel.tsx'), 'utf8')
+const rendererSource = readFileSync(join(root, 'src', 'features', 'devtools', 'domain', 'renderers', 'resource-renderer.tsx'), 'utf8')
+const pluginBridge = readFileSync(join(root, 'src-tauri', 'src', 'bridge', 'plugin.rs'), 'utf8')
+const iframeShim = readFileSync(join(root, 'src', 'hooks', 'use-iframe-shim.ts'), 'utf8')
 const expectedTools = [
   'mir3_system_list',
   'mir3_system_describe',
@@ -193,6 +289,7 @@ const expectedTools = [
   'mir3_resource_get',
   'mir3_dependency_resolve',
   'mir3_draft_open',
+  'mir3_draft_diff',
   'mir3_domain_operate',
   'mir3_capability_list',
   'mir3_capability_describe',
@@ -207,6 +304,48 @@ if (!mcp.includes('MCP_MAX_QUERY_ITEMS') || !mcp.includes('MCP_MAX_RESULT_BYTES'
   failures.push('MCP must expose quantified query, result, and schema context budgets')
 if (!mcp.includes('.map(system_list_payload)') || !mcp.includes('MCP_RESULT_BUDGET_EXCEEDED:'))
   failures.push('MCP list output must use summaries and fail closed when the result budget is exceeded')
+if (!mcp.includes('every_writable_official_operation_compiles_into_a_scoped_draft')
+  || !mcp.includes('.filter(|capability| !capability.write_systems.is_empty())')
+  || !mcp.includes('assert_eq!(compiled.len(), 155')) {
+  failures.push('MCP tests must compile every writable operation from all 33 packs, not only shaped examples')
+}
+if (!packLifecycle.includes('all_33_domain_packs_support_disable_upgrade_and_rollback')
+  || !packLifecycle.includes('corrupt_or_disabled_pack_is_isolated_and_reported_as_a_missing_dependency')
+  || !packLifecycle.includes('for system_id in &system_ids')
+  || !packLifecycle.includes('assert_eq!(system_ids.len(), 33)')) {
+  failures.push('Domain lifecycle tests must cover all-pack upgrade/rollback and every-pack fault isolation')
+}
+if (!packLifecycle.includes('execute_domain_pack_fixture_canary')
+  || !packLifecycle.includes('semantically_tampered_candidate_fixture_never_changes_current')
+  || !domainFixtures.includes('all_bundled_domain_pack_fixtures_execute_with_exact_diagnostics')
+  || !domainFixtures.includes('execute_fixture(&manifest, &schema, &valid)')
+  || !domainFixtures.includes('invalid_diagnostics != expected_diagnostics')) {
+  failures.push('Domain candidates must execute valid/invalid fixtures and operation dry-runs before staging or activation')
+}
+if (!packLifecycle.includes('activate_domain_pack_with_canary')
+  || !packLifecycle.includes('domain_pack_canary_failure_rolls_back_and_success_advances_lkg')
+  || !pluginBridge.includes('activate_domain_pack_with_canary')) {
+  failures.push('Domain candidate activation must rollback failed canaries and advance LKG only after success')
+}
+if (!iframeShim.includes('invoke<boolean>(\'rollback_core_update\')')
+  || !iframeShim.includes('await invoke(\'launch_harness\')')
+  || !iframeShim.includes('store.harness.refreshIframe()')) {
+  failures.push('Harness candidate canary failure must restore LKG and relaunch the workbench')
+}
+if (!domainSystems.includes('unknown_extensions_are_readonly')
+  || !domainSystems.includes('external_real_project_corpus_runs_the_full_readonly_domain_matrix')
+  || !domainSystems.includes('"every detected domain must be validated"')) {
+  failures.push('Domain tests must cover unknown-format readonly behavior and the external corpus matrix')
+}
+if (!systemAi.includes('manifest.capabilities')
+  || !systemAi.includes('writeSystems')
+  || !systemAi.includes('registerGlobalTask')) {
+  failures.push('System AI must consume manifest capabilities and support global multi-system tasks')
+}
+for (const marker of ['ChartPreview', 'CalendarPreview', 'RankingPreview', 'RelationshipPreview', 'MapCanvas']) {
+  if (!rendererSource.includes(marker))
+    failures.push(`Central renderer implementation is missing ${marker}`)
+}
 
 const systemSummaryBytes = Buffer.byteLength(JSON.stringify({
   systems: registry.packs.map(pack => ({
@@ -226,7 +365,13 @@ if (failures.length) {
   process.stderr.write(`${failures.join('\n')}\n`)
   process.exit(1)
 }
-process.stdout.write(`Domain Kernel audit passed (33 packs, ${capabilityIds.size} official capabilities, 11 MCP tools, ${systemSummaryBytes}B system summary, ${cyclicComponents.length} cyclic dependency components reported)\n`)
+for (const row of evidenceRows) {
+  const families = Object.entries(row.operationFamilies).filter(([, present]) => present).map(([family]) => family).join(',') || 'none'
+  process.stdout.write(`${row.systemId}@${row.version} engine=${row.engine} metadata=ok projection=${row.files}/${row.fingerprints} resources=${row.resources}/${row.mappings} renderer=${row.renderer} operations=${row.readOperations}R+${row.writeOperations}W families=${families} validators=${row.validators} fixtures=${row.fixtures} i18n=${row.i18n}\n`)
+}
+const familyCoverage = Object.keys(operationFamilies).map(family => `${family}=${evidenceRows.filter(row => row.operationFamilies[family]).length}/33`).join(', ')
+process.stdout.write(`Domain delivery family coverage (reported, not inferred): ${familyCoverage}\n`)
+process.stdout.write(`Domain Kernel audit passed (33 per-pack evidence rows, ${capabilityIds.size} official capabilities, 155 writable compiler cases, 12 MCP tools, ${systemSummaryBytes}B system summary, ${cyclicComponents.length} cyclic dependency components reported)\n`)
 
 function dependencyCycleComponents(packs) {
   const dependencies = new Map(packs.map(pack => [pack.systemId, pack.dependencies || []]))

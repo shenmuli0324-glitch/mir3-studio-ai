@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "hero_soul",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -403,6 +403,182 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "clone-hero_soul",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-hero_soul"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "nodeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "powerValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-hero_soul"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-hero_soul-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-hero_soul-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "costItemId",
+              "grantedSkillId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-hero_soul-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -467,7 +643,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -568,7 +744,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -670,7 +846,191 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-hero_soul",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-hero_soul"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "nodeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "grantedSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              },
+              "powerValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-hero_soul"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-hero_soul-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-hero_soul-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "costItemId",
+              "grantedSkillId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "hero_soul",
+        "item",
+        "equipment",
+        "skill",
+        "buff",
+        "quest"
+      ],
+      "writeSystems": [
+        "hero_soul"
+      ],
+      "preconditions": [
+        "hero_soul.resource-index-ready",
+        "hero_soul.schema-loaded",
+        "hero_soul.draft-open",
+        "hero_soul.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-hero_soul-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

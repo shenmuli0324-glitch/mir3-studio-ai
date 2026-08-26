@@ -73,8 +73,21 @@ pub struct DomainManifest {
     pub operations: Vec<DomainOperationContract>,
     #[serde(default)]
     pub validators: Vec<DomainValidatorContract>,
+    #[serde(default)]
+    pub fixtures: DomainFixturesContract,
     pub dependencies: Vec<String>,
     pub capabilities: Vec<OfficialCapability>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainFixturesContract {
+    #[serde(default)]
+    pub valid: String,
+    #[serde(default)]
+    pub invalid: String,
+    #[serde(default)]
+    pub expected_diagnostics: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1779,7 +1792,30 @@ impl DomainStore {
         let extension = std::path::Path::new(path)
             .extension()
             .and_then(|value| value.to_str());
-        if !matches_projection(&manifest, path, extension, None) {
+        let path_projection_matches = matches_projection(&manifest, path, extension, None);
+        let content_projection_matches = if path_projection_matches {
+            false
+        } else {
+            let project = self.get_project(project_id)?;
+            let root = fs::canonicalize(&project.root).ok();
+            let target = root.as_ref().and_then(|root| {
+                fs::canonicalize(root.join(path))
+                    .ok()
+                    .map(|target| (root, target))
+            });
+            target.is_some_and(|(root, target)| {
+                crate::path_is_within(root, &target)
+                    && fs::read(target)
+                        .ok()
+                        .and_then(|bytes| {
+                            crate::safe_files::decode_supported_text_checked(&bytes).ok()
+                        })
+                        .is_some_and(|content| {
+                            matches_projection(&manifest, path, extension, Some(&content))
+                        })
+            })
+        };
+        if !path_projection_matches && !content_projection_matches {
             return Err(format!(
                 "DRAFT_DOMAIN_SCOPE_DENIED: {path} is not owned by {system_id}"
             ));
@@ -1987,6 +2023,9 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
             )
             || pack.documentation.readme != "README.md"
             || pack.documentation.changelog != "CHANGELOG.md"
+            || pack.fixtures.valid.is_empty()
+            || pack.fixtures.invalid.is_empty()
+            || pack.fixtures.expected_diagnostics.is_empty()
         {
             return Err(format!(
                 "DOMAIN_RESOURCE_CONTRACT_INVALID: {}",
@@ -2529,6 +2568,9 @@ fn stable_unknown_resource_id(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static EXTERNAL_CORPUS_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn registry_contains_exactly_the_product_systems() {
@@ -2689,7 +2731,7 @@ mod tests {
             .open_draft(&project.id, "invalid level overlay")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.0.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -2768,7 +2810,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "level",
-                "1.0.0",
+                "1.1.0",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -2778,7 +2820,7 @@ mod tests {
                 &project.id,
                 &companion.id,
                 "shop",
-                "1.0.0",
+                "1.1.0",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -2835,7 +2877,7 @@ mod tests {
         copy_test_directory(&bundled, &v1_staging);
         let v1_hash = hash_runtime_release(&v1_staging).unwrap();
         let v1 = RuntimeDomainPackRelease {
-            version: "1.0.0".to_string(),
+            version: "1.1.0".to_string(),
             directory: format!("level-{}", &v1_hash[..12]),
             hash: v1_hash,
         };
@@ -2843,10 +2885,10 @@ mod tests {
 
         let v101_staging = base.join("level-v101");
         copy_test_directory(&bundled, &v101_staging);
-        mutate_test_pack_contract(&v101_staging, "1.0.1", "v101");
+        mutate_test_pack_contract(&v101_staging, "1.1.1", "v101");
         let v101_hash = hash_runtime_release(&v101_staging).unwrap();
         let v101 = RuntimeDomainPackRelease {
-            version: "1.0.1".to_string(),
+            version: "1.1.1".to_string(),
             directory: format!("level-{}", &v101_hash[..12]),
             hash: v101_hash,
         };
@@ -2854,10 +2896,10 @@ mod tests {
 
         let v102_staging = base.join("level-v102");
         copy_test_directory(&bundled, &v102_staging);
-        mutate_test_pack_contract(&v102_staging, "1.0.2", "v102");
+        mutate_test_pack_contract(&v102_staging, "1.1.2", "v102");
         let v102_hash = hash_runtime_release(&v102_staging).unwrap();
         let v102 = RuntimeDomainPackRelease {
-            version: "1.0.2".to_string(),
+            version: "1.1.2".to_string(),
             directory: format!("level-{}", &v102_hash[..12]),
             hash: v102_hash,
         };
@@ -2868,9 +2910,9 @@ mod tests {
         let project = store.import_project(&project_root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
 
-        let draft = store.open_draft(&project.id, "pinned v1.0.0").unwrap();
+        let draft = store.open_draft(&project.id, "pinned v1.1.0").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.0.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
             .unwrap();
         let old_lease = store
             .issue_task_scope(
@@ -2879,12 +2921,30 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"level":"1.0.0"}),
+                serde_json::json!({"level":"1.1.0"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
+        store
+            .save_domain_memory(
+                &project.id,
+                &crate::DomainMemory {
+                    id: "level-v1-memory".to_string(),
+                    system_id: "level".to_string(),
+                    scope: "project".to_string(),
+                    kind: "rule".to_string(),
+                    summary: "pinned memory".to_string(),
+                    body: serde_json::json!({"maximumLevel": 80}),
+                    status: "active".to_string(),
+                    source_task_id: "old-task".to_string(),
+                    plugin_version: "1.1.0".to_string(),
+                    created_at: crate::now_millis(),
+                    updated_at: crate::now_millis(),
+                },
+            )
+            .unwrap();
 
-        // 两次升级后 v1.0.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
+        // 两次升级后 v1.1.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
         write_test_runtime_state(
             &system_root,
             "level",
@@ -2899,13 +2959,20 @@ mod tests {
             .into_iter()
             .find(|manifest| manifest.system_id == "level")
             .unwrap();
-        assert_eq!(active.version, "1.0.2");
+        assert_eq!(active.version, "1.1.2");
+        assert_eq!(
+            store
+                .list_domain_memories(&project.id, "level", true)
+                .unwrap()
+                .len(),
+            1
+        );
         assert!(active
             .operations
             .iter()
             .any(|operation| operation.id == "scale-experience-v102"));
         let pinned_manifest = store.draft_domain_manifest(&project.id, &draft.id).unwrap();
-        assert_eq!(pinned_manifest.version, "1.0.0");
+        assert_eq!(pinned_manifest.version, "1.1.0");
         assert!(pinned_manifest
             .operations
             .iter()
@@ -2931,7 +2998,7 @@ mod tests {
             )
             .is_ok());
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.0.2", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.2", None)
             .unwrap();
         assert!(store
             .authorize_task_scope(
@@ -2944,7 +3011,7 @@ mod tests {
             .unwrap_err()
             .starts_with("TASK_SCOPE_DRAFT_VERSION_MISMATCH:"));
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.0.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
             .unwrap();
 
         let new_lease = store
@@ -2954,11 +3021,11 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 &[],
-                serde_json::json!({"level":"1.0.2"}),
+                serde_json::json!({"level":"1.1.2"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
-        assert_eq!(new_lease.plugin_versions["level"], "1.0.2");
+        assert_eq!(new_lease.plugin_versions["level"], "1.1.2");
 
         // 保留另一个可用领域，用来证明禁用包从新任务清单消失而非拖垮注册表。
         let shop_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -2967,7 +3034,7 @@ mod tests {
         copy_test_directory(&shop_bundled, &shop_staging);
         let shop_hash = hash_runtime_release(&shop_staging).unwrap();
         let shop_release = RuntimeDomainPackRelease {
-            version: "1.0.0".to_string(),
+            version: "1.1.0".to_string(),
             directory: format!("shop-{}", &shop_hash[..12]),
             hash: shop_hash,
         };
@@ -3013,15 +3080,27 @@ mod tests {
             .is_ok());
 
         // 历史目录被篡改后完整哈希与内容寻址目录不一致，旧任务必须关闭。
+        write_test_runtime_state(
+            &system_root,
+            "level",
+            true,
+            Some(&v102),
+            Some(&v101),
+            Some(&v101),
+        );
         std::fs::write(
             releases_root.join(&v1.directory).join("README.md"),
             "tampered",
         )
         .unwrap();
         assert!(store
-            .runtime_manifest_at_version("level", Some("1.0.0"))
+            .runtime_manifest_at_version("level", Some("1.1.0"))
             .unwrap_err()
             .starts_with("DOMAIN_PACK_VERSION_UNAVAILABLE:"));
+        assert!(store
+            .list_domain_memories(&project.id, "level", true)
+            .unwrap_err()
+            .starts_with("MEMORY_DOMAIN_VERSION_INCOMPATIBLE:"));
         assert!(store
             .authorize_task_scope(
                 &project.id,
@@ -3049,6 +3128,7 @@ mod tests {
         let Some(raw_roots) = std::env::var_os("MIR3_DOMAIN_CORPUS_ROOTS") else {
             return;
         };
+        let _corpus_guard = EXTERNAL_CORPUS_LOCK.lock().unwrap();
         let roots = std::env::split_paths(&raw_roots).collect::<Vec<_>>();
         assert!(
             roots.len() >= 3,
@@ -3083,17 +3163,17 @@ mod tests {
                     .unwrap();
                 if !files.is_empty() {
                     detected += 1;
-                    if validated < 3
-                        || matches!(manifest.system_id.as_str(), "map" | "quest" | "shop")
-                    {
-                        store
-                            .validate_domain_system(&project.id, &manifest.system_id)
-                            .unwrap();
-                        validated += 1;
-                    }
+                    store
+                        .validate_domain_system(&project.id, &manifest.system_id)
+                        .unwrap();
+                    validated += 1;
                 }
             }
             assert!(detected > 0, "{} has no detected domains", root.display());
+            assert_eq!(
+                validated, detected,
+                "every detected domain must be validated"
+            );
             assert_eq!(readonly_tree_signature(&root), before);
             signatures.insert((stats.scanned_files, detected));
         }
@@ -3101,6 +3181,128 @@ mod tests {
             signatures.len() >= 3,
             "real project copies are not materially different"
         );
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn external_real_project_corpus_applies_and_restores_verified_drafts() {
+        let Some(raw_roots) = std::env::var_os("MIR3_DOMAIN_CORPUS_ROOTS") else {
+            return;
+        };
+        let _corpus_guard = EXTERNAL_CORPUS_LOCK.lock().unwrap();
+        let roots = std::env::split_paths(&raw_roots).collect::<Vec<_>>();
+        assert!(
+            roots.len() >= 3,
+            "MIR3_DOMAIN_CORPUS_ROOTS requires three project copies"
+        );
+        let base = std::env::temp_dir().join(format!(
+            "mir3-real-write-corpus-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let manifests = store.list_domain_systems().unwrap();
+        let mut exercised = 0_usize;
+        for root in roots {
+            let project = store.import_project(&root).unwrap();
+            store.scan_project(&project.id, || false).unwrap();
+            let mut selected = None;
+            for manifest in &manifests {
+                let baseline = store
+                    .validate_domain_system(&project.id, &manifest.system_id)
+                    .unwrap();
+                if !baseline.valid || baseline.writable_files == 0 {
+                    continue;
+                }
+                let files = store
+                    .query_domain_files(
+                        &project.id,
+                        &manifest.system_id,
+                        &DomainFileQuery {
+                            text: String::new(),
+                            limit: Some(500),
+                            offset: None,
+                        },
+                    )
+                    .unwrap();
+                for file in files {
+                    if file.access == "readonly"
+                        || file.ownership == "dependency"
+                        || !file.systems.contains(&manifest.system_id)
+                        || file.size > 1024 * 1024
+                        || !matches!(file.extension.as_deref(), Some("lua" | "txt"))
+                    {
+                        continue;
+                    }
+                    let target = root.join(&file.path);
+                    let Ok(original) = std::fs::read(&target) else {
+                        continue;
+                    };
+                    let Ok(text) = String::from_utf8(original.clone()) else {
+                        continue;
+                    };
+                    selected = Some((manifest.clone(), file.path, target, original, text));
+                    break;
+                }
+                if selected.is_some() {
+                    break;
+                }
+            }
+            let Some((manifest, relative, target, original, text)) = selected else {
+                panic!(
+                    "{} has no verified writable UTF-8 Lua/TXT domain fixture",
+                    root.display()
+                );
+            };
+            let draft = store
+                .open_draft(&project.id, "真实项目副本 Draft 应用与恢复验收")
+                .unwrap();
+            store
+                .bind_draft_domain(
+                    &project.id,
+                    &draft.id,
+                    &manifest.system_id,
+                    &manifest.version,
+                    None,
+                )
+                .unwrap();
+            let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+            let preview = store
+                .patch_draft(
+                    &project.id,
+                    &draft.id,
+                    draft.revision,
+                    &[crate::DraftChangeInput {
+                        path: relative,
+                        content: Some(format!("{text}{newline}")),
+                        deleted: false,
+                        expected_sha256: None,
+                    }],
+                )
+                .unwrap();
+            assert_eq!(std::fs::read(&target).unwrap(), original);
+            let validation = store.validate_domain_draft(&project.id, &draft.id).unwrap();
+            assert!(
+                validation.valid,
+                "{}:{} draft validation failed: {:?}",
+                root.display(),
+                manifest.system_id,
+                validation.diagnostics
+            );
+            let snapshot = store
+                .apply_validated_domain_draft(
+                    &project.id,
+                    &draft.id,
+                    preview.draft.revision,
+                    &preview.diff_hash,
+                )
+                .unwrap();
+            assert_ne!(std::fs::read(&target).unwrap(), original);
+            store.restore_snapshot(&project.id, &snapshot.id).unwrap();
+            assert_eq!(std::fs::read(&target).unwrap(), original);
+            exercised += 1;
+        }
+        assert!(exercised >= 3);
         std::fs::remove_dir_all(base).ok();
     }
 

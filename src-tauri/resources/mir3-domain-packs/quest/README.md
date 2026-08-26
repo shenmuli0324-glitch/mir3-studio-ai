@@ -1,6 +1,6 @@
 # quest
 
-MIR3 Studio quest domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio quest domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -19,6 +19,7 @@ Unique key: `questId`. Runtime rule: `quest.chain-acyclic-and-reachable`.
 - `clone-quest-chain` via `graph`
 - `insert-quest-step` via `graph`
 - `replace-quest-reward` via `graph`
+- `batch-update-quest` via `graph`
 
 ## Contract fixtures
 

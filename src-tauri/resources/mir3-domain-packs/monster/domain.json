@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "monster",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -477,6 +477,184 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-monster"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "monsterId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "combatLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "healthPoints": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000000000
+              },
+              "spawnMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "primaryDropItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            },
+            "required": [
+              "monsterId",
+              "combatLevel",
+              "healthPoints",
+              "spawnMapId",
+              "primaryDropItemId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-monster-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-monster-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "spawnMapId",
+              "primaryDropItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-monster-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -539,7 +717,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -634,7 +812,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -728,7 +906,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -825,7 +1003,193 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-monster",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-monster"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "monsterId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "combatLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "healthPoints": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000000000
+              },
+              "spawnMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "primaryDropItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              }
+            },
+            "required": [
+              "monsterId",
+              "combatLevel",
+              "healthPoints",
+              "spawnMapId",
+              "primaryDropItemId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-monster"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-monster-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-monster-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "spawnMapId",
+              "primaryDropItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "monster",
+        "map",
+        "item",
+        "quest"
+      ],
+      "writeSystems": [
+        "monster"
+      ],
+      "preconditions": [
+        "monster.resource-index-ready",
+        "monster.schema-loaded",
+        "monster.draft-open",
+        "monster.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-monster-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

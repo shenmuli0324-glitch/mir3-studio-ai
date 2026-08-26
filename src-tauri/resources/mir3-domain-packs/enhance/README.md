@@ -1,6 +1,6 @@
 # enhance
 
-MIR3 Studio enhance domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio enhance domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -17,6 +17,8 @@ Unique key: `enhanceTier + equipmentClass`. Runtime rule: `enhance.probability-b
 - `inspect-enhancement` via `xls`
 - `generate-enhancement-tiers` via `xls`
 - `tune-enhancement-probability` via `xls`
+- `clone-enhance` via `xls`
+- `replace-enhance-reference` via `text`
 
 ## Contract fixtures
 

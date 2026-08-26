@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "level",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -377,6 +377,264 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-level",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-level"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "requiredExperience": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "statPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "recommendedMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            },
+            "required": [
+              "level",
+              "requiredExperience",
+              "statPoints",
+              "recommendedMonsterId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-level"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-level",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-level"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredExperience": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "statPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "recommendedMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-level"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-level-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-level-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "recommendedMonsterId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-level-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -439,7 +697,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -534,7 +792,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -626,7 +884,277 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-level",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-level"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "requiredExperience": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "statPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "recommendedMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            },
+            "required": [
+              "level",
+              "requiredExperience",
+              "statPoints",
+              "recommendedMonsterId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-level"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-level",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-level"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "requiredExperience": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              },
+              "statPoints": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "recommendedMonsterId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "monster"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-level"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-level-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-level-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "recommendedMonsterId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "level",
+        "monster",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "level"
+      ],
+      "preconditions": [
+        "level.resource-index-ready",
+        "level.schema-loaded",
+        "level.draft-open",
+        "level.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-level-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

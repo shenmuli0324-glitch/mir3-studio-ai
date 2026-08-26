@@ -8,7 +8,7 @@
 
 <p align="center"><samp><a href="./README.en.md">English</a> · <strong>中文</strong></samp></p>
 
-> 当前版本为 `0.9.1`。MIR3 Studio 通过统一系统开发内核、33 个领域包、归档系统会话和安全 Draft 工作流开发由 996 项目管理器创建的项目。
+> 当前版本为 `0.9.2`。MIR3 Studio 通过统一系统开发内核、33 个领域包、归档系统会话和安全 Draft 工作流开发由 996 项目管理器创建的项目。
 
 MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。在其插件化架构基础上，我们独立开发了面向 996 传奇3的项目模型、知识体系、开发工具链和 AI 工作流。
 
@@ -21,7 +21,7 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 - 996项目识别、外置索引、真实文件与领域资源映射、知识治理、Draft预览与版本快照。
 - 统一三栏系统工作区：左侧真实文件/资源/依赖，中间领域视图/Diff/校验，右侧归档 AI 会话。
 - 一个系统内核和 33 个独立版本化领域包；领域包可单独审计、升级、禁用和回滚，不争用 Harness UI 生命周期。
-- 十一项固定通用 MCP 工具向系统 AI 和全局 Harness 暴露同一份资源、依赖、Draft、校验和能力目录。
+- 十二项固定通用 MCP 工具向系统 AI 和全局 Harness 暴露同一份资源、依赖、Draft Diff、校验和能力目录。
 - 成功任务生成 Task Receipt，并可经预览和校验提升为项目、个人或团队的版本化安全能力。
 - Studio 领域源码编辑统一先创建并绑定当前系统版本的外置 Draft，再执行保留 GB18030/BOM/换行的 TXT、Lua 修改和 BIFF XLS 查看；Harness AI 写入只走带任务作用域的通用 MCP。
 - 应用自更新仅连接 MIR3 Studio AI 的 GitHub Releases。
@@ -32,7 +32,7 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 | --- | --- |
 | 应用名 | MIR3 Studio AI |
 | 核心显示名 | MIR3 AI Core |
-| 版本 | 0.9.1 |
+| 版本 | 0.9.2 |
 | Tauri identifier | `ai.mir3.studio` |
 | 数据目录 | `~/.mir3-studio-ai` |
 | 开发数据目录 | `~/.mir3-studio-ai.dev` |

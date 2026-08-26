@@ -34,6 +34,29 @@ impl Drop for LaunchGuard {
     }
 }
 
+/// 等待并取得启动所有权；并发调用不能在首个启动尚未登记 PID 时提前返回成功。
+async fn acquire_launch_guard() -> Result<Option<LaunchGuard>, String> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if has_owned_process() {
+            return Ok(None);
+        }
+        if LAUNCH_GUARD
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            return Ok(Some(LaunchGuard));
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(
+                "HARNESS_LAUNCH_LOCK_TIMEOUT: another MIR3 AI Core launch did not settle"
+                    .to_string(),
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 /// 从起始端口向上查找第一个空闲端口，绝不结束未知的端口占用进程。
 fn find_available_port(start: u16) -> Result<u16, String> {
     let mut port = start;
@@ -323,6 +346,7 @@ fn port_owner_pid(port: u16) -> Option<u32> {
 }
 
 /// Windows RedirectionGuard（错误码 448 = ERROR_UNTRUSTED_MOUNT_POINT）逃逸重拉的标记路径。
+#[cfg(windows)]
 fn relaunch_marker_path(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
     config::get_base_dir(app_handle).join(".dsh-relaunch-448")
 }
@@ -331,6 +355,7 @@ fn relaunch_marker_path(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
 ///
 /// 448 只在「进程继承 RedirectionGuard 强制执行」时出现；干净上下文（父进程为
 /// explorer 等普通进程）下 Level-1 符号链接可正常穿越。
+#[cfg(windows)]
 fn dsh_bin_open_error(app_handle: &tauri::AppHandle) -> Option<i32> {
     std::fs::File::open(config::get_dsh_binary_path(app_handle))
         .err()
@@ -458,19 +483,12 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
         return Err("HARNESS_NOT_FOUND: MIR3 AI Core not installed".to_string());
     }
 
-    // 避免重复启动（配合启动守卫，确保并发调用只拉起一个进程）
-    if has_owned_process() {
+    // setup 自动启动与前端 boot 可能并发进入。后到者必须等待首个调用登记 PID，
+    // 不能提前返回成功，否则紧随其后的健康检查会误报 HARNESS_NOT_OWNED。
+    let Some(_launch_guard) = acquire_launch_guard().await? else {
         log::info!("Owned MIR3 AI Core process is already running, skipping launch");
         return Ok(());
-    }
-    if LAUNCH_GUARD
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        log::info!("MIR3 AI Core launch already in progress, skipping");
-        return Ok(());
-    }
-    let _launch_guard = LaunchGuard;
+    };
 
     // 端口冲突时从当前值开始逐个递增，并持久化最终选择供所有调用方复用。
     let available_port = find_available_port(setting.port)?;
@@ -1057,6 +1075,28 @@ mod tests {
         let selected = find_available_port(occupied).expect("find next free port");
         assert!(selected > occupied);
         assert!(!is_port_in_use(selected));
+    }
+
+    #[tokio::test]
+    async fn concurrent_launch_waits_for_the_first_owner_instead_of_returning_early() {
+        OWNED_PROCESS_ID.store(0, Ordering::SeqCst);
+        LAUNCH_GUARD.store(false, Ordering::SeqCst);
+        let first = acquire_launch_guard()
+            .await
+            .expect("acquire first launch guard")
+            .expect("first caller owns launch");
+        let waiting = tokio::spawn(acquire_launch_guard());
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(!waiting.is_finished());
+        drop(first);
+        let second = tokio::time::timeout(std::time::Duration::from_secs(1), waiting)
+            .await
+            .expect("second caller resumes")
+            .expect("join second caller")
+            .expect("second caller acquires guard")
+            .expect("second caller owns launch after first settles");
+        drop(second);
+        assert!(!LAUNCH_GUARD.load(Ordering::SeqCst));
     }
 
     #[test]

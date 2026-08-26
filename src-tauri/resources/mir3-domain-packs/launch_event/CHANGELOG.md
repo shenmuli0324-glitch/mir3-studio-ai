@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.
+- Kept all writes scoped to this domain and compiled only through registered safe primitives.
+
 ## 1.0.0
 
 - Added the launch-event-record resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.

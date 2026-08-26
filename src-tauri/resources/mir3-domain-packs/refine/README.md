@@ -1,6 +1,6 @@
 # refine
 
-MIR3 Studio refine domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio refine domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,9 @@ Unique key: `poolId + equipmentId + attributeKey`. Runtime rule: `refine.minimum
 - `inspect-refine-pool` via `xls`
 - `edit-refine-weight` via `xls`
 - `clone-refine-template` via `xls`
+- `add-refine` via `xls`
+- `batch-update-refine` via `xls`
+- `replace-refine-reference` via `text`
 
 ## Contract fixtures
 

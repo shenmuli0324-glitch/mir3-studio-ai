@@ -1,6 +1,6 @@
 # npc
 
-MIR3 Studio npc domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio npc domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -19,6 +19,9 @@ Unique key: `npcId`. Runtime rule: `npc.script-entry-resolves`.
 - `move-npc` via `graph`
 - `edit-dialogue` via `text`
 - `replace-npc-reference` via `text`
+- `add-npc` via `graph`
+- `clone-npc` via `graph`
+- `batch-update-npc` via `graph`
 
 ## Contract fixtures
 

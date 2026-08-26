@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "map",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -30,6 +30,7 @@
       "地图"
     ],
     "ownedSelectors": [
+      "map",
       "mapinfo",
       "/map/",
       ".map",
@@ -662,6 +663,302 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-map",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-map"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_\\-]+$"
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "safeZoneMode": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "partial",
+                  "full"
+                ]
+              },
+              "spawnNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              }
+            },
+            "required": [
+              "mapId",
+              "displayName",
+              "width",
+              "height",
+              "safeZoneMode",
+              "spawnNpcId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "manor",
+        "sabac"
+      ],
+      "writeSystems": [
+        "map"
+      ],
+      "preconditions": [
+        "map.resource-index-ready",
+        "map.schema-loaded",
+        "map.draft-open",
+        "map.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "add-map"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-map",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-map"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "safeZoneMode": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "partial",
+                  "full"
+                ]
+              },
+              "spawnNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "manor",
+        "sabac"
+      ],
+      "writeSystems": [
+        "map"
+      ],
+      "preconditions": [
+        "map.resource-index-ready",
+        "map.schema-loaded",
+        "map.draft-open",
+        "map.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-map"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-map-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-map-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "spawnNpcId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "manor",
+        "sabac"
+      ],
+      "writeSystems": [
+        "map"
+      ],
+      "preconditions": [
+        "map.resource-index-ready",
+        "map.schema-loaded",
+        "map.draft-open",
+        "map.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-map-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -726,7 +1023,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.1",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -830,7 +1127,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.1",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -936,7 +1233,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.1",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1191,7 +1488,315 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.1",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-map",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-map"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_\\-]+$"
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "safeZoneMode": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "partial",
+                  "full"
+                ]
+              },
+              "spawnNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              }
+            },
+            "required": [
+              "mapId",
+              "displayName",
+              "width",
+              "height",
+              "safeZoneMode",
+              "spawnNpcId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "manor",
+        "sabac"
+      ],
+      "writeSystems": [
+        "map"
+      ],
+      "preconditions": [
+        "map.resource-index-ready",
+        "map.schema-loaded",
+        "map.draft-open",
+        "map.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "add-map"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-map",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-map"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "safeZoneMode": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "partial",
+                  "full"
+                ]
+              },
+              "spawnNpcId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "npc"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "manor",
+        "sabac"
+      ],
+      "writeSystems": [
+        "map"
+      ],
+      "preconditions": [
+        "map.resource-index-ready",
+        "map.schema-loaded",
+        "map.draft-open",
+        "map.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "map",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "map",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-map"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-map-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-map-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "spawnNpcId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "map",
+        "npc",
+        "monster",
+        "quest",
+        "manor",
+        "sabac"
+      ],
+      "writeSystems": [
+        "map"
+      ],
+      "preconditions": [
+        "map.resource-index-ready",
+        "map.schema-loaded",
+        "map.draft-open",
+        "map.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-map-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

@@ -19,6 +19,8 @@ export function DevToolWorkspace({ tool, onBack, sidebar, toolbar, rightPanel, c
   const [mobilePanel, setMobilePanel] = useState<'resources' | 'ai' | null>(null)
   const [leftWidth, setLeftWidth] = useState(280)
   const [rightWidth, setRightWidth] = useState(360)
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
 
   function toggleMobilePanel(panel: 'resources' | 'ai') {
     setMobilePanel((value) => {
@@ -50,7 +52,7 @@ export function DevToolWorkspace({ tool, onBack, sidebar, toolbar, rightPanel, c
 
   return (
     <div className="flex h-full min-h-0 bg-canvas">
-      <aside className={resourcePanelClass(mobilePanel)} style={{ width: leftWidth }}>
+      <aside className={resourcePanelClass(mobilePanel, leftCollapsed)} style={{ width: leftWidth }}>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-3">
           <Button
             className="size-8 shrink-0 rounded-lg"
@@ -77,11 +79,15 @@ export function DevToolWorkspace({ tool, onBack, sidebar, toolbar, rightPanel, c
             <Button size="sm" variant="ghost" onPress={() => toggleMobilePanel('resources')}>{t('studio.devtools.mobile.resources')}</Button>
             <Button size="sm" variant="ghost" onPress={() => toggleMobilePanel('ai')}>{t('studio.devtools.mobile.ai')}</Button>
           </div>
+          <div className="mr-2 flex shrink-0 gap-1 max-[900px]:hidden">
+            <Button size="sm" variant="ghost" aria-label={t(resourceToggleKey(leftCollapsed))} onPress={() => setLeftCollapsed(value => !value)}>{t('studio.devtools.mobile.resources')}</Button>
+            <Button size="sm" variant="ghost" aria-label={t(aiToggleKey(rightCollapsed))} onPress={() => setRightCollapsed(value => !value)}>{t('studio.devtools.mobile.ai')}</Button>
+          </div>
           {toolbar}
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">{children}</div>
       </section>
-      <div className={aiPanelClass(mobilePanel)} style={{ width: rightWidth }}>
+      <div className={aiPanelClass(mobilePanel, rightCollapsed)} style={{ width: rightWidth }}>
         <button type="button" className="absolute inset-y-0 left-0 z-30 w-1 cursor-col-resize bg-transparent hover:bg-accent/40 max-[900px]:hidden" aria-label={t('studio.devtools.resize.ai')} onPointerDown={event => beginResize('right', event)} />
         {rightPanel}
       </div>
@@ -101,14 +107,30 @@ function resizeDelta(side: 'left' | 'right', startX: number, currentX: number) {
   return startX - currentX
 }
 
-function resourcePanelClass(panel: 'resources' | 'ai' | null) {
+function resourcePanelClass(panel: 'resources' | 'ai' | null, collapsed: boolean) {
   if (panel === 'resources')
     return 'relative flex min-h-0 shrink-0 flex-col border-r border-line bg-panel max-[900px]:absolute max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-20 max-[900px]:w-[280px] max-[900px]:shadow-2xl'
+  if (collapsed)
+    return 'hidden max-[900px]:hidden'
   return 'relative flex min-h-0 shrink-0 flex-col border-r border-line bg-panel max-[900px]:hidden'
 }
 
-function aiPanelClass(panel: 'resources' | 'ai' | null) {
+function aiPanelClass(panel: 'resources' | 'ai' | null, collapsed: boolean) {
   if (panel === 'ai')
     return 'relative h-full shrink-0 max-[900px]:absolute max-[900px]:inset-y-0 max-[900px]:right-0 max-[900px]:z-20 max-[900px]:max-w-[85vw] max-[900px]:shadow-2xl'
+  if (collapsed)
+    return 'hidden max-[900px]:hidden'
   return 'relative h-full shrink-0 max-[900px]:hidden'
+}
+
+function resourceToggleKey(collapsed: boolean) {
+  if (collapsed)
+    return 'studio.devtools.panels.resources_expand'
+  return 'studio.devtools.panels.resources_collapse'
+}
+
+function aiToggleKey(collapsed: boolean) {
+  if (collapsed)
+    return 'studio.devtools.panels.ai_expand'
+  return 'studio.devtools.panels.ai_collapse'
 }

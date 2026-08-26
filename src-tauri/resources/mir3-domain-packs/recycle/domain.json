@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "recycle",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -362,6 +362,291 @@
         "validationRequired": true,
         "confirmationRequired": false
       }
+    },
+    {
+      "id": "add-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-recycle"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "equipment",
+                  "material",
+                  "consumable"
+                ]
+              },
+              "minimumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "maximumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "returnValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            },
+            "required": [
+              "ruleId",
+              "itemType",
+              "minimumQuality",
+              "maximumQuality",
+              "currencyItemId",
+              "returnValue"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-recycle"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "equipment",
+                  "material",
+                  "consumable"
+                ]
+              },
+              "minimumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "maximumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "returnValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-recycle-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-recycle-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "currencyItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-recycle-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -424,7 +709,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -533,7 +818,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -602,7 +887,304 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-recycle"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "equipment",
+                  "material",
+                  "consumable"
+                ]
+              },
+              "minimumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "maximumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "returnValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            },
+            "required": [
+              "ruleId",
+              "itemType",
+              "minimumQuality",
+              "maximumQuality",
+              "currencyItemId",
+              "returnValue"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-recycle",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-recycle"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "equipment",
+                  "material",
+                  "consumable"
+                ]
+              },
+              "minimumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "maximumQuality": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "currencyItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "returnValue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000000
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-recycle"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-recycle-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-recycle-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "currencyItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "recycle",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "recycle"
+      ],
+      "preconditions": [
+        "recycle.resource-index-ready",
+        "recycle.schema-loaded",
+        "recycle.draft-open",
+        "recycle.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-recycle-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

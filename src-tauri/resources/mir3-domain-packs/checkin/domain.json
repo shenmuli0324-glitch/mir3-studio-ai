@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "checkin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -383,6 +383,184 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "batch-update-checkin",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-checkin"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "dayIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "vipMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-checkin"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-checkin-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-checkin-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-checkin-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -445,7 +623,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -548,7 +726,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -643,7 +821,193 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-checkin",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-checkin"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "dayIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 31
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "vipMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-checkin"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-checkin-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-checkin-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "checkin",
+        "item",
+        "vip",
+        "limited_event"
+      ],
+      "writeSystems": [
+        "checkin"
+      ],
+      "preconditions": [
+        "checkin.resource-index-ready",
+        "checkin.schema-loaded",
+        "checkin.draft-open",
+        "checkin.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-checkin-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

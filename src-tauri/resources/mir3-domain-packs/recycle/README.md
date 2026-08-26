@@ -1,6 +1,6 @@
 # recycle
 
-MIR3 Studio recycle domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio recycle domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,9 @@ Unique key: `ruleId`. Runtime rule: `recycle.quality-range-ordered`.
 - `inspect-recycle` via `xls`
 - `batch-edit-recycle` via `xls`
 - `preview-recycle-value` via `xls`
+- `add-recycle` via `xls`
+- `clone-recycle` via `xls`
+- `replace-recycle-reference` via `text`
 
 ## Contract fixtures
 

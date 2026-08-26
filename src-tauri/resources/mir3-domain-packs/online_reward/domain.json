@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "online_reward",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -359,6 +359,287 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-online_reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-online_reward"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rewardId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            },
+            "required": [
+              "rewardId",
+              "durationSeconds",
+              "rewardItemId",
+              "rewardCount",
+              "minimumVipLevel"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-online_reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-online_reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-online_reward"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-online_reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-online_reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-online_reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-online_reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -420,7 +701,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -516,7 +797,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -600,7 +881,300 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-online_reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-online_reward"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rewardId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            },
+            "required": [
+              "rewardId",
+              "durationSeconds",
+              "rewardItemId",
+              "rewardCount",
+              "minimumVipLevel"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-online_reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-online_reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-online_reward"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-online_reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-online_reward",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-online_reward"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "durationSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "minimumVipLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "online_reward",
+        "item",
+        "vip"
+      ],
+      "writeSystems": [
+        "online_reward"
+      ],
+      "preconditions": [
+        "online_reward.resource-index-ready",
+        "online_reward.schema-loaded",
+        "online_reward.draft-open",
+        "online_reward.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-online_reward"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

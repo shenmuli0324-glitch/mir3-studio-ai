@@ -14,7 +14,7 @@
 - 不向 iframe 暴露无任务作用域的文件写入命令；AI 写入统一使用作用域凭证和外置 Draft，Studio 人工编辑由 Tauri 领域工作区承担。
 - 服务端为 `mir3-system-` 和 `global-` 保留会话命名空间：只将 Studio 管理的系统/全局会话切换为只读，并在文件意图层拒绝其直接改写已验证项目根目录内的任何真实文件；普通 Harness 会话不受该策略影响。
 - 无法确认系统会话的项目根目录时，系统 AI 写入失败关闭；MCP 只写项目外 Draft，用户确认后的项目应用仍由 Studio/Tauri 完成。
-- 插件完成 `apply` 后向 Studio 发送 ready 加载信号；该信号本身不推进 Core LKG，Studio 仍须完成协议描述、归档会话、MCP 和领域注册表 canary。
+- 插件完成 `apply` 后向 Studio 发送 ready 加载信号；该信号本身不推进 Core LKG。Studio 还会通过公共 Runtime 创建、打开并归档一个非 managed 普通 Session，并在一次性项目和数据库中启动真实 MCP sidecar、调用只读系统工具及官方只读领域能力；全部通过后才能推进 LKG。
 
 ## Harness 兼容边界
 
@@ -22,6 +22,7 @@
 - 浏览器入口必须通过 Harness `window.__ModuleLoader__.load` 注册，并从 factory 返回 `module.exports`。
 - 仅接受 `document.referrer` 推导出的精确父窗口 origin，并同时校验 `event.source`、协议版本和完整任务标识。
 - Studio 请求和 Core 响应分别按项目、任务、会话维护严格单调的 `sequence`，旧响应不会覆盖新快照。
+- 每个受管 Session 在当前 Core 生命周期内固定绑定 `projectId/systemId/taskId/sessionId`，同源但串任务或错 Session 的控制消息也会失败关闭。
 - 仍在运行的系统/全局任务可接收新短期作用域令牌；取消或完成会话后停止续租并撤销令牌，不回传或复制完整聊天历史。
 - 快照只投影可结构化克隆的数据；不把 Harness Runtime 对象、函数或响应句柄暴露给 Studio。
 - 只使用 Harness 公共注入能力，不修改 Core 源码、官方包或 `node_modules`。

@@ -1,5 +1,5 @@
 import type { StudioShellState, StudioView } from './studio-types'
-import type { DevtoolsReturnTarget, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import type { VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { useEffect, useRef, useState } from 'react'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
@@ -9,7 +9,7 @@ import { getDomainResource, previewDomainDraft, validateDomainDraft } from '@/fe
 import { GuiDesignerScope } from '@/features/gui-designer/gui-designer-scope'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { bridgeRequestId, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
-import { draftHandoffs, registeredGlobalTask, returnTarget, unregisterGlobalTask } from '@/features/system-ai/ai-handoff'
+import { draftHandoffs, isGlobalDraftEvent, registeredGlobalTask, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { stopScopeLease } from '@/features/system-ai/scope-lease-manager'
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
@@ -52,22 +52,32 @@ export function App() {
   useEffect(() => {
     let disposed = false
     const unsubscribe = subscribeHarnessBridge((message) => {
-      if (message.type !== 'mir3/globalSession.completed')
+      if (!isGlobalDraftEvent(message.type))
         return
       const registration = registeredGlobalTask(message)
       if (!registration)
         return
       const requestedTarget = returnTarget(message, registration)
       const handoffs = draftHandoffs(message, registration)
-      stopScopeLease(registration)
-      unregisterGlobalTask(registration)
+      const completed = message.type === 'mir3/globalSession.completed'
+      if (completed) {
+        stopScopeLease(registration)
+        unregisterGlobalTask(registration)
+      }
       if (!requestedTarget || requestedTarget.projectId !== activeProject?.id)
         return
-      void verifyDevtoolsTarget(requestedTarget, handoffs).then((verified) => {
+      void verifyDevtoolsTarget(requestedTarget, handoffs, {
+        isKnownSystem: systemId => DEV_TOOLS.some(tool => tool.id === systemId),
+        getResource: getDomainResource,
+        previewDraft: previewDomainDraft,
+        validateDraft: validateDomainDraft,
+        nonce: bridgeRequestId,
+      }).then((verified) => {
         if (disposed || !verified)
           return
         setDevtoolsTarget(verified)
-        setShellState(value => ({ ...value, activeView: 'devtools' }))
+        if (completed)
+          setShellState(value => ({ ...value, activeView: 'devtools' }))
       }).catch(() => {})
     })
     return () => {
@@ -158,40 +168,6 @@ export function App() {
       )}
     </GuiDesignerScope.Provider>
   )
-}
-
-async function verifyDevtoolsTarget(
-  target: DevtoolsReturnTarget,
-  handoffs: ReturnType<typeof draftHandoffs>,
-): Promise<VerifiedDevtoolsTarget | null> {
-  if (!DEV_TOOLS.some(tool => tool.id === target.systemId))
-    return null
-  let relativePath: string | null = null
-  if (target.resourceId) {
-    const resource = await getDomainResource(target.projectId, target.systemId, target.resourceId)
-    if (resource.systemId !== target.systemId || resource.id !== target.resourceId || !resource.files[0])
-      return null
-    relativePath = resource.files[0].path
-  }
-  const reportedDraft = handoffs.find(handoff => handoff.systemId === target.systemId && (!target.draftId || handoff.draftId === target.draftId))
-  const draftId = target.draftId ?? reportedDraft?.draftId ?? null
-  let revision: number | null = reportedDraft?.revision ?? null
-  if (draftId) {
-    const [preview, validation] = await Promise.all([
-      previewDomainDraft(target.projectId, draftId),
-      validateDomainDraft(target.projectId, draftId),
-    ])
-    if (validation.systemId !== target.systemId || (revision != null && preview.preview.draft.revision < revision))
-      return null
-    revision = preview.preview.draft.revision
-  }
-  return {
-    ...target,
-    draftId,
-    relativePath,
-    revision,
-    nonce: bridgeRequestId(),
-  }
 }
 
 function studioPageClass(view: StudioView): string {

@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "crafting",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -31,6 +31,7 @@
       "配方"
     ],
     "ownedSelectors": [
+      "crafting",
       "craft",
       "compose",
       "recipe",
@@ -472,6 +473,102 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-crafting",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-crafting"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "recipeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "outputCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "materialItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "materialCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            },
+            "required": [
+              "recipeId",
+              "outputItemId",
+              "outputCount",
+              "materialItemId",
+              "materialCount"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-crafting"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -534,7 +631,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -629,7 +726,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -715,7 +812,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -809,7 +906,107 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-crafting",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-crafting"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "recipeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "outputItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "outputCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              },
+              "materialItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "materialCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            },
+            "required": [
+              "recipeId",
+              "outputItemId",
+              "outputCount",
+              "materialItemId",
+              "materialCount"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "crafting",
+        "item",
+        "equipment",
+        "shop"
+      ],
+      "writeSystems": [
+        "crafting"
+      ],
+      "preconditions": [
+        "crafting.resource-index-ready",
+        "crafting.schema-loaded",
+        "crafting.draft-open",
+        "crafting.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-crafting"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

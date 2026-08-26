@@ -2,10 +2,11 @@
 
 use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
-    CapabilityCompileRequest, CompositeApplyResult, CompositeDraftConfirmation,
-    DomainDependencyGraph, DomainFileQuery, DomainFileRecord, DomainManifest, DomainMemory,
-    DomainResourceQuery, DomainResourceRecord, DomainSystemDescription, DomainValidationReport,
-    Draft, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
+    CapabilityCompileRequest, CapabilityPromotionRequest, CapabilityResolution,
+    CompositeApplyResult, CompositeDraftConfirmation, DomainDependencyGraph, DomainFileQuery,
+    DomainFileRecord, DomainManifest, DomainMemory, DomainResourceQuery, DomainResourceRecord,
+    DomainSystemDescription, DomainValidationReport, Draft, GlobalCapabilityCompileRequest,
+    IndexQuery, IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
     LegacyDraftCloneRequest, Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult,
     SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet, SafeXlsWorkbook, Snapshot,
     SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability, WorkspaceDirectory,
@@ -295,6 +296,82 @@ pub fn user_capability_compile(
     service
         .store()
         .compile_user_capability(&project_id, &request)
+}
+
+#[tauri::command]
+pub fn user_capability_compile_global(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    request: GlobalCapabilityCompileRequest,
+) -> Result<UserCapability, String> {
+    service
+        .store()
+        .compile_global_workflow_capability(&project_id, &request)
+}
+
+#[tauri::command]
+pub fn user_capability_promote(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    request: CapabilityPromotionRequest,
+    confirmed: bool,
+) -> Result<CapabilityResolution, String> {
+    if !confirmed {
+        return Err(
+            "CAPABILITY_PROMOTION_CONFIRMATION_REQUIRED: review shared scope before promotion"
+                .to_string(),
+        );
+    }
+    service
+        .store()
+        .promote_user_capability(&project_id, &request)
+}
+
+#[tauri::command]
+pub fn user_capability_resolve(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: Option<String>,
+) -> Result<Vec<CapabilityResolution>, String> {
+    service
+        .store()
+        .resolve_user_capabilities(&project_id, system_id.as_deref())
+}
+
+#[tauri::command]
+pub fn user_capability_set_shared_status(
+    service: State<'_, ProjectService>,
+    scope: String,
+    capability_id: String,
+    version: String,
+    status: String,
+    confirmed: bool,
+) -> Result<UserCapability, String> {
+    if status == "active" && !confirmed {
+        return Err(
+            "CAPABILITY_ACTIVATION_CONFIRMATION_REQUIRED: review and confirm before activation"
+                .to_string(),
+        );
+    }
+    service
+        .store()
+        .set_shared_capability_status(&scope, &capability_id, &version, &status)
+}
+
+#[tauri::command]
+pub fn user_capability_validate_global(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    composite_id: String,
+    capability_id: String,
+    version: Option<String>,
+) -> Result<UserCapability, String> {
+    service.store().validate_global_capability_for_composite(
+        &project_id,
+        &composite_id,
+        &capability_id,
+        version.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -796,4 +873,11 @@ pub fn diagnostics_get(
             .filter(|path| path.is_file())
             .map(|path| path.to_string_lossy().into_owned()),
     })
+}
+
+#[tauri::command]
+pub async fn core_mcp_canary_run(
+    app: AppHandle,
+) -> Result<crate::service::project::canary::CoreMcpCanaryReport, String> {
+    crate::service::project::canary::run(&app).await
 }

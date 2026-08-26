@@ -1,6 +1,6 @@
 # ranking
 
-MIR3 Studio ranking domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio ranking domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,8 @@ Unique key: `boardId`. Runtime rule: `ranking.settlement-within-cycle`.
 - `clone-ranking` via `xls`
 - `edit-ranking-cycle` via `xls`
 - `replace-ranking-reward` via `xls`
+- `add-ranking` via `xls`
+- `batch-update-ranking` via `xls`
 
 ## Contract fixtures
 

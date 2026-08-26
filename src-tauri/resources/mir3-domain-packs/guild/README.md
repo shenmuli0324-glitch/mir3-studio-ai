@@ -1,6 +1,6 @@
 # guild
 
-MIR3 Studio guild domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio guild domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -16,6 +16,9 @@ Unique key: `guildLevel`. Runtime rule: `guild.members-and-contribution-monotoni
 - `inspect-guild` via `graph`
 - `edit-guild-permission` via `graph`
 - `generate-guild-levels` via `graph`
+- `clone-guild` via `graph`
+- `batch-update-guild` via `graph`
+- `replace-guild-reference` via `text`
 
 ## Contract fixtures
 

@@ -1,8 +1,10 @@
+import type { RefObject } from 'react'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
-import { describe, expect, it } from 'vitest'
-import { isGlobalSession, isMir3ManagedSession, isProtectedTarget, isSystemSession } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
+import { describe, expect, it, vi } from 'vitest'
+import { isGlobalSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
 import { BridgeSequenceRegistry } from '../src/features/projects/bridge-sequence'
+import { connectHarnessBridge, subscribeHarnessBridge } from '../src/features/projects/workspace-bridge'
 
 describe('bridge protocol v2 sequence contract', () => {
   it('keeps independent request and response sequences strictly monotonic per session', () => {
@@ -17,6 +19,49 @@ describe('bridge protocol v2 sequence contract', () => {
     expect(responses.accept(identity, 2)).toBe(false)
     expect(responses.accept(identity, 1)).toBe(false)
     expect(responses.accept(identity, 3)).toBe(true)
+  })
+
+  it('accepts Core responses only from the exact iframe origin/source with a complete v2 DTO', () => {
+    let messageListener: ((event: MessageEvent) => void) | null = null
+    const contentWindow = {}
+    vi.stubGlobal('window', {
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === 'message')
+          messageListener = listener
+      },
+      removeEventListener() {},
+    })
+    const received: string[] = []
+    const iframeRef = {
+      current: { src: 'http://127.0.0.1:3081/workbench', contentWindow },
+    } as unknown as RefObject<HTMLIFrameElement | null>
+    const disconnect = connectHarnessBridge(iframeRef)
+    const unsubscribe = subscribeHarnessBridge(message => received.push(message.type))
+    const valid = {
+      source: 'mir3-core-plugin',
+      protocolVersion: 2,
+      type: 'mir3/systemSession.snapshot',
+      requestId: 'response-1',
+      projectId: 'project-studio-side',
+      systemId: 'shop',
+      taskId: 'task-studio-side',
+      sessionId: 'mir3-system-studio-side',
+      sequence: 2,
+      payload: {},
+    }
+    messageListener?.({ origin: 'http://evil.local', source: contentWindow, data: valid } as MessageEvent)
+    messageListener?.({ origin: 'http://127.0.0.1:3081', source: {}, data: valid } as MessageEvent)
+    const { payload: _payload, ...missingPayload } = valid
+    messageListener?.({ origin: 'http://127.0.0.1:3081', source: contentWindow, data: missingPayload } as MessageEvent)
+    expect(received).toEqual([])
+
+    messageListener?.({ origin: 'http://127.0.0.1:3081', source: contentWindow, data: valid } as MessageEvent)
+    messageListener?.({ origin: 'http://127.0.0.1:3081', source: contentWindow, data: { ...valid, sequence: 1 } } as MessageEvent)
+    messageListener?.({ origin: 'http://127.0.0.1:3081', source: contentWindow, data: { ...valid, sequence: 3 } } as MessageEvent)
+    expect(received).toEqual(['mir3/systemSession.snapshot', 'mir3/systemSession.snapshot'])
+    unsubscribe()
+    disconnect()
+    vi.unstubAllGlobals()
   })
 
   it('emits cancel and errors after snapshots with increasing Core response sequences', async () => {
@@ -42,6 +87,91 @@ describe('bridge protocol v2 sequence contract', () => {
     harness.send({ ...systemRequest('mir3/systemSession.prompt', 4, {}), sessionId: undefined })
     await flushTasks()
     expect(harness.posts).toHaveLength(count)
+  })
+
+  it('creates an archived system session before opening and prompting without a Workspace', async () => {
+    const harness = loadCoreClientHarness()
+    harness.send(systemRequest('mir3/systemSession.create', 1, { prompt: 'inspect the current system' }))
+    await flushTasks()
+
+    expect(harness.calls).toEqual([
+      'session.create:mir3-system-test:cwd',
+      'workspace.archive:mir3-system-test',
+      'session.open',
+      'session.subscribe',
+      'post:mir3/systemSession.created',
+      'session.prompt:queue',
+    ])
+    expect(harness.calls.some(call => call.startsWith('workspace.create:'))).toBe(false)
+  })
+
+  it('creates and opens an ordinary Session without a managed marker before archiving cleanup', async () => {
+    const harness = loadCoreClientHarness()
+    harness.send(systemRequest('mir3/bridge.ordinarySessionCanary', 1, {
+      cwd: '/project',
+      sessionId: 'harness-canary-test',
+    }))
+    await flushTasks()
+
+    expect(harness.calls).toEqual([
+      'session.create:harness-canary-test:cwd',
+      'session.open',
+      'workspace.archive:harness-canary-test',
+      'post:mir3/bridge.ordinarySessionCanary',
+    ])
+    expect(harness.posts.at(-1)?.payload).toMatchObject({
+      sessionId: 'harness-canary-test',
+      managed: false,
+      archived: true,
+    })
+    expect(isMir3ManagedSession({ id: 'harness-canary-test' })).toBe(false)
+  })
+
+  it('rejects wrong origin, wrong source, missing DTO payload, old sequence, and cross-task session control', async () => {
+    const harness = loadCoreClientHarness()
+    const create = systemRequest('mir3/systemSession.create', 1, {})
+    harness.send(create, { origin: 'http://evil.local' })
+    harness.send(create, { source: {} })
+    harness.send({ ...create, payload: undefined, sequence: 2, __omitPayload: true })
+    await flushTasks()
+    expect(harness.posts.filter(message => message.type !== 'mir3/plugin.ready')).toEqual([])
+
+    harness.send(create)
+    await flushTasks()
+    harness.send(systemRequest('mir3/systemSession.prompt', 2, { content: 'first' }))
+    await flushTasks()
+    const afterFirst = harness.posts.length
+    harness.send(systemRequest('mir3/systemSession.prompt', 2, { content: 'replayed' }))
+    await flushTasks()
+    expect(harness.posts).toHaveLength(afterFirst)
+
+    harness.send({ ...systemRequest('mir3/systemSession.prompt', 1, { content: 'cross task' }), taskId: 'task-other' })
+    await flushTasks()
+    expect(harness.posts.at(-1)?.type).toBe('mir3/bridge.error')
+    expect(String(harness.posts.at(-1)?.payload.message)).toContain('SESSION_IDENTITY_MISMATCH')
+  })
+
+  it('resumes, cancels, and answers question/approval interactions through the bound session', async () => {
+    const harness = loadCoreClientHarness()
+    harness.send(systemRequest('mir3/systemSession.create', 1, {}))
+    await flushTasks()
+
+    harness.setPending('question', { answer: 'yes' })
+    harness.send(systemRequest('mir3/systemSession.respond', 2, { pendingKey: 'pending-1', response: { answer: 'yes' } }))
+    await flushTasks()
+    expect(harness.pendingResponses.at(-1)).toMatchObject({ ok: true, value: { answer: 'yes' } })
+
+    harness.setPending('approval', { outcome: 'allowed-once' })
+    harness.send(systemRequest('mir3/systemSession.respond', 3, { pendingKey: 'pending-1', response: { outcome: 'allowed-once' } }))
+    await flushTasks()
+    expect(harness.pendingResponses.at(-1)).toMatchObject({ ok: true, value: { outcome: 'allowed-once' } })
+
+    harness.send(systemRequest('mir3/systemSession.cancel', 4, {}))
+    await flushTasks()
+    expect(harness.posts.some(message => message.type === 'mir3/systemSession.cancelled')).toBe(true)
+    harness.send(systemRequest('mir3/systemSession.resume', 5, {}))
+    await flushTasks()
+    expect(harness.posts.some(message => message.type === 'mir3/systemSession.resumed')).toBe(true)
   })
 
   it('projects only structured tool results into snapshot and complete handoffs', async () => {
@@ -121,6 +251,10 @@ describe('mir3 managed-session policy', () => {
     expect(isProtectedTarget('/project', { path: '/project/Data/config.json' })).toBe(true)
     expect(isProtectedTarget('/project', { path: '/project/Data/unknown.bin' })).toBe(true)
     expect(isProtectedTarget('/project', { path: '/outside/a.map' })).toBe(false)
+    expect(managedWriteViolation('/project', { id: 'mir3-system-1', header: { cwd: '/project' } }, { path: '/project/Data/config.json' })).toBe('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED')
+    expect(managedWriteViolation('/project', { id: 'global-1', header: { cwd: '/outside' } }, { path: '/tmp/scratch.txt' })).toBe('MIR3_SYSTEM_SESSION_SCOPE_UNAVAILABLE')
+    expect(managedWriteViolation('/project', { id: 'mir3-system-1', header: { cwd: '/project' } }, { path: '/tmp/scratch.txt' })).toBeNull()
+    expect(managedWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/project/Data/config.json' })).toBeNull()
   })
 })
 
@@ -158,6 +292,8 @@ function globalRequest(type: string, sequence: number, payload: unknown) {
 function loadCoreClientHarness() {
   const source = readFileSync(new URL('../src-tauri/resources/mir3-core-plugin/lib/client.js', import.meta.url), 'utf8')
   const posts: PostedMessage[] = []
+  const calls: string[] = []
+  const pendingResponses: unknown[] = []
   let listener: ((event: { source: unknown, origin: string, data: unknown }) => void) | undefined
   let exported: { apply: (context: unknown) => () => void } | undefined
   let snapshotListener: (() => void) | undefined
@@ -165,17 +301,23 @@ function loadCoreClientHarness() {
   const parent = {
     postMessage(message: PostedMessage) {
       posts.push(message)
+      calls.push(`post:${message.type}`)
     },
   }
   const session = {
-    async open() {},
-    async prompt() {
+    async open() {
+      calls.push('session.open')
+    },
+    async prompt(_content: unknown, mode: string) {
+      calls.push(`session.prompt:${mode}`)
       return { ok: true, value: {} }
     },
     async cancel() {
+      calls.push('session.cancel')
       return { ok: true, value: {} }
     },
     subscribe(callback: () => void) {
+      calls.push('session.subscribe')
       snapshotListener = callback
       return function dispose() {}
     },
@@ -207,7 +349,8 @@ function loadCoreClientHarness() {
     throw new Error('CORE_CLIENT_TEST_LOAD_FAILED')
   exported.apply({
     sessions: {
-      async create() {
+      async create(options: { sessionId: string, cwd?: string }) {
+        calls.push(`session.create:${options.sessionId}:${options.cwd ? 'cwd' : 'workspace'}`)
         return { ok: true, value: {} }
       },
       binding() {
@@ -216,8 +359,11 @@ function loadCoreClientHarness() {
       open() {},
     },
     workspaces: {
-      async archiveSession() {},
-      async create() {
+      async archiveSession(sessionId: string) {
+        calls.push(`workspace.archive:${sessionId}`)
+      },
+      async create(options: { path: string }) {
+        calls.push(`workspace.create:${options.path}`)
         return { workspaceId: 'workspace-1', path: '/project' }
       },
       startSession() {},
@@ -225,7 +371,10 @@ function loadCoreClientHarness() {
   })
   if (!listener)
     throw new Error('CORE_CLIENT_TEST_LISTENER_FAILED')
+  calls.length = 0
   return {
+    calls,
+    pendingResponses,
     posts,
     emitSnapshot() {
       snapshotListener?.()
@@ -233,8 +382,28 @@ function loadCoreClientHarness() {
     setSnapshot(value: Record<string, unknown>) {
       snapshot = value
     },
-    send(data: unknown) {
-      listener?.({ source: parent, origin: 'http://studio.local', data })
+    setPending(kind: 'approval' | 'question', expectedResponse: unknown) {
+      snapshot = {
+        ...snapshot,
+        pending: [{
+          key: 'pending-1',
+          kind,
+          sessionId: 'mir3-system-test',
+          payload: kind === 'approval' ? { approvalId: 'approval-1' } : { question: 'Continue?' },
+          async respond(response: unknown) {
+            pendingResponses.push(response)
+            expect(response).toMatchObject({ ok: true, value: expectedResponse } as object)
+            return { accepted: true }
+          },
+        }],
+      }
+    },
+    send(data: any, overrides: { origin?: string, source?: unknown } = {}) {
+      if (data?.__omitPayload) {
+        const { __omitPayload: _ignored, payload: _payload, ...withoutPayload } = data
+        data = withoutPayload
+      }
+      listener?.({ source: overrides.source ?? parent, origin: overrides.origin ?? 'http://studio.local', data })
     },
   }
 }

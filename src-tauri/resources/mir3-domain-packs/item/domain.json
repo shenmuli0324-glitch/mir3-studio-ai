@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "item",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -485,6 +485,112 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-item",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-item"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "consumable",
+                  "material",
+                  "equipment",
+                  "currency",
+                  "quest"
+                ]
+              },
+              "stackLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "clientIcon": {
+                "type": "string",
+                "minLength": 1
+              },
+              "engineStdMode": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "linkedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            },
+            "required": [
+              "itemId",
+              "itemType",
+              "stackLimit",
+              "clientIcon",
+              "engineStdMode",
+              "linkedBuffId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "item",
+        "equipment",
+        "buff",
+        "skill"
+      ],
+      "writeSystems": [
+        "item"
+      ],
+      "preconditions": [
+        "item.resource-index-ready",
+        "item.schema-loaded",
+        "item.draft-open",
+        "item.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-item"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -547,7 +653,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -651,7 +757,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -761,7 +867,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -846,7 +952,117 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-item",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-item"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "itemType": {
+                "type": "string",
+                "enum": [
+                  "consumable",
+                  "material",
+                  "equipment",
+                  "currency",
+                  "quest"
+                ]
+              },
+              "stackLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "clientIcon": {
+                "type": "string",
+                "minLength": 1
+              },
+              "engineStdMode": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "linkedBuffId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "buff"
+              }
+            },
+            "required": [
+              "itemId",
+              "itemType",
+              "stackLimit",
+              "clientIcon",
+              "engineStdMode",
+              "linkedBuffId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "item",
+        "equipment",
+        "buff",
+        "skill"
+      ],
+      "writeSystems": [
+        "item"
+      ],
+      "preconditions": [
+        "item.resource-index-ready",
+        "item.schema-loaded",
+        "item.draft-open",
+        "item.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-item"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

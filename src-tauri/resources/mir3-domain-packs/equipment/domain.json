@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "equipment",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -499,6 +499,112 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-equipment"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "helmet",
+                  "ring",
+                  "bracelet",
+                  "necklace",
+                  "boots"
+                ]
+              },
+              "baseItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "durability": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            },
+            "required": [
+              "equipmentId",
+              "slot",
+              "baseItemId",
+              "requiredLevel",
+              "durability"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -564,7 +670,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -669,7 +775,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -780,7 +886,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -868,7 +974,117 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-equipment",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-equipment"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "equipmentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "weapon",
+                  "armor",
+                  "helmet",
+                  "ring",
+                  "bracelet",
+                  "necklace",
+                  "boots"
+                ]
+              },
+              "baseItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "requiredLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "durability": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            },
+            "required": [
+              "equipmentId",
+              "slot",
+              "baseItemId",
+              "requiredLevel",
+              "durability"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "equipment",
+        "item",
+        "enhance",
+        "gem",
+        "refine",
+        "skill",
+        "buff"
+      ],
+      "writeSystems": [
+        "equipment"
+      ],
+      "preconditions": [
+        "equipment.resource-index-ready",
+        "equipment.schema-loaded",
+        "equipment.draft-open",
+        "equipment.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-equipment"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

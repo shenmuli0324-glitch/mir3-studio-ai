@@ -1,7 +1,7 @@
 {
   "name": "@mir3-studio/domain-map",
   "kind": "domain",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "files": [
     "CHANGELOG.md",

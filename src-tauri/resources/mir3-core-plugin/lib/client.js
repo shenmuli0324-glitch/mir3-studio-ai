@@ -12,12 +12,17 @@ window.__ModuleLoader__.load({
     const activeBindings = new Map()
     const bindingActivity = new Map()
     const returnTargets = new Map()
+    const sessionOwners = new Map()
     const inboundSequences = new Map()
     const outboundSequences = new Map()
     const parentOrigin = resolveParentOrigin()
 
     function sequenceKey(message) {
       return `${message.projectId}\u241F${message.taskId}\u241F${message.sessionId}`
+    }
+
+    function bindingKey(message) {
+      return sequenceKey(message)
     }
 
     function acceptInboundSequence(message) {
@@ -79,6 +84,7 @@ window.__ModuleLoader__.load({
           && typeof message.sessionId === 'string'
           && Number.isSafeInteger(message.sequence)
           && message.sequence > 0
+          && Object.hasOwn(message, 'payload')
       }
 
       async function describe(request) {
@@ -91,6 +97,7 @@ window.__ModuleLoader__.load({
             snapshot: true,
             pendingInteraction: true,
             globalSession: typeof ctx.sessions?.open === 'function',
+            ordinarySessionCanary: typeof ctx.sessions?.create === 'function' && typeof ctx.workspaces?.archiveSession === 'function',
           },
         })
       }
@@ -108,12 +115,38 @@ window.__ModuleLoader__.load({
         })
       }
 
+      async function canaryOrdinarySession(request) {
+        const payload = request.payload || {}
+        const sessionId = String(payload.sessionId || '')
+        if (!sessionId.startsWith('harness-canary-') || isSystemSessionId(sessionId) || isGlobalSessionId(sessionId) || typeof payload.cwd !== 'string')
+          throw new Error('ORDINARY_SESSION_CANARY_INVALID: an unreserved canary sessionId and cwd are required')
+        requireResult(await ctx.sessions.create({ cwd: payload.cwd, sessionId }), 'ORDINARY_SESSION_CANARY_CREATE_FAILED')
+        let openError = null
+        try {
+          const session = requireSession(sessionId)
+          await session.open()
+        }
+        catch (error) {
+          openError = error
+        }
+        await ctx.workspaces.archiveSession(sessionId)
+        if (openError)
+          throw openError
+        post('mir3/bridge.ordinarySessionCanary', { ...request, sessionId }, {
+          sessionId,
+          managed: false,
+          archived: true,
+        })
+      }
+
       async function createSystemSession(request) {
         const payload = request.payload || {}
         if (!ctx.sessions || typeof ctx.sessions.create !== 'function')
           throw new Error('SYSTEM_SESSION_UNSUPPORTED: sessions.create is unavailable')
         if (!isSystemSessionId(request.sessionId) || typeof payload.cwd !== 'string')
           throw new Error('SYSTEM_SESSION_INVALID: sessionId and cwd are required')
+        requireScopedIdentity(request)
+        claimSessionOwner(request)
         const created = await ctx.sessions.create({ cwd: payload.cwd, sessionId: request.sessionId })
         requireResult(created, 'SYSTEM_SESSION_CREATE_FAILED')
         if (typeof ctx.workspaces?.archiveSession !== 'function')
@@ -128,6 +161,8 @@ window.__ModuleLoader__.load({
       }
 
       async function resumeSystemSession(request) {
+        requireScopedIdentity(request)
+        claimSessionOwner(request)
         const session = requireSystemSession(request.sessionId)
         await session.open()
         bindSession(request, session, 'mir3/systemSession')
@@ -135,23 +170,25 @@ window.__ModuleLoader__.load({
       }
 
       function bindSession(request, session, eventPrefix) {
-        const old = activeBindings.get(request.taskId)
+        const key = bindingKey(request)
+        const old = activeBindings.get(key)
         if (typeof old === 'function')
           old()
-        bindingActivity.set(request.taskId, Boolean(session.getSnapshot()?.running))
+        bindingActivity.set(key, Boolean(session.getSnapshot()?.running))
         const dispose = session.subscribe(() => {
           const snapshot = session.getSnapshot()
-          const wasRunning = bindingActivity.get(request.taskId) === true
+          const wasRunning = bindingActivity.get(key) === true
           const running = Boolean(snapshot?.running)
-          bindingActivity.set(request.taskId, running)
+          bindingActivity.set(key, running)
           post(`${eventPrefix}.snapshot`, request, projectSnapshot(snapshot, request))
           if (wasRunning && !running)
             post(`${eventPrefix}.completed`, request, projectSnapshot(snapshot, request))
         })
-        activeBindings.set(request.taskId, dispose)
+        activeBindings.set(key, dispose)
       }
 
       async function promptSystemSession(request) {
+        requireSessionOwner(request)
         const session = requireSystemSession(request.sessionId)
         const content = String(request.payload?.content || '').trim()
         if (!content)
@@ -162,12 +199,14 @@ window.__ModuleLoader__.load({
       }
 
       async function cancelSystemSession(request) {
+        requireSessionOwner(request)
         const session = requireSystemSession(request.sessionId)
         requireResult(await session.cancel(), 'SYSTEM_SESSION_CANCEL_FAILED')
         post('mir3/systemSession.cancelled', request, {})
       }
 
       async function respondSystemSession(request) {
+        requireSessionOwner(request)
         const session = requireSystemSession(request.sessionId)
         const snapshot = session.getSnapshot()
         const pending = Array.isArray(snapshot?.pending) ? snapshot.pending : []
@@ -182,6 +221,7 @@ window.__ModuleLoader__.load({
       }
 
       async function snapshotSystemSession(request) {
+        requireSessionOwner(request)
         const session = requireSystemSession(request.sessionId)
         post('mir3/systemSession.snapshot', request, projectSnapshot(session.getSnapshot(), request))
       }
@@ -189,14 +229,17 @@ window.__ModuleLoader__.load({
       async function completeSystemSession(request) {
         if (!isSystemSessionId(request.sessionId))
           throw new Error('SYSTEM_SESSION_SCOPE_UNVERIFIED: reserved Studio session id is required')
+        requireSessionOwner(request)
         const session = requireSystemSession(request.sessionId)
         const snapshot = projectSnapshot(session.getSnapshot(), request)
-        const dispose = activeBindings.get(request.taskId)
+        const key = bindingKey(request)
+        const dispose = activeBindings.get(key)
         if (typeof dispose === 'function')
           dispose()
-        activeBindings.delete(request.taskId)
-        bindingActivity.delete(request.taskId)
-        returnTargets.delete(request.taskId)
+        activeBindings.delete(key)
+        bindingActivity.delete(key)
+        returnTargets.delete(key)
+        sessionOwners.delete(request.sessionId)
         post('mir3/systemSession.completed', request, snapshot)
       }
 
@@ -206,6 +249,8 @@ window.__ModuleLoader__.load({
           throw new Error('GLOBAL_SESSION_INVALID: cwd is required')
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        requireScopedIdentity(request)
+        claimSessionOwner(request)
         const workspace = await ctx.workspaces.create({ path: payload.cwd })
         const globalSessionId = request.sessionId
         requireResult(
@@ -215,7 +260,7 @@ window.__ModuleLoader__.load({
         ctx.sessions.open(globalSessionId)
         const session = requireSession(globalSessionId)
         await session.open()
-        returnTargets.set(request.taskId, cloneable(payload.structuredContext?.returnTo || null))
+        returnTargets.set(bindingKey(request), cloneable(payload.structuredContext?.returnTo || null))
         bindSession(request, session, 'mir3/globalSession')
         post('mir3/globalSession.created', { ...request, sessionId: globalSessionId }, {
           workspaceId: workspace.workspaceId,
@@ -228,6 +273,7 @@ window.__ModuleLoader__.load({
       async function promptGlobalSession(request) {
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        requireSessionOwner(request)
         const session = requireSession(request.sessionId)
         const content = String(request.payload?.content || '').trim()
         if (!content)
@@ -239,6 +285,7 @@ window.__ModuleLoader__.load({
       async function cancelGlobalSession(request) {
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        requireSessionOwner(request)
         const session = requireSession(request.sessionId)
         requireResult(await session.cancel(), 'GLOBAL_SESSION_CANCEL_FAILED')
         post('mir3/globalSession.cancelled', request, projectSnapshot(session.getSnapshot(), request))
@@ -247,14 +294,17 @@ window.__ModuleLoader__.load({
       async function completeGlobalSession(request) {
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
+        requireSessionOwner(request)
         const session = requireSession(request.sessionId)
         const snapshot = projectSnapshot(session.getSnapshot(), request)
-        const dispose = activeBindings.get(request.taskId)
+        const key = bindingKey(request)
+        const dispose = activeBindings.get(key)
         if (typeof dispose === 'function')
           dispose()
-        activeBindings.delete(request.taskId)
-        bindingActivity.delete(request.taskId)
-        returnTargets.delete(request.taskId)
+        activeBindings.delete(key)
+        bindingActivity.delete(key)
+        returnTargets.delete(key)
+        sessionOwners.delete(request.sessionId)
         post('mir3/globalSession.completed', request, snapshot)
       }
 
@@ -266,11 +316,31 @@ window.__ModuleLoader__.load({
       }
 
       function isSystemSessionId(sessionId) {
-        return typeof sessionId === 'string' && sessionId.startsWith(SYSTEM_SESSION_PREFIX)
+        return typeof sessionId === 'string' && sessionId.startsWith(SYSTEM_SESSION_PREFIX) && sessionId.length > SYSTEM_SESSION_PREFIX.length
       }
 
       function isGlobalSessionId(sessionId) {
-        return typeof sessionId === 'string' && sessionId.startsWith(GLOBAL_SESSION_PREFIX)
+        return typeof sessionId === 'string' && sessionId.startsWith(GLOBAL_SESSION_PREFIX) && sessionId.length > GLOBAL_SESSION_PREFIX.length
+      }
+
+      function requireScopedIdentity(request) {
+        if (!request.projectId || !request.systemId || !request.taskId || !request.sessionId)
+          throw new Error('SESSION_IDENTITY_INVALID: projectId, systemId, taskId, and sessionId are required')
+      }
+
+      function claimSessionOwner(request) {
+        const owner = `${request.projectId}\u241F${request.systemId}\u241F${request.taskId}`
+        const previous = sessionOwners.get(request.sessionId)
+        if (previous && previous !== owner)
+          throw new Error('SESSION_IDENTITY_MISMATCH: session is bound to another task')
+        sessionOwners.set(request.sessionId, owner)
+      }
+
+      function requireSessionOwner(request) {
+        requireScopedIdentity(request)
+        const owner = `${request.projectId}\u241F${request.systemId}\u241F${request.taskId}`
+        if (sessionOwners.get(request.sessionId) !== owner)
+          throw new Error('SESSION_IDENTITY_MISMATCH: session is not bound to this task')
       }
 
       function requireSystemSession(sessionId) {
@@ -283,6 +353,7 @@ window.__ModuleLoader__.load({
         switch (message.type) {
           case 'mir3/bridge.describe': return describe(message)
           case 'mir3/project.activate': return activateProject(message)
+          case 'mir3/bridge.ordinarySessionCanary': return canaryOrdinarySession(message)
           case 'mir3/systemSession.create': return createSystemSession(message)
           case 'mir3/systemSession.resume': return resumeSystemSession(message)
           case 'mir3/systemSession.prompt': return promptSystemSession(message)
@@ -329,6 +400,7 @@ window.__ModuleLoader__.load({
         activeBindings.clear()
         bindingActivity.clear()
         returnTargets.clear()
+        sessionOwners.clear()
         inboundSequences.clear()
         outboundSequences.clear()
       }
@@ -336,7 +408,7 @@ window.__ModuleLoader__.load({
 
     function projectSnapshot(snapshot, request) {
       if (!snapshot || typeof snapshot !== 'object')
-        return { nodes: [], runningCalls: [], running: false, domainResults: [], returnTo: cloneable(returnTargets.get(request?.taskId) || null) }
+        return { nodes: [], runningCalls: [], running: false, domainResults: [], returnTo: cloneable(returnTargets.get(request ? bindingKey(request) : '') || null) }
       const nodes = cloneable(Array.isArray(snapshot.nodes) ? snapshot.nodes : [])
       return {
         sessionId: snapshot.sessionId || null,
@@ -353,7 +425,7 @@ window.__ModuleLoader__.load({
         promptError: projectError(snapshot.promptError),
         lastAgentError: projectError(snapshot.lastAgentError),
         domainResults: projectDomainResults(nodes, request?.systemId),
-        returnTo: projectReturnTarget(nodes) || cloneable(returnTargets.get(request?.taskId) || null),
+        returnTo: projectReturnTarget(nodes) || cloneable(returnTargets.get(request ? bindingKey(request) : '') || null),
       }
     }
 

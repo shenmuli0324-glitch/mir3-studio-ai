@@ -213,6 +213,14 @@ export interface DomainDraftConfirmation {
   confirmationToken: string
 }
 
+export interface LegacyDraftCloneRequest {
+  legacyDraftId: string
+  systemId: string
+  pluginVersion: string
+  expectedSources: Record<string, string>
+  intent: string
+}
+
 export interface DomainSnapshot {
   id: string
   draftId?: string | null

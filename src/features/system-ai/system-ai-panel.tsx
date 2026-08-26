@@ -99,7 +99,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
           includeScopeLeaseDraft(globalTask, handoff.draftId)
         }
       }
-      if (globalTask && (message.type === 'mir3/globalSession.completed' || message.type === 'mir3/globalSession.cancelled' || message.type === 'mir3/bridge.error')) {
+      if (globalTask && (message.type === 'mir3/globalSession.cancelled' || message.type === 'mir3/bridge.error')) {
         stopScopeLease(globalTask)
         unregisterGlobalTask(globalTask)
       }
@@ -415,7 +415,6 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   }
 
   async function openGlobalTask() {
-    const summary = messages.slice(-6).map(message => `${message.role}: ${message.content}`).join('\n')
     setGlobalPending(true)
     setError(null)
     try {
@@ -456,6 +455,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         ...globalIdentity,
         systemId: manifest.systemId,
         allowedSystems: readSystems,
+        allowedWriteSystems: writeSystems,
         draftIds: lease.draftIds,
       })
       manageGlobalLease(lease, globalIdentity, project, manifest.systemId)
@@ -471,9 +471,22 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         allowedWriteSystems: lease.writeSystems,
         pluginVersions: lease.pluginVersions,
         compositeId,
-        resourceReferences: optionalValue(selectedPath),
+        taskSummary: {
+          messageCount: messages.length,
+          toolCallCount: taskToolCalls.length,
+          capabilityIds: usedCapabilities.map(capability => capability.id),
+          receiptStatus,
+        },
+        resourceReferences: {
+          relativePath: optionalValue(selectedPath),
+          resourceId: optionalValue(selectedResourceId),
+        },
         draftIds: lease.draftIds,
-        unfinishedPlan: running,
+        unfinishedPlan: {
+          status: running ? 'running' : 'ready',
+          pendingInteractions: pending.map(interaction => ({ key: interaction.key, kind: interaction.kind })),
+          runningCalls: runningCalls.map(toolCallLabel),
+        },
         returnTo: {
           view: 'devtools',
           projectId: project.id,
@@ -490,7 +503,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         sessionId: globalSessionId,
         payload: {
           cwd: project.activeWorkspaceRoot,
-          prompt: `${t('studio.devtools.ai.global_context')}\n${summary}\n${JSON.stringify(structuredContext)}`,
+          prompt: `${t('studio.devtools.ai.global_context')}\n${JSON.stringify(structuredContext)}`,
           structuredContext,
         },
       })

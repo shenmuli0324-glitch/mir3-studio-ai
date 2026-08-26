@@ -1,11 +1,23 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.0.3 - 2026-08-26
+
+- Core 候选升级 canary 通过公共 Runtime 创建、打开并归档一个非 managed 普通 Session，避免仅验证系统会话旁路。
+- Studio 使用一次性项目和数据库启动真实 MIR3 MCP sidecar，调用只读系统工具和官方只读领域能力；失败时禁止推进 LKG 并恢复上一版本。
+
+## 1.0.2 - 2026-08-26
+
+- 固定系统/全局会话的项目、系统、任务与 Session 所有者，拒绝跨任务控制、缺失 payload、空保留 ID 与旧序列。
+- 补齐结构化 Draft/校验/资源变更回传和 `returnTo` 深链，并以可执行测试固定 create → archive → open → prompt 的顺序。
+- Core 直接写保护改为可独立审计的策略函数，证明普通 Harness 会话保持原行为；候选 canary 失败后恢复 LKG、重启 Harness 并刷新 iframe。
+
 ## 1.0.1 - 2026-08-26
 
 - 全局 MIR3 会话纳入与系统会话相同的只读和 Draft-only 策略，禁止直接改写已验证项目根目录内的任何真实文件且不影响普通 Harness 会话。
 - 协议 v2 的 Studio 请求与 Core 响应按会话分别使用严格单调序列，并完整校验 `sessionId`。
 - 全局会话要求 Studio 保留的 `global-` 会话 ID，拒绝无作用域的伪全局请求。
 - 系统与全局会话的快照/完成事件只投影结构化 Draft 结果，支持安全回传版本、校验、资源变更和 Studio `returnTo` 深链；长任务可接收短期作用域续租且结束即撤销。
+- 会话命令固定绑定项目、系统、任务和 Session 所有者，拒绝跨任务控制、缺失 payload、空保留 ID 和重放序列；归档顺序与普通 Harness 写权限加入可执行回归测试。
 
 ## 1.0.0 - 2026-08-26
 

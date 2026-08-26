@@ -28,6 +28,10 @@ const MIN_RENEW_DELAY_MILLIS = 1_000
 const leases = new Map<string, ManagedLease>()
 
 export function manageScopeLease(registration: ScopeLeaseRegistration): void {
+  if (registration.lease.taskId !== registration.identity.taskId) {
+    void registration.revoke(registration.lease).catch(() => {})
+    throw new Error('SCOPE_LEASE_IDENTITY_MISMATCH: lease belongs to another task')
+  }
   stopScopeLease(registration.identity, false)
   const managed: ManagedLease = { ...registration, active: true, timer: null }
   leases.set(leaseKey(registration.identity), managed)
@@ -68,6 +72,10 @@ async function renewScopeLease(managed: ManagedLease): Promise<void> {
   const previous = managed.lease
   try {
     const renewed = await managed.renew(previous)
+    if (renewed.taskId !== managed.identity.taskId) {
+      await managed.revoke(renewed).catch(() => {})
+      throw new Error('SCOPE_LEASE_IDENTITY_MISMATCH: renewed lease belongs to another task')
+    }
     if (!managed.active || leases.get(key) !== managed) {
       await managed.revoke(renewed).catch(() => {})
       return

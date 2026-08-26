@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "launch_event",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -391,6 +391,293 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-launch_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-launch_event"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "scheduleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "openServerDay": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "limited_event"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            },
+            "required": [
+              "scheduleId",
+              "openServerDay",
+              "eventId",
+              "rewardItemId",
+              "rewardCount"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "launch_event",
+        "checkin",
+        "online_reward",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "launch_event"
+      ],
+      "preconditions": [
+        "launch_event.resource-index-ready",
+        "launch_event.schema-loaded",
+        "launch_event.draft-open",
+        "launch_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-launch_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-launch_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-launch_event"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "openServerDay": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "limited_event"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "launch_event",
+        "checkin",
+        "online_reward",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "launch_event"
+      ],
+      "preconditions": [
+        "launch_event.resource-index-ready",
+        "launch_event.schema-loaded",
+        "launch_event.draft-open",
+        "launch_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-launch_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-launch_event-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-launch_event-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "eventId",
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "launch_event",
+        "checkin",
+        "online_reward",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "launch_event"
+      ],
+      "preconditions": [
+        "launch_event.resource-index-ready",
+        "launch_event.schema-loaded",
+        "launch_event.draft-open",
+        "launch_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-launch_event-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -457,7 +744,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -556,7 +843,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -639,7 +926,306 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-launch_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-launch_event"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "scheduleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "openServerDay": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "limited_event"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            },
+            "required": [
+              "scheduleId",
+              "openServerDay",
+              "eventId",
+              "rewardItemId",
+              "rewardCount"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "launch_event",
+        "checkin",
+        "online_reward",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "launch_event"
+      ],
+      "preconditions": [
+        "launch_event.resource-index-ready",
+        "launch_event.schema-loaded",
+        "launch_event.draft-open",
+        "launch_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-launch_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-launch_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-launch_event"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "openServerDay": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "limited_event"
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "rewardCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999999
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "launch_event",
+        "checkin",
+        "online_reward",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "launch_event"
+      ],
+      "preconditions": [
+        "launch_event.resource-index-ready",
+        "launch_event.schema-loaded",
+        "launch_event.draft-open",
+        "launch_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-launch_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-launch_event-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-launch_event-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "eventId",
+              "rewardItemId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "launch_event",
+        "checkin",
+        "online_reward",
+        "first_charge",
+        "cumulative_charge",
+        "shop",
+        "quest",
+        "ranking"
+      ],
+      "writeSystems": [
+        "launch_event"
+      ],
+      "preconditions": [
+        "launch_event.resource-index-ready",
+        "launch_event.schema-loaded",
+        "launch_event.draft-open",
+        "launch_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-launch_event-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "ranking",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -481,6 +481,211 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-ranking"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "boardId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            },
+            "required": [
+              "boardId",
+              "metric",
+              "cycleSeconds",
+              "rewardItemId",
+              "seasonId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-ranking"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -544,7 +749,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -645,7 +850,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -748,7 +953,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -835,7 +1040,220 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-ranking"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "boardId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            },
+            "required": [
+              "boardId",
+              "metric",
+              "cycleSeconds",
+              "rewardItemId",
+              "seasonId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "add-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-ranking",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-ranking"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "level",
+                  "power",
+                  "guild",
+                  "wealth",
+                  "season-points"
+                ]
+              },
+              "cycleSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000
+              },
+              "rewardItemId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "item"
+              },
+              "seasonId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "season"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "ranking",
+        "level",
+        "equipment",
+        "guild",
+        "season"
+      ],
+      "writeSystems": [
+        "ranking"
+      ],
+      "preconditions": [
+        "ranking.resource-index-ready",
+        "ranking.schema-loaded",
+        "ranking.draft-open",
+        "ranking.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "xls",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "xls",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-ranking"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

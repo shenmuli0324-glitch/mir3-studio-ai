@@ -1,5 +1,5 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainValidationReport, SafeTextOpen } from './types'
+import type { DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainValidationReport, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { CircleCheck, CircleExclamation, Magnifier } from '@gravity-ui/icons'
@@ -15,6 +15,7 @@ import {
   activateDomainPack,
   applyDomainDraft,
   checkDomainPackUpdates,
+  cloneLegacyDomainDraft,
   describeDomainSystem,
   getDomainPackState,
   getDomainResource,
@@ -38,6 +39,11 @@ import { ResourceRenderer } from './renderers/resource-renderer'
 type ResourceTab = 'resources' | 'files' | 'dependencies'
 type CenterTab = 'domain' | 'source' | 'diff' | 'validation'
 
+interface DraftScopeState {
+  systemId: string | null
+  legacyOrUnscoped: boolean
+}
+
 export function DomainSystemView({ tool, project, onBack, target }: {
   tool: DevToolDefinition
   project: Mir3Project | null
@@ -54,6 +60,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   const [editedContent, setEditedContent] = useState<string | null>(null)
   const [draftPreview, setDraftPreview] = useState<DomainDraftConfirmation | null>(null)
   const [validation, setValidation] = useState<DomainValidationReport | null>(null)
+  const [draftScopes, setDraftScopes] = useState<Record<string, DraftScopeState>>({})
   const handledTargetRef = useRef('')
 
   const manifests = useQuery({
@@ -182,6 +189,47 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
+  const cloneLegacyDraft = useMutation({
+    mutationFn: async (confirmation: DomainDraftConfirmation) => {
+      const expectedSources: Record<string, string> = {}
+      for (const change of confirmation.preview.changes) {
+        if (!change.baseSha256)
+          throw new Error('DRAFT_LEGACY_SOURCE_REVIEW_REQUIRED')
+        expectedSources[change.path] = change.baseSha256
+      }
+      return cloneLegacyDomainDraft(project!.id, {
+        legacyDraftId: confirmation.preview.draft.id,
+        systemId: manifest.systemId,
+        pluginVersion: manifest.version,
+        expectedSources,
+        intent: t('studio.devtools.diff.legacy_clone_intent', { intent: confirmation.preview.draft.intent }),
+      })
+    },
+    onSuccess: async (confirmation) => {
+      setDraftPreview(confirmation)
+      setValidation(await validateDomainDraft(project!.id, confirmation.preview.draft.id))
+      setDraftScopes(value => ({
+        ...value,
+        [confirmation.preview.draft.id]: { systemId: manifest.systemId, legacyOrUnscoped: false },
+      }))
+      setCenterTab('diff')
+      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
+      toast(t('studio.devtools.diff.legacy_cloned'), {})
+    },
+    onError: reason => toast(String(reason), { variant: 'danger' }),
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    const openDrafts = (drafts.data ?? []).filter(draft => draft.status === 'open')
+    void classifyDraftScopes(project?.id, openDrafts).then((scopes) => {
+      if (!cancelled)
+        setDraftScopes(scopes)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [drafts.data, project?.id])
 
   useEffect(() => {
     if (!project || !target || files.isLoading || target.projectId !== project.id || target.systemId !== tool.id || handledTargetRef.current === target.nonce)
@@ -227,6 +275,17 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     catch (reason) {
       toast(String(reason), { variant: 'danger' })
     }
+  }
+
+  function clearDraft() {
+    setDraftPreview(null)
+    setValidation(null)
+  }
+
+  function cloneLegacyPreview(confirmation: DomainDraftConfirmation) {
+    // eslint-disable-next-line no-alert
+    if (window.confirm(t('studio.devtools.diff.legacy_clone_confirm', { count: confirmation.preview.changes.length })))
+      cloneLegacyDraft.mutate(confirmation)
   }
 
   async function handleAiDraftHandoff(handoff: DomainDraftHandoff) {
@@ -285,6 +344,11 @@ export function DomainSystemView({ tool, project, onBack, target }: {
         <WorkspaceToolbar
           manifest={manifest}
           project={project}
+          drafts={drafts.data ?? []}
+          draftScopes={draftScopes}
+          activeDraftId={draftPreview?.preview.draft.id ?? ''}
+          onDraft={draftId => void showDraft(draftId)}
+          onClearDraft={clearDraft}
           activeTab={centerTab}
           onTab={setCenterTab}
           onValidate={() => void runValidation()}
@@ -337,10 +401,15 @@ export function DomainSystemView({ tool, project, onBack, target }: {
           draftPreview={draftPreview}
           onShowDraft={draftId => void showDraft(draftId)}
           onApplyDraft={(confirmation) => {
+            if (draftScopes[confirmation.preview.draft.id]?.legacyOrUnscoped !== false)
+              return
             // eslint-disable-next-line no-alert
             if (window.confirm(t('studio.devtools.diff.apply_confirm')))
               applyDraft.mutate(confirmation)
           }}
+          draftScopes={draftScopes}
+          onCloneLegacy={cloneLegacyPreview}
+          cloningLegacy={cloneLegacyDraft.isPending}
           applying={applyDraft.isPending}
           validation={validation}
         />
@@ -546,9 +615,14 @@ function DependencyList({ manifest, files, selectedPath, onSelect, loading }: {
   )
 }
 
-function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, packState, remoteCandidate, busy, onCheckUpdate, onStageUpdate, onActivate, onRollback, onToggleEnabled }: {
+function WorkspaceToolbar({ manifest, project, drafts, draftScopes, activeDraftId, onDraft, onClearDraft, activeTab, onTab, onValidate, packState, remoteCandidate, busy, onCheckUpdate, onStageUpdate, onActivate, onRollback, onToggleEnabled }: {
   manifest: DomainManifest
   project: Mir3Project | null
+  drafts: DomainDraft[]
+  draftScopes: Record<string, DraftScopeState>
+  activeDraftId: string
+  onDraft: (draftId: string) => void
+  onClearDraft: () => void
   activeTab: CenterTab
   onTab: (tab: CenterTab) => void
   onValidate: () => void
@@ -562,22 +636,33 @@ function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, pac
   onToggleEnabled: () => void
 }) {
   const { t } = useTranslation()
+  const availableDrafts = drafts.filter((draft) => {
+    const scope = draftScopes[draft.id]
+    return draft.status === 'open' && (scope?.systemId === manifest.systemId || scope?.legacyOrUnscoped === true)
+  })
+  function selectDraft(value: string) {
+    if (value) {
+      onDraft(value)
+      return
+    }
+    onClearDraft()
+  }
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-      <span className="min-w-0">
-        <strong className="block truncate text-xs text-ink">{project?.name ?? t('studio.devtools.no_project')}</strong>
-        <small className="block truncate text-[9px] text-muted">
-          v
-          {packState?.current?.version ?? manifest.version}
-          {' '}
-          ·
-          {project?.engineVersion ?? t('studio.devtools.engine_unknown')}
-          {' '}
-          ·
-          {manifest.renderer}
-        </small>
-        <small className="block truncate text-[9px] text-muted">{t('studio.devtools.package_docs')}</small>
-      </span>
+      <div className="flex min-w-0 items-center gap-2 overflow-auto">
+        <ControlValue label={t('studio.devtools.controls.project')} value={project?.name ?? t('studio.devtools.no_project')} />
+        <ControlValue label={t('studio.devtools.controls.system')} value={t(`studio.devtools.tool.${manifest.systemId}.title`)} />
+        <ControlValue label={t('studio.devtools.controls.plugin')} value={`v${packState?.current?.version ?? manifest.version}`} />
+        <ControlValue label={t('studio.devtools.controls.engine')} value={project?.engineVersion ?? t('studio.devtools.engine_unknown')} />
+        <label className="shrink-0 rounded-lg border border-line bg-panel2 px-2 py-1">
+          <span className="block text-[8px] uppercase tracking-wider text-muted">{t('studio.devtools.controls.draft')}</span>
+          <select className="max-w-48 bg-transparent text-[10px] text-ink outline-none" value={activeDraftId} aria-label={t('studio.devtools.controls.draft')} onChange={event => selectDraft(event.target.value)}>
+            <option value="">{t('studio.devtools.controls.no_draft')}</option>
+            {availableDrafts.map(draft => <option key={draft.id} value={draft.id}>{draftLabel(draft, draftScopes[draft.id], t('studio.devtools.diff.legacy_short'))}</option>)}
+          </select>
+        </label>
+        <DomainConfiguration manifest={manifest} />
+      </div>
       <div className="flex items-center gap-1 overflow-auto">
         <Button size="sm" variant="ghost" isDisabled={busy} onPress={onCheckUpdate}>{t('studio.devtools.pack.check_update')}</Button>
         <If cond={remoteCandidate != null && packState?.candidate?.version !== remoteCandidate?.version}>
@@ -606,6 +691,37 @@ function WorkspaceToolbar({ manifest, project, activeTab, onTab, onValidate, pac
   )
 }
 
+function ControlValue({ label, value }: { label: string, value: string }) {
+  return (
+    <span className="max-w-36 shrink-0 rounded-lg border border-line bg-panel2 px-2 py-1">
+      <small className="block text-[8px] uppercase tracking-wider text-muted">{label}</small>
+      <strong className="block truncate text-[10px] font-medium text-ink">{value}</strong>
+    </span>
+  )
+}
+
+function DomainConfiguration({ manifest }: { manifest: DomainManifest }) {
+  const { t } = useTranslation()
+  return (
+    <details className="group relative shrink-0">
+      <summary className="cursor-pointer list-none rounded-lg border border-line bg-panel2 px-2 py-1.5 text-[10px] text-ink">{t('studio.devtools.controls.domain_config')}</summary>
+      <div className="absolute left-0 top-9 z-40 w-80 rounded-xl border border-line bg-panel p-4 shadow-2xl">
+        <strong className="text-xs text-ink">{t('studio.devtools.controls.domain_config_title')}</strong>
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-[10px]">
+          <dt className="text-muted">{t('studio.devtools.controls.renderer')}</dt>
+          <dd className="text-ink">{manifest.renderer}</dd>
+          <dt className="text-muted">{t('studio.devtools.controls.kernel_api')}</dt>
+          <dd className="text-ink">{manifest.kernelApiRange}</dd>
+          <dt className="text-muted">{t('studio.devtools.controls.engine_range')}</dt>
+          <dd className="text-ink">{manifest.supportedEngineRange}</dd>
+          <dt className="text-muted">{t('studio.devtools.controls.dependencies')}</dt>
+          <dd className="break-words text-ink">{manifest.dependencies.join(', ') || t('studio.devtools.dependencies.empty')}</dd>
+        </dl>
+      </div>
+    </details>
+  )
+}
+
 function CenterWorkspace(props: {
   activeTab: CenterTab
   manifest: DomainManifest
@@ -623,17 +739,20 @@ function CenterWorkspace(props: {
   onSaveSource: () => void
   saving: boolean
   drafts: Array<{ id: string, intent: string, revision: number, status: string }>
+  draftScopes: Record<string, DraftScopeState>
   draftPreview: DomainDraftConfirmation | null
   onShowDraft: (draftId: string) => void
   onApplyDraft: (confirmation: DomainDraftConfirmation) => void
   applying: boolean
+  onCloneLegacy: (confirmation: DomainDraftConfirmation) => void
+  cloningLegacy: boolean
   validation: DomainValidationReport | null
 }) {
   return (
     <div className="h-full min-h-0 overflow-auto p-4">
       <If cond={props.activeTab === 'domain'}><DomainRenderer manifest={props.manifest} description={props.description} resource={props.resource} resourceLoading={props.resourceLoading} resourceError={props.resourceError} /></If>
       <If cond={props.activeTab === 'source'}><SourcePanel {...props} /></If>
-      <If cond={props.activeTab === 'diff'}><DiffPanel drafts={props.drafts} preview={props.draftPreview} onShow={props.onShowDraft} onApply={props.onApplyDraft} applying={props.applying} /></If>
+      <If cond={props.activeTab === 'diff'}><DiffPanel drafts={props.drafts} draftScopes={props.draftScopes} preview={props.draftPreview} onShow={props.onShowDraft} onApply={props.onApplyDraft} applying={props.applying} onCloneLegacy={props.onCloneLegacy} cloningLegacy={props.cloningLegacy} /></If>
       <If cond={props.activeTab === 'validation'}><ValidationPanel report={props.validation} /></If>
     </div>
   )
@@ -726,8 +845,18 @@ function SourcePanel(props: {
   )
 }
 
-function DiffPanel({ drafts, preview, onShow, onApply, applying }: { drafts: Array<{ id: string, intent: string, revision: number, status: string }>, preview: DomainDraftConfirmation | null, onShow: (draftId: string) => void, onApply: (confirmation: DomainDraftConfirmation) => void, applying: boolean }) {
+function DiffPanel({ drafts, draftScopes, preview, onShow, onApply, applying, onCloneLegacy, cloningLegacy }: {
+  drafts: Array<{ id: string, intent: string, revision: number, status: string }>
+  draftScopes: Record<string, DraftScopeState>
+  preview: DomainDraftConfirmation | null
+  onShow: (draftId: string) => void
+  onApply: (confirmation: DomainDraftConfirmation) => void
+  applying: boolean
+  onCloneLegacy: (confirmation: DomainDraftConfirmation) => void
+  cloningLegacy: boolean
+}) {
   const { t } = useTranslation()
+  const previewScope = preview ? draftScopes[preview.preview.draft.id] : undefined
   function applyPreview() {
     if (preview)
       onApply(preview)
@@ -747,6 +876,9 @@ function DiffPanel({ drafts, preview, onShow, onApply, applying }: { drafts: Arr
                 ·
                 {draft.status}
               </small>
+              <If cond={draftScopes[draft.id]?.legacyOrUnscoped === true}>
+                <small className="mt-1 block text-[9px] text-warning">{t('studio.devtools.diff.legacy_readonly')}</small>
+              </If>
             </button>
           ))}
         </div>
@@ -754,8 +886,17 @@ function DiffPanel({ drafts, preview, onShow, onApply, applying }: { drafts: Arr
       <div className="min-w-0 p-4">
         <If cond={preview != null} else={<CenteredNotice title={t('studio.devtools.diff.empty')} description={t('studio.devtools.diff.empty_desc')} />}>
           <div>
+            <If cond={previewScope?.legacyOrUnscoped === true}>
+              <div className="mb-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
+                <strong className="text-xs text-warning">{t('studio.devtools.diff.legacy_readonly')}</strong>
+                <p className="mt-1 text-[10px] leading-5 text-muted">{t('studio.devtools.diff.legacy_desc')}</p>
+                <Button className="mt-2 bg-accent text-white" size="sm" isPending={cloningLegacy} onPress={() => preview && onCloneLegacy(preview)}>{t('studio.devtools.diff.legacy_clone')}</Button>
+              </div>
+            </If>
             <div className="mb-3 flex justify-end">
-              <Button className="bg-accent text-white" size="sm" isPending={applying} onPress={applyPreview}>{t('studio.devtools.diff.apply')}</Button>
+              <If cond={previewScope?.legacyOrUnscoped === false}>
+                <Button className="bg-accent text-white" size="sm" isPending={applying} onPress={applyPreview}>{t('studio.devtools.diff.apply')}</Button>
+              </If>
             </div>
             <div className="space-y-3">
               {preview?.preview.changes.map(change => (
@@ -815,6 +956,32 @@ function CenteredNotice({ title, description }: { title: string, description: st
 function NoProject() {
   const { t } = useTranslation()
   return <CenteredNotice title={t('studio.devtools.no_project')} description={t('studio.devtools.no_project_desc')} />
+}
+
+async function classifyDraftScopes(projectId: string | undefined, drafts: DomainDraft[]) {
+  if (!projectId)
+    return {}
+  const entries = await Promise.all(drafts.map(async (draft) => {
+    try {
+      const report = await validateDomainDraft(projectId, draft.id)
+      return [draft.id, { systemId: report.systemId, legacyOrUnscoped: false }] as const
+    }
+    catch (reason) {
+      return [draft.id, { systemId: null, legacyOrUnscoped: isLegacyOrUnscopedError(reason) }] as const
+    }
+  }))
+  return Object.fromEntries(entries)
+}
+
+function isLegacyOrUnscopedError(reason: unknown) {
+  const message = String(reason)
+  return message.includes('DRAFT_DOMAIN_REQUIRED') || message.includes('DRAFT_LEGACY_READONLY')
+}
+
+function draftLabel(draft: DomainDraft, scope: DraftScopeState | undefined, legacyLabel: string) {
+  if (scope?.legacyOrUnscoped)
+    return `${draft.intent} · ${legacyLabel}`
+  return draft.intent
 }
 
 function isTextFile(file?: DomainFileRecord | null): boolean {

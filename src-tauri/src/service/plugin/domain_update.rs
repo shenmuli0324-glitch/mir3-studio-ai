@@ -669,13 +669,16 @@ mod tests {
         let root = test_directory("remote-candidate");
         let source =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/mir3-domain-packs/level");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(source.join("domain.json")).unwrap()).unwrap();
+        let version = manifest["version"].as_str().unwrap();
         let archive = zip_directory(&source);
         let key = test_key();
         let config = test_config(&key);
         let release = signed_release(
             "level",
-            "1.0.0",
-            "https://updates.example/packs/level-1.0.0.zip",
+            version,
+            &format!("https://updates.example/packs/level-{version}.zip"),
             &archive,
             &key,
         );
@@ -695,13 +698,13 @@ mod tests {
         unpack_archive(&archive, &unpacked).unwrap();
         validate_staged_descriptor(&unpacked, &release).unwrap();
         let mut mismatched = release.clone();
-        mismatched.version = "1.0.1".to_string();
+        mismatched.version = "999.0.0".to_string();
         assert!(validate_staged_descriptor(&unpacked, &mismatched)
             .unwrap_err()
             .starts_with("DOMAIN_PACK_UPDATE_MANIFEST_MISMATCH:"));
         let state = system::stage_domain_pack_candidate(&root, &unpacked).unwrap();
         assert!(state.current.is_none());
-        assert_eq!(state.candidate.unwrap().version, "1.0.0");
+        assert_eq!(state.candidate.unwrap().version, version);
         fs::remove_dir_all(root).ok();
     }
 
@@ -719,6 +722,44 @@ mod tests {
         release.signature = BASE64_STANDARD.encode([0_u8; 64]);
         let error = validate_release_metadata(&release, &config).unwrap_err();
         assert!(error.starts_with("DOMAIN_PACK_UPDATE_SIGNATURE_INVALID:"));
+    }
+
+    #[test]
+    fn signed_release_rejects_incompatible_api_engine_schema_and_digest_contracts() {
+        let key = test_key();
+        let config = test_config(&key);
+        let archive = b"fixture";
+        let baseline = signed_release(
+            "level",
+            "1.0.1",
+            "https://updates.example/level.zip",
+            archive,
+            &key,
+        );
+
+        let mut incompatible_kernel = baseline.clone();
+        incompatible_kernel.kernel_api_range = "^2.0.0".to_string();
+        assert!(validate_release_metadata(&incompatible_kernel, &config)
+            .unwrap_err()
+            .starts_with("DOMAIN_PACK_UPDATE_KERNEL_INCOMPATIBLE:"));
+
+        let mut invalid_engine = baseline.clone();
+        invalid_engine.supported_engine_range = "not-a-semver-range".to_string();
+        assert!(validate_release_metadata(&invalid_engine, &config)
+            .unwrap_err()
+            .starts_with("DOMAIN_PACK_UPDATE_ENGINE_RANGE_INVALID:"));
+
+        let mut unsupported_schema = baseline.clone();
+        unsupported_schema.memory_schema_version = 2;
+        assert!(validate_release_metadata(&unsupported_schema, &config)
+            .unwrap_err()
+            .starts_with("DOMAIN_PACK_UPDATE_SCHEMA_UNSUPPORTED:"));
+
+        let mut invalid_digest = baseline;
+        invalid_digest.archive_sha256 = "ABC".to_string();
+        assert!(validate_release_metadata(&invalid_digest, &config)
+            .unwrap_err()
+            .starts_with("DOMAIN_PACK_UPDATE_SHA256_INVALID:"));
     }
 
     #[test]

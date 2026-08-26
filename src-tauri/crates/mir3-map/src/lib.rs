@@ -659,6 +659,24 @@ mod tests {
     }
 
     #[test]
+    fn maximum_supported_map_opens_by_chunk_without_expanding_the_whole_grid() {
+        let started = std::time::Instant::now();
+        let bytes = fixture(MapFormat::Mir3ZeroHeader, 2048, 2048);
+        assert!(bytes.len() < 64 * 1024 * 1024);
+        let source_hash = hash_bytes(&bytes);
+        let document = MapDocument::parse(bytes).unwrap();
+        assert_eq!(document.header().source_sha256, source_hash);
+        let chunk = document.chunk(15, 15, 128).unwrap();
+        assert_eq!((chunk.start_x, chunk.start_y), (1920, 1920));
+        assert_eq!((chunk.width, chunk.height), (128, 128));
+        assert_eq!(chunk.cells.len(), 128 * 128);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(60),
+            "maximum 2048x2048 map exceeded the 60 second G4 gate"
+        );
+    }
+
+    #[test]
     fn rejects_unknown_or_length_mismatched_layouts() {
         let mut bytes = fixture(MapFormat::Mir3ZeroHeader, 4, 4);
         bytes.pop();

@@ -15,13 +15,14 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 #[cfg(test)]
-const TOOLS: [&str; 11] = [
+const TOOLS: [&str; 12] = [
     "mir3_system_list",
     "mir3_system_describe",
     "mir3_resource_query",
     "mir3_resource_get",
     "mir3_dependency_resolve",
     "mir3_draft_open",
+    "mir3_draft_diff",
     "mir3_domain_operate",
     "mir3_capability_list",
     "mir3_capability_describe",
@@ -47,8 +48,10 @@ fn run() -> Result<(), String> {
         .ok_or_else(|| "MIR3_MCP_HOME_MISSING: MIR3_STUDIO_HOME is required".to_string())?;
     let project_id = env::var("MIR3_ACTIVE_PROJECT_ID")
         .map_err(|_| "MIR3_MCP_PROJECT_MISSING: MIR3_ACTIVE_PROJECT_ID is required".to_string())?;
-    let store =
-        DomainStore::new_with_domain_pack_root(home.join("projects"), home.join("domain-packs"))?;
+    let domain_pack_root = env::var_os("MIR3_DOMAIN_PACK_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("domain-packs"));
+    let store = DomainStore::new_with_domain_pack_root(home.join("projects"), domain_pack_root)?;
     store.get_project(&project_id)?;
 
     let stdin = io::stdin();
@@ -250,10 +253,30 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         None,
                     )?;
                     store.attach_draft_to_scope(project_id, scope_token, &system_id, &draft.id)?;
-                    Ok(draft)
+                    Ok((system_id, draft))
                 })
-                .map(|draft| json!({"draft": draft}))
+                .map(|(system_id, draft)| {
+                    json!({
+                        "systemId": system_id,
+                        "draftId": draft.id,
+                        "revision": draft.revision,
+                        "validation": Value::Null,
+                        "changedResources": [],
+                        "draft": draft
+                    })
+                })
         }
+        "mir3_draft_diff" => required_string(&args, "draftId").and_then(|draft_id| {
+            store.authorize_task_scope(project_id, scope_token, None, None, Some(&draft_id))?;
+            let preview = store.preview_draft(project_id, &draft_id)?;
+            Ok(json!({
+                "draftId": draft_id,
+                "revision": preview.draft.revision,
+                "status": preview.draft.status,
+                "diffHash": preview.diff_hash,
+                "preview": &preview,
+            }))
+        }),
         "mir3_domain_operate" => {
             let draft_id = required_string(&args, "draftId");
             let capability_id = required_string(&args, "capabilityId");
@@ -566,8 +589,28 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
             let valid = project.status != mir3_domain::ProjectStatus::Missing
                 && domain.as_ref().is_none_or(|report| report.valid)
                 && draft_validation.as_ref().is_none_or(|report| report.valid);
+            let revision = draft_preview.as_ref().map(|preview| preview.draft.revision);
+            let changed_files = draft_preview
+                .as_ref()
+                .map(|preview| {
+                    preview
+                        .changes
+                        .iter()
+                        .map(|change| change.path.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let changed_resources = system_id
+                .map(|system_id| changed_resource_ids(store, project_id, system_id, &changed_files))
+                .unwrap_or_default();
             Ok(json!({
                 "valid": valid,
+                "systemId": system_id,
+                "draftId": draft,
+                "revision": revision,
+                "validation": draft_validation.clone(),
+                "changedFiles": changed_files,
+                "changedResources": changed_resources,
                 "warnings": project.warnings,
                 "project": project,
                 "domain": domain,
@@ -657,6 +700,13 @@ fn tool_definitions() -> Vec<Value> {
             "为指定系统创建外置 Draft；不会修改正式项目。",
             with_scope(
                 json!({"type":"object","properties":{"systemId":{"type":"string"},"intent":{"type":"string","minLength":1}},"required":["systemId","intent"],"additionalProperties":false}),
+            ),
+        ),
+        tool(
+            "mir3_draft_diff",
+            "返回作用域内 Draft 的稳定预览、统一 Diff、内容哈希和当前 revision。",
+            with_scope(
+                json!({"type":"object","properties":{"draftId":{"type":"string","minLength":1}},"required":["draftId"],"additionalProperties":false}),
             ),
         ),
         tool(
@@ -866,6 +916,12 @@ fn validate_json_schema(schema: &Value, value: &Value, path: &str) -> Result<(),
                             !part.is_empty() && part.chars().all(|value| value.is_ascii_digit())
                         })
                 }
+                "^[A-Za-z0-9_\\-]+$" => {
+                    !string.is_empty()
+                        && string.chars().all(|value| {
+                            value.is_ascii_alphanumeric() || matches!(value, '_' | '-')
+                        })
+                }
                 _ => {
                     return Err(format!("CAPABILITY_SCHEMA_PATTERN_UNSUPPORTED: {path}"));
                 }
@@ -902,7 +958,7 @@ fn execute_manifest_operation(
 ) -> Result<Value, String> {
     validate_manifest_operation_steps(operation_id, steps)?;
     let revision_before = store.get_draft(project_id, draft_id)?.revision;
-    let result = execute_manifest_operation_unrecorded(
+    let mut result = execute_manifest_operation_unrecorded(
         store,
         project_id,
         draft_id,
@@ -927,7 +983,77 @@ fn execute_manifest_operation(
         evidence.sequence,
         &replay_change_hash,
     )?;
+    enrich_draft_handoff_result(store, project_id, draft_id, system_id, &mut result);
     Ok(result)
+}
+
+/// 工具结果显式携带可验证的 Draft 交接字段，避免 Studio 从自由文本或内部步骤猜测状态。
+fn enrich_draft_handoff_result(
+    store: &DomainStore,
+    project_id: &str,
+    draft_id: &str,
+    system_id: &str,
+    result: &mut Value,
+) {
+    let revision = store
+        .get_draft(project_id, draft_id)
+        .map(|draft| draft.revision)
+        .unwrap_or_default();
+    let preview = store.preview_draft(project_id, draft_id).ok();
+    let changed_files = preview
+        .as_ref()
+        .map(|preview| {
+            preview
+                .changes
+                .iter()
+                .map(|change| change.path.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let changed_resources = changed_resource_ids(store, project_id, system_id, &changed_files);
+    let validation = store.validate_domain_draft(project_id, draft_id).ok();
+    if !result.is_object() {
+        let original = result.take();
+        *result = json!({ "result": original });
+    }
+    let object = result
+        .as_object_mut()
+        .expect("new result envelope is an object");
+    object.insert("draftId".into(), Value::String(draft_id.to_string()));
+    object.insert("systemId".into(), Value::String(system_id.to_string()));
+    object.insert("revision".into(), Value::from(revision));
+    object.insert("changedFiles".into(), json!(changed_files));
+    object.insert("changedResources".into(), json!(changed_resources));
+    object.insert("validation".into(), json!(validation));
+}
+
+fn changed_resource_ids(
+    store: &DomainStore,
+    project_id: &str,
+    system_id: &str,
+    changed_files: &[String],
+) -> Vec<String> {
+    store
+        .query_domain_resources(
+            project_id,
+            system_id,
+            &DomainResourceQuery {
+                text: String::new(),
+                resource_type: None,
+                limit: Some(10_000),
+                offset: None,
+            },
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|resource| {
+            resource
+                .files
+                .iter()
+                .any(|file| changed_files.iter().any(|path| path == &file.path))
+        })
+        .map(|resource| resource.id)
+        .collect()
 }
 
 fn replay_manifest_operation_chain(
@@ -2577,6 +2703,18 @@ mod tests {
                 .and_then(Value::as_u64),
             Some(MCP_MAX_QUERY_ITEMS as u64)
         );
+        let draft_diff = definitions
+            .iter()
+            .find(|definition| definition["name"] == "mir3_draft_diff")
+            .unwrap();
+        assert_eq!(
+            draft_diff.pointer("/inputSchema/additionalProperties"),
+            Some(&json!(false))
+        );
+        assert_eq!(
+            draft_diff.pointer("/inputSchema/required"),
+            Some(&json!(["draftId", "scopeToken"]))
+        );
     }
 
     #[test]
@@ -2756,7 +2894,7 @@ mod tests {
     }
 
     #[test]
-    fn shaped_compiler_routes_every_previously_uncompiled_official_operation() {
+    fn shaped_compiler_routes_every_registered_shaped_operation() {
         let base = std::env::temp_dir().join(format!(
             "mir3-mcp-shaped-routes-{}-{}",
             std::process::id(),
@@ -2775,7 +2913,7 @@ mod tests {
                     .map(move |operation| format!("{}:{}", manifest.system_id, operation.id))
             })
             .collect::<Vec<_>>();
-        assert_eq!(operations.len(), 41, "{operations:#?}");
+        assert_eq!(operations.len(), 78, "{operations:#?}");
         assert!(operations
             .iter()
             .any(|value| value == "map:edit-map-region"));
@@ -2783,7 +2921,7 @@ mod tests {
     }
 
     #[test]
-    fn every_shaped_official_operation_compiles_into_a_scoped_draft() {
+    fn every_writable_official_operation_compiles_into_a_scoped_draft() {
         let base = std::env::temp_dir().join(format!(
             "mir3-mcp-shaped-e2e-{}-{}",
             std::process::id(),
@@ -2816,6 +2954,55 @@ mod tests {
                 fs::write(
                     directory.join(format!("{owned_selector}_source_{}.txt", index + 1)),
                     record_text(record),
+                )
+                .unwrap();
+            }
+            if manifest.capabilities.iter().any(|capability| {
+                !capability.write_systems.is_empty()
+                    && capability
+                        .steps
+                        .first()
+                        .is_some_and(|step| step.primitive == "xls")
+            }) {
+                let headers = records[0]
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let mut sheet = Biff8Sheet::new("records");
+                for (column, header) in headers.iter().enumerate() {
+                    sheet
+                        .set(
+                            0,
+                            column,
+                            Biff8Cell::general(Biff8Value::Text(header.clone())),
+                        )
+                        .unwrap();
+                }
+                for (row_index, record) in records.iter().take(2).enumerate() {
+                    for (column, header) in headers.iter().enumerate() {
+                        let mut value = record[header]
+                            .as_str()
+                            .map(str::to_string)
+                            .unwrap_or_else(|| record[header].to_string());
+                        if manifest.resources.unique_key.contains(header) {
+                            value = format!("xls-{value}");
+                        }
+                        sheet
+                            .set(
+                                row_index as u32 + 1,
+                                column,
+                                Biff8Cell::general(Biff8Value::Text(value)),
+                            )
+                            .unwrap();
+                    }
+                }
+                let mut book = Biff8Book::default();
+                book.sheets.push(sheet);
+                fs::write(
+                    directory.join(format!("{owned_selector}_records.xls")),
+                    book.to_cfb_bytes().unwrap(),
                 )
                 .unwrap();
             }
@@ -2854,18 +3041,59 @@ mod tests {
                     },
                 )
                 .unwrap();
-            let source_ids = files
+            let text_source_ids = files
                 .iter()
                 .filter(|file| file.path.ends_with(".txt") && file.access != "readonly")
                 .map(|file| file.resource_id.clone())
                 .collect::<Vec<_>>();
-            assert!(source_ids.len() >= 2, "{}: {files:#?}", manifest.system_id);
+            assert!(
+                text_source_ids.len() >= 2,
+                "{}: {files:#?}",
+                manifest.system_id
+            );
+            let xls_source_ids = store
+                .query_domain_resources(
+                    &project.id,
+                    &manifest.system_id,
+                    &DomainResourceQuery {
+                        text: format!("domains/{}/", manifest.system_id),
+                        resource_type: None,
+                        limit: Some(100),
+                        offset: None,
+                    },
+                )
+                .unwrap()
+                .into_iter()
+                .filter(|resource| {
+                    resource.source.path.ends_with(".xls")
+                        && resource.source.row.is_some()
+                        && resource.writable
+                })
+                .map(|resource| resource.id)
+                .collect::<Vec<_>>();
 
             for capability in manifest
                 .capabilities
                 .iter()
-                .filter(|capability| is_shaped_operation(&capability.id))
+                .filter(|capability| !capability.write_systems.is_empty())
             {
+                let text_only_structural = is_shaped_operation(&capability.id);
+                let source_ids = if !text_only_structural
+                    && capability
+                        .steps
+                        .first()
+                        .is_some_and(|step| step.primitive == "xls")
+                {
+                    assert!(
+                        xls_source_ids.len() >= 2,
+                        "{}:{} has no XLS records",
+                        manifest.system_id,
+                        capability.id
+                    );
+                    &xls_source_ids
+                } else {
+                    &text_source_ids
+                };
                 let params = shaped_test_params(
                     &capability.id,
                     &capability.parameter_schema,
@@ -2917,10 +3145,21 @@ mod tests {
                 assert!(result["revision"]
                     .as_i64()
                     .is_some_and(|revision| revision > 0));
+                assert_eq!(result["draftId"], draft.id, "{}", capability.id);
+                assert_eq!(result["systemId"], manifest.system_id, "{}", capability.id);
+                assert!(
+                    result["changedFiles"]
+                        .as_array()
+                        .is_some_and(|files| !files.is_empty()),
+                    "{}",
+                    capability.id
+                );
+                assert!(result["changedResources"].is_array(), "{}", capability.id);
+                assert!(result.get("validation").is_some(), "{}", capability.id);
                 compiled.push(capability.id.clone());
             }
         }
-        assert_eq!(compiled.len(), 41, "{compiled:#?}");
+        assert_eq!(compiled.len(), 155, "{compiled:#?}");
         fs::remove_dir_all(base).ok();
     }
 
@@ -2942,7 +3181,7 @@ mod tests {
                 &["quest".to_string()],
                 &["quest".to_string()],
                 &[],
-                json!({"quest":"1.0.0"}),
+                json!({"quest":"1.1.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -2965,6 +3204,115 @@ mod tests {
             }),
         );
         assert_eq!(inspect.get("isError"), Some(&Value::Bool(false)));
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn draft_diff_is_revisioned_and_rejects_foreign_scope_or_project() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-mcp-draft-diff-{}-{}",
+            std::process::id(),
+            mir3_domain::now_millis()
+        ));
+        let root = base.join("项目/DraftDiff");
+        let quest_path = "引擎/Mir200/Envir/QuestDiary/quest.txt";
+        fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Envir/QuestDiary")).unwrap();
+        fs::write(root.join(quest_path), "quest=0\n").unwrap();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let draft = store.open_draft(&project.id, "检查 Draft Diff").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.1.0", None)
+            .unwrap();
+        let preview = store
+            .patch_draft(
+                &project.id,
+                &draft.id,
+                0,
+                &[DraftChangeInput {
+                    path: quest_path.to_string(),
+                    content: Some("quest=1\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+        let lease = store
+            .issue_task_scope(
+                &project.id,
+                "task-draft-diff",
+                &["quest".to_string()],
+                &["quest".to_string()],
+                std::slice::from_ref(&draft.id),
+                json!({"quest":"1.1.0"}),
+                mir3_domain::now_millis() + 60_000,
+            )
+            .unwrap();
+        let result = call_tool(
+            &store,
+            &project.id,
+            "mir3_draft_diff",
+            json!({"scopeToken":lease.token.clone(),"draftId":draft.id}),
+        );
+        assert_eq!(result["isError"], false);
+        assert_eq!(
+            result.pointer("/structuredContent/revision"),
+            Some(&json!(preview.draft.revision))
+        );
+        assert_eq!(
+            result.pointer("/structuredContent/diffHash"),
+            Some(&json!(preview.diff_hash))
+        );
+        assert!(result
+            .pointer("/structuredContent/preview/changes/0/unifiedDiff")
+            .and_then(Value::as_str)
+            .is_some_and(|diff| diff.contains("quest=1")));
+
+        let unrelated = store.open_draft(&project.id, "另一个 Draft").unwrap();
+        store
+            .bind_draft_domain(&project.id, &unrelated.id, "quest", "1.1.0", None)
+            .unwrap();
+        let denied = call_tool(
+            &store,
+            &project.id,
+            "mir3_draft_diff",
+            json!({"scopeToken":lease.token.clone(),"draftId":unrelated.id}),
+        );
+        assert_eq!(denied["isError"], true);
+        assert!(denied["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("TASK_SCOPE_DRAFT_DENIED:"));
+
+        let other_root = base.join("项目/OtherProject");
+        fs::create_dir_all(other_root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(other_root.join("引擎/Mir200/Envir")).unwrap();
+        let other_project = store.import_project(&other_root).unwrap();
+        let foreign_project = call_tool(
+            &store,
+            &other_project.id,
+            "mir3_draft_diff",
+            json!({"scopeToken":lease.token,"draftId":draft.id}),
+        );
+        assert_eq!(foreign_project["isError"], true);
+        assert!(foreign_project["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("TASK_SCOPE_NOT_FOUND:"));
+
+        let unclosed = call_tool(
+            &store,
+            &project.id,
+            "mir3_draft_diff",
+            json!({"scopeToken":"x".repeat(32),"draftId":"draft","unexpected":true}),
+        );
+        assert_eq!(unclosed["isError"], true);
+        assert!(unclosed["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("CAPABILITY_PARAMETER_UNKNOWN:"));
         fs::remove_dir_all(base).ok();
     }
 
@@ -2996,7 +3344,7 @@ mod tests {
             .open_draft(&project.id, "MCP overlay validation")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.0.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.1.0", None)
             .unwrap();
         store
             .patch_draft(
@@ -3021,7 +3369,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                json!({"level":"1.0.0"}),
+                json!({"level":"1.1.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3078,7 +3426,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "安全能力调用").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.0.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.1.0", None)
             .unwrap();
         let lease = store
             .issue_task_scope(
@@ -3087,7 +3435,7 @@ mod tests {
                 &["map".to_string()],
                 &["map".to_string()],
                 &[],
-                json!({"map":"1.0.1"}),
+                json!({"map":"1.1.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3199,7 +3547,7 @@ mod tests {
 
         let shop_draft = store.open_draft(&project.id, "越权商城能力").unwrap();
         store
-            .bind_draft_domain(&project.id, &shop_draft.id, "shop", "1.0.0", None)
+            .bind_draft_domain(&project.id, &shop_draft.id, "shop", "1.1.0", None)
             .unwrap();
         let scope_escalation = call_tool(
             &store,
@@ -3220,7 +3568,7 @@ mod tests {
             &project.id,
             &lease.token,
             &draft.id,
-            Some("1.0.1"),
+            Some("1.1.0"),
             valid_params,
         );
         assert_eq!(applied.get("isError"), Some(&Value::Bool(false)));
@@ -3249,7 +3597,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let source = store.open_draft(&project.id, "source task").unwrap();
         store
-            .bind_draft_domain(&project.id, &source.id, "shop", "1.0.0", None)
+            .bind_draft_domain(&project.id, &source.id, "shop", "1.1.0", None)
             .unwrap();
         store
             .patch_draft(
@@ -3361,7 +3709,7 @@ mod tests {
 
         let target = store.open_draft(&project.id, "new session").unwrap();
         store
-            .bind_draft_domain(&project.id, &target.id, "shop", "1.0.0", None)
+            .bind_draft_domain(&project.id, &target.id, "shop", "1.1.0", None)
             .unwrap();
         let target_lease = store
             .issue_task_scope(
@@ -3370,7 +3718,7 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 std::slice::from_ref(&target.id),
-                json!({"shop":"1.0.0"}),
+                json!({"shop":"1.1.0"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -3517,6 +3865,7 @@ mod tests {
             }
             "add" => {
                 params["record"] = records[1].clone();
+                params["insertAfterResourceId"] = json!(source_ids[0]);
             }
             "insert" => {
                 params["parentResourceId"] = json!(source_ids[0]);
@@ -3562,6 +3911,18 @@ mod tests {
                 } else {
                     json!(60)
                 };
+            }
+            "replace" => {
+                let field = first_schema_enum(schema, "/properties/referenceField/enum");
+                params["resourceIds"] = json!([source_ids[0]]);
+                params["referenceField"] = json!(field);
+                params["fromReference"] = records[0][&field].clone();
+                params["toReference"] = records[1][&field].clone();
+            }
+            "batch" | "edit" => {
+                params["resourceIds"] = json!([source_ids[0]]);
+                params["changes"] =
+                    first_patch(schema, "/properties/changes/properties", &records[1]);
             }
             family => panic!("unsupported test family {family}"),
         }

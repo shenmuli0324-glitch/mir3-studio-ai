@@ -72,6 +72,7 @@ impl DomainStore {
     where
         F: Fn() -> bool,
     {
+        self.ensure_writable()?;
         let project = self.get_project(project_id)?;
         let root = PathBuf::from(&project.root);
         let mut connection = self.project_connection(project_id)?;

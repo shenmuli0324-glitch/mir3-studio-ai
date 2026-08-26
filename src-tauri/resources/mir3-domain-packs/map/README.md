@@ -1,6 +1,6 @@
 # map
 
-MIR3 Studio map domain pack for MIR3 System Kernel v1. Pack version: `1.0.1`; compiler compatibility: MIR3 System Kernel `^1.0.0`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio map domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -19,6 +19,9 @@ Unique key: `mapId`. Runtime rule: `map.bounds-contain-spawns`.
 - `clone-map` via `map`
 - `edit-map-config` via `text`
 - `edit-map-region` via `map`
+- `add-map` via `map`
+- `batch-update-map` via `map`
+- `replace-map-reference` via `text`
 
 ## Contract fixtures
 

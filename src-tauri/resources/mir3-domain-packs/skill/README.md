@@ -1,6 +1,6 @@
 # skill
 
-MIR3 Studio skill domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio skill domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,7 @@ Unique key: `skillId + skillLevel`. Runtime rule: `skill.level-curve-contiguous`
 - `clone-skill` via `graph`
 - `generate-skill-curve` via `graph`
 - `bind-skill-effect` via `graph`
+- `batch-update-skill` via `graph`
 
 ## Contract fixtures
 

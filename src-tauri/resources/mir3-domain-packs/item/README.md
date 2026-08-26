@@ -1,6 +1,6 @@
 # item
 
-MIR3 Studio item domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio item domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -19,6 +19,7 @@ Unique key: `itemId`. Runtime rule: `item.icon-resource-exists`.
 - `clone-item` via `xls`
 - `batch-edit-item` via `xls`
 - `replace-item-reference` via `text`
+- `add-item` via `xls`
 
 ## Contract fixtures
 

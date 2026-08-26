@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "season",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -438,6 +438,287 @@
         "validationRequired": true,
         "confirmationRequired": false
       }
+    },
+    {
+      "id": "add-season",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-season"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "seasonId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              },
+              "seasonShopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            },
+            "required": [
+              "seasonId",
+              "startEpochSeconds",
+              "endEpochSeconds",
+              "rankingBoardId",
+              "seasonShopId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "season",
+        "ranking",
+        "quest",
+        "limited_event",
+        "shop",
+        "cross_server"
+      ],
+      "writeSystems": [
+        "season"
+      ],
+      "preconditions": [
+        "season.resource-index-ready",
+        "season.schema-loaded",
+        "season.draft-open",
+        "season.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-season"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-season",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-season"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              },
+              "seasonShopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "season",
+        "ranking",
+        "quest",
+        "limited_event",
+        "shop",
+        "cross_server"
+      ],
+      "writeSystems": [
+        "season"
+      ],
+      "preconditions": [
+        "season.resource-index-ready",
+        "season.schema-loaded",
+        "season.draft-open",
+        "season.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-season"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-season-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-season-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rankingBoardId",
+              "seasonShopId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "season",
+        "ranking",
+        "quest",
+        "limited_event",
+        "shop",
+        "cross_server"
+      ],
+      "writeSystems": [
+        "season"
+      ],
+      "preconditions": [
+        "season.resource-index-ready",
+        "season.schema-loaded",
+        "season.draft-open",
+        "season.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-season-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -502,7 +783,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -599,7 +880,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -680,7 +961,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -751,7 +1032,300 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-season",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-season"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "seasonId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              },
+              "seasonShopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            },
+            "required": [
+              "seasonId",
+              "startEpochSeconds",
+              "endEpochSeconds",
+              "rankingBoardId",
+              "seasonShopId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "season",
+        "ranking",
+        "quest",
+        "limited_event",
+        "shop",
+        "cross_server"
+      ],
+      "writeSystems": [
+        "season"
+      ],
+      "preconditions": [
+        "season.resource-index-ready",
+        "season.schema-loaded",
+        "season.draft-open",
+        "season.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-season"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-season",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-season"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "rankingBoardId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "ranking"
+              },
+              "seasonShopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "season",
+        "ranking",
+        "quest",
+        "limited_event",
+        "shop",
+        "cross_server"
+      ],
+      "writeSystems": [
+        "season"
+      ],
+      "preconditions": [
+        "season.resource-index-ready",
+        "season.schema-loaded",
+        "season.draft-open",
+        "season.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-season"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-season-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-season-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "rankingBoardId",
+              "seasonShopId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "season",
+        "ranking",
+        "quest",
+        "limited_event",
+        "shop",
+        "cross_server"
+      ],
+      "writeSystems": [
+        "season"
+      ],
+      "preconditions": [
+        "season.resource-index-ready",
+        "season.schema-loaded",
+        "season.draft-open",
+        "season.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-season-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

@@ -26,12 +26,27 @@ export interface VerifiedDevtoolsTarget extends DevtoolsReturnTarget {
   revision?: number | null
 }
 
+export interface DevtoolsTargetVerification {
+  isKnownSystem: (systemId: string) => boolean
+  getResource: (projectId: string, systemId: string, resourceId: string) => Promise<{
+    id: string
+    systemId: string
+    files: Array<{ path: string }>
+  }>
+  previewDraft: (projectId: string, draftId: string) => Promise<{
+    preview: { draft: { revision: number } }
+  }>
+  validateDraft: (projectId: string, draftId: string) => Promise<{ systemId: string }>
+  nonce: () => string
+}
+
 export interface AiTaskIdentity {
   projectId: string
   systemId: string
   taskId: string
   sessionId: string
   allowedSystems: string[]
+  allowedWriteSystems?: string[]
 }
 
 interface RegisteredGlobalTask extends AiTaskIdentity {
@@ -74,8 +89,9 @@ export function draftHandoffs(message: Mir3BridgeEnvelope, identity: AiTaskIdent
     return []
   const payload = asRecord(message.payload)
   const values = Array.isArray(payload?.domainResults) ? payload.domainResults : []
+  const writableSystems = identity.allowedWriteSystems ?? identity.allowedSystems
   return values.flatMap((value) => {
-    const handoff = parseDraftHandoff(value, identity.allowedSystems)
+    const handoff = parseDraftHandoff(value, writableSystems)
     return handoff ? [handoff] : []
   })
 }
@@ -85,6 +101,45 @@ export function returnTarget(message: Mir3BridgeEnvelope, identity: AiTaskIdenti
     return null
   const payload = asRecord(message.payload)
   return parseReturnTarget(payload?.returnTo, identity.projectId, identity.allowedSystems)
+}
+
+export function isGlobalDraftEvent(type: string): boolean {
+  return type === 'mir3/globalSession.snapshot' || type === 'mir3/globalSession.completed'
+}
+
+export async function verifyDevtoolsTarget(
+  target: DevtoolsReturnTarget,
+  handoffs: DomainDraftHandoff[],
+  verification: DevtoolsTargetVerification,
+): Promise<VerifiedDevtoolsTarget | null> {
+  if (!verification.isKnownSystem(target.systemId))
+    return null
+  let relativePath: string | null = null
+  if (target.resourceId) {
+    const resource = await verification.getResource(target.projectId, target.systemId, target.resourceId)
+    if (resource.systemId !== target.systemId || resource.id !== target.resourceId || !resource.files[0])
+      return null
+    relativePath = resource.files[0].path
+  }
+  const reportedDraft = handoffs.find(handoff => handoff.systemId === target.systemId && (!target.draftId || handoff.draftId === target.draftId))
+  const draftId = target.draftId ?? reportedDraft?.draftId ?? null
+  let revision: number | null = reportedDraft?.revision ?? null
+  if (draftId) {
+    const [preview, validation] = await Promise.all([
+      verification.previewDraft(target.projectId, draftId),
+      verification.validateDraft(target.projectId, draftId),
+    ])
+    if (validation.systemId !== target.systemId || (revision != null && preview.preview.draft.revision < revision))
+      return null
+    revision = preview.preview.draft.revision
+  }
+  return {
+    ...target,
+    draftId,
+    relativePath,
+    revision,
+    nonce: verification.nonce(),
+  }
 }
 
 function parseDraftHandoff(value: unknown, allowedSystems: string[]): DomainDraftHandoff | null {

@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "limited_event",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -377,6 +377,287 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-limited_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-limited_event"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "eventMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "questId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "quest"
+              }
+            },
+            "required": [
+              "eventId",
+              "startEpochSeconds",
+              "endEpochSeconds",
+              "eventMapId",
+              "questId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "limited_event",
+        "quest",
+        "shop",
+        "item",
+        "npc",
+        "map"
+      ],
+      "writeSystems": [
+        "limited_event"
+      ],
+      "preconditions": [
+        "limited_event.resource-index-ready",
+        "limited_event.schema-loaded",
+        "limited_event.draft-open",
+        "limited_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-limited_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-limited_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-limited_event"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "eventMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "questId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "quest"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "limited_event",
+        "quest",
+        "shop",
+        "item",
+        "npc",
+        "map"
+      ],
+      "writeSystems": [
+        "limited_event"
+      ],
+      "preconditions": [
+        "limited_event.resource-index-ready",
+        "limited_event.schema-loaded",
+        "limited_event.draft-open",
+        "limited_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-limited_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-limited_event-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-limited_event-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "eventMapId",
+              "questId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "limited_event",
+        "quest",
+        "shop",
+        "item",
+        "npc",
+        "map"
+      ],
+      "writeSystems": [
+        "limited_event"
+      ],
+      "preconditions": [
+        "limited_event.resource-index-ready",
+        "limited_event.schema-loaded",
+        "limited_event.draft-open",
+        "limited_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-limited_event-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -441,7 +722,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -538,7 +819,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -619,7 +900,300 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-limited_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-limited_event"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "eventMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "questId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "quest"
+              }
+            },
+            "required": [
+              "eventId",
+              "startEpochSeconds",
+              "endEpochSeconds",
+              "eventMapId",
+              "questId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "limited_event",
+        "quest",
+        "shop",
+        "item",
+        "npc",
+        "map"
+      ],
+      "writeSystems": [
+        "limited_event"
+      ],
+      "preconditions": [
+        "limited_event.resource-index-ready",
+        "limited_event.schema-loaded",
+        "limited_event.draft-open",
+        "limited_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-limited_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-limited_event",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-limited_event"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "startEpochSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              "endEpochSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4102444800
+              },
+              "eventMapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "questId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "quest"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "limited_event",
+        "quest",
+        "shop",
+        "item",
+        "npc",
+        "map"
+      ],
+      "writeSystems": [
+        "limited_event"
+      ],
+      "preconditions": [
+        "limited_event.resource-index-ready",
+        "limited_event.schema-loaded",
+        "limited_event.draft-open",
+        "limited_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-limited_event"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-limited_event-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-limited_event-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "eventMapId",
+              "questId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "limited_event",
+        "quest",
+        "shop",
+        "item",
+        "npc",
+        "map"
+      ],
+      "writeSystems": [
+        "limited_event"
+      ],
+      "preconditions": [
+        "limited_event.resource-index-ready",
+        "limited_event.schema-loaded",
+        "limited_event.draft-open",
+        "limited_event.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-limited_event-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

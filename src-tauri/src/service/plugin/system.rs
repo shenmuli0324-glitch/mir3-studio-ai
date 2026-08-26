@@ -109,7 +109,10 @@ pub fn ensure_bundled_domain_packs(app: &AppHandle) -> Result<(), String> {
     ensure_domain_pack_root(&source_root, &destination_root)
 }
 
-fn ensure_domain_pack_root(source_root: &Path, destination_root: &Path) -> Result<(), String> {
+pub(crate) fn ensure_domain_pack_root(
+    source_root: &Path,
+    destination_root: &Path,
+) -> Result<(), String> {
     let registry: Value = serde_json::from_str(
         &fs::read_to_string(source_root.join("registry.json"))
             .map_err(|error| format!("DOMAIN_REGISTRY_READ_FAILED: {error}"))?,
@@ -241,6 +244,40 @@ pub fn activate_domain_pack_candidate(
     state.candidate = None;
     persist_domain_pack_state(&system_root, &state)?;
     Ok(state)
+}
+
+/// 候选只有在运行时 canary 成功后才推进 LKG；canary 或 LKG 提交失败时，
+/// 必须立即恢复 previous/LKG，避免 current 指向尚未验收的领域契约。
+pub fn activate_domain_pack_with_canary<F>(
+    destination_root: &Path,
+    system_id: &str,
+    canary: F,
+) -> Result<DomainPackState, String>
+where
+    F: FnOnce(&DomainPackState) -> Result<(), String>,
+{
+    let activated = activate_domain_pack_candidate(destination_root, system_id)?;
+    if let Err(error) = canary(&activated) {
+        let rollback = rollback_domain_pack(destination_root, system_id);
+        return Err(format!(
+            "DOMAIN_PACK_RUNTIME_CANARY_FAILED: {error}; rollback={}",
+            rollback
+                .map(|_| "ok".to_string())
+                .unwrap_or_else(|rollback_error| rollback_error)
+        ));
+    }
+    match mark_domain_pack_lkg(destination_root, system_id) {
+        Ok(stable) => Ok(stable),
+        Err(error) => {
+            let rollback = rollback_domain_pack(destination_root, system_id);
+            Err(format!(
+                "DOMAIN_PACK_LKG_COMMIT_FAILED: {error}; rollback={}",
+                rollback
+                    .map(|_| "ok".to_string())
+                    .unwrap_or_else(|rollback_error| rollback_error)
+            ))
+        }
+    }
 }
 
 /// 将当前版本标记为已通过 canary 的最后已知可用版本。
@@ -453,8 +490,8 @@ fn validate_domain_pack(source: &Path) -> Result<DomainPackDescriptor, String> {
             descriptor.version
         ));
     }
-    mir3_domain::validate_domain_pack_manifest(
-        &source.join("domain.json"),
+    mir3_domain::execute_domain_pack_fixture_canary(
+        source,
         &descriptor.system_id,
         &descriptor.version,
     )?;
@@ -938,11 +975,12 @@ mod tests {
             .join("resources")
             .join("mir3-domain-packs")
             .join("level");
+        let (original_version, next_version) = test_pack_versions(&source);
         let first = stage_domain_pack_candidate(&root, &source).unwrap();
         assert!(first.current.is_none());
-        assert_eq!(first.candidate.as_ref().unwrap().version, "1.0.0");
+        assert_eq!(first.candidate.as_ref().unwrap().version, original_version);
         let active = activate_domain_pack_candidate(&root, "level").unwrap();
-        assert_eq!(active.current.as_ref().unwrap().version, "1.0.0");
+        assert_eq!(active.current.as_ref().unwrap().version, original_version);
         assert!(active.candidate.is_none());
         let stable = mark_domain_pack_lkg(&root, "level").unwrap();
         assert_eq!(stable.lkg, stable.current);
@@ -954,19 +992,62 @@ mod tests {
 
         let next_source = root.join("next-source");
         copy_directory(&source, &next_source).unwrap();
-        set_test_pack_version(&next_source, "1.0.1");
+        set_test_pack_version(&next_source, &next_version);
         let staged = stage_domain_pack_candidate(&root, &next_source).unwrap();
-        assert_eq!(staged.current.as_ref().unwrap().version, "1.0.0");
-        assert_eq!(staged.candidate.as_ref().unwrap().version, "1.0.1");
+        assert_eq!(staged.current.as_ref().unwrap().version, original_version);
+        assert_eq!(staged.candidate.as_ref().unwrap().version, next_version);
         let upgraded = activate_domain_pack_candidate(&root, "level").unwrap();
-        assert_eq!(upgraded.current.as_ref().unwrap().version, "1.0.1");
-        assert_eq!(upgraded.previous.as_ref().unwrap().version, "1.0.0");
-        assert_eq!(upgraded.lkg.as_ref().unwrap().version, "1.0.0");
+        assert_eq!(upgraded.current.as_ref().unwrap().version, next_version);
+        assert_eq!(
+            upgraded.previous.as_ref().unwrap().version,
+            original_version
+        );
+        assert_eq!(upgraded.lkg.as_ref().unwrap().version, original_version);
 
         let restored = rollback_domain_pack(&root, "level").unwrap();
-        assert_eq!(restored.current.as_ref().unwrap().version, "1.0.0");
-        assert_eq!(restored.previous.as_ref().unwrap().version, "1.0.1");
+        assert_eq!(restored.current.as_ref().unwrap().version, original_version);
+        assert_eq!(restored.previous.as_ref().unwrap().version, next_version);
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn domain_pack_canary_failure_rolls_back_and_success_advances_lkg() {
+        let base = test_directory("domain-pack-canary");
+        let installed = base.join("installed");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let (original_version, next_version) = test_pack_versions(&source);
+        let initial = stage_domain_pack_candidate(&installed, &source).unwrap();
+        assert!(initial.current.is_none());
+        activate_domain_pack_candidate(&installed, "level").unwrap();
+        mark_domain_pack_lkg(&installed, "level").unwrap();
+
+        let candidate = base.join("candidate");
+        copy_directory(&source, &candidate).unwrap();
+        set_test_pack_version(&candidate, &next_version);
+        stage_domain_pack_candidate(&installed, &candidate).unwrap();
+        let error = activate_domain_pack_with_canary(&installed, "level", |_| {
+            Err("fixture canary rejected".to_string())
+        })
+        .unwrap_err();
+        assert!(error.starts_with("DOMAIN_PACK_RUNTIME_CANARY_FAILED:"));
+        assert!(error.ends_with("rollback=ok"));
+        let restored = read_domain_pack_state(&installed.join("level"), "level").unwrap();
+        assert_eq!(restored.current.as_ref().unwrap().version, original_version);
+        assert_eq!(restored.lkg.as_ref().unwrap().version, original_version);
+
+        stage_domain_pack_candidate(&installed, &candidate).unwrap();
+        let stable = activate_domain_pack_with_canary(&installed, "level", |state| {
+            assert_eq!(state.current.as_ref().unwrap().version, next_version);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(stable.current.as_ref().unwrap().version, next_version);
+        assert_eq!(stable.lkg, stable.current);
+        assert_eq!(stable.previous.as_ref().unwrap().version, original_version);
+        fs::remove_dir_all(base).ok();
     }
 
     #[test]
@@ -992,6 +1073,56 @@ mod tests {
         assert!(state.current.is_none());
         assert!(state.candidate.is_some());
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn semantically_tampered_candidate_fixture_never_changes_current() {
+        let base = test_directory("domain-pack-fixture-tamper");
+        let installed = base.join("installed");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("mir3-domain-packs")
+            .join("level");
+        let original_version = Version::parse(
+            serde_json::from_str::<Value>(&fs::read_to_string(source.join("domain.json")).unwrap())
+                .unwrap()["version"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let next_version = Version::new(
+            original_version.major,
+            original_version.minor,
+            original_version.patch + 1,
+        )
+        .to_string();
+        stage_domain_pack_candidate(&installed, &source).unwrap();
+        activate_domain_pack_candidate(&installed, "level").unwrap();
+        mark_domain_pack_lkg(&installed, "level").unwrap();
+
+        let candidate = base.join("candidate");
+        copy_directory(&source, &candidate).unwrap();
+        set_test_pack_version(&candidate, &next_version);
+        let valid_path = candidate.join("fixtures/valid.json");
+        let mut valid: Value =
+            serde_json::from_str(&fs::read_to_string(&valid_path).unwrap()).unwrap();
+        valid["records"][0]["level"] = Value::from(999);
+        fs::write(
+            &valid_path,
+            format!("{}\n", serde_json::to_string_pretty(&valid).unwrap()),
+        )
+        .unwrap();
+
+        let error = stage_domain_pack_candidate(&installed, &candidate).unwrap_err();
+        assert!(error.starts_with("DOMAIN_PACK_FIXTURE_VALID_REJECTED:"));
+        let state = read_domain_pack_state(&installed.join("level"), "level").unwrap();
+        assert_eq!(
+            state.current.as_ref().unwrap().version,
+            original_version.to_string()
+        );
+        assert_eq!(state.lkg, state.current);
+        assert!(state.candidate.is_none());
+        fs::remove_dir_all(base).ok();
     }
 
     #[test]
@@ -1112,29 +1243,53 @@ mod tests {
             .join("mir3-domain-packs");
         ensure_domain_pack_root(&source, &installed).unwrap();
 
-        let monster = read_domain_pack_state(&installed.join("monster"), "monster").unwrap();
-        let release = monster.current.unwrap();
-        fs::write(
-            installed
-                .join("monster/releases")
-                .join(release.directory)
-                .join("README.md"),
-            "corrupted",
-        )
-        .unwrap();
-        let store = mir3_domain::DomainStore::new_with_domain_pack_root(
-            base.join("data-corrupt"),
-            &installed,
-        )
-        .unwrap();
-        let active = store.list_domain_systems().unwrap();
-        assert_eq!(active.len(), 32);
-        assert!(!active.iter().any(|pack| pack.system_id == "monster"));
-        assert!(active.iter().any(|pack| pack.system_id == "shop"));
-        let dependency = store.resolve_domain_dependencies("level").unwrap();
-        assert!(dependency.missing.contains(&"monster".to_string()));
-        assert!(!dependency.cycles.is_empty());
-        assert!(store.resolve_domain_dependencies("shop").is_ok());
+        let registry: Value =
+            serde_json::from_str(&fs::read_to_string(source.join("registry.json")).unwrap())
+                .unwrap();
+        let system_ids = registry["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pack| pack["systemId"].as_str().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(system_ids.len(), 33);
+        for system_id in &system_ids {
+            let state = read_domain_pack_state(&installed.join(system_id), system_id).unwrap();
+            let release = state.current.unwrap();
+            let readme = installed
+                .join(system_id)
+                .join("releases")
+                .join(&release.directory)
+                .join("README.md");
+            let original = fs::read(&readme).unwrap();
+            fs::write(&readme, "corrupted").unwrap();
+
+            let store = mir3_domain::DomainStore::new_with_domain_pack_root(
+                base.join(format!("data-corrupt-{system_id}")),
+                &installed,
+            )
+            .unwrap();
+            let active = store
+                .list_domain_systems()
+                .unwrap()
+                .into_iter()
+                .map(|pack| pack.system_id)
+                .collect::<BTreeSet<_>>();
+            let expected = system_ids
+                .iter()
+                .filter(|candidate| *candidate != system_id)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            assert_eq!(active, expected, "{system_id} corruption was not isolated");
+            if system_id == "monster" {
+                let dependency = store.resolve_domain_dependencies("level").unwrap();
+                assert!(dependency.missing.contains(&"monster".to_string()));
+                assert!(!dependency.cycles.is_empty());
+                assert!(store.resolve_domain_dependencies("shop").is_ok());
+            }
+            fs::write(&readme, original).unwrap();
+            validate_installed_release(&installed.join(system_id), system_id, &release).unwrap();
+        }
 
         let clean_installed = base.join("installed-disabled");
         ensure_domain_pack_root(&source, &clean_installed).unwrap();
@@ -1159,6 +1314,14 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("mir3-{label}-{}-{suffix}", std::process::id()))
+    }
+
+    fn test_pack_versions(root: &Path) -> (String, String) {
+        let manifest: Value =
+            serde_json::from_str(&fs::read_to_string(root.join("domain.json")).unwrap()).unwrap();
+        let original = Version::parse(manifest["version"].as_str().unwrap()).unwrap();
+        let next = Version::new(original.major, original.minor, original.patch + 1).to_string();
+        (original.to_string(), next)
     }
 
     fn set_test_pack_version(root: &Path, version: &str) {

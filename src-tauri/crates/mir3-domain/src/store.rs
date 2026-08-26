@@ -20,6 +20,8 @@ pub struct DomainStore {
     domain_pack_root: PathBuf,
     read_only_reason: Option<Arc<str>>,
     pub(crate) xls_cache: Arc<Mutex<HashMap<String, Arc<CachedXlsWorkbook>>>>,
+    #[cfg(test)]
+    pub(crate) composite_apply_test_barrier: Arc<Mutex<Option<Arc<std::sync::Barrier>>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -47,6 +49,8 @@ impl DomainStore {
             domain_pack_root: domain_pack_root.into(),
             read_only_reason: None,
             xls_cache: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(test)]
+            composite_apply_test_barrier: Arc::new(Mutex::new(None)),
         };
         fs::create_dir_all(&store.data_root)
             .map_err(|e| format!("PROJECT_DATA_CREATE_FAILED: {e}"))?;
@@ -354,7 +358,7 @@ impl DomainStore {
         Ok(())
     }
 
-    fn registry(&self) -> Result<Connection, String> {
+    pub(crate) fn registry(&self) -> Result<Connection, String> {
         let path = self.data_root.join("registry.sqlite");
         let connection = if self.read_only_reason.is_some() {
             Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?
@@ -394,6 +398,52 @@ CREATE TABLE IF NOT EXISTS projects(
   last_scan_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS shared_user_capabilities(
+  scope TEXT NOT NULL,
+  id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  source_project_id TEXT NOT NULL,
+  system_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  parameter_schema TEXT NOT NULL,
+  steps TEXT NOT NULL,
+  read_systems TEXT NOT NULL,
+  write_systems TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source_task_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(scope,id,version)
+);
+CREATE INDEX IF NOT EXISTS idx_shared_user_capabilities_lookup
+  ON shared_user_capabilities(system_id,scope,status,id,version);
+CREATE TABLE IF NOT EXISTS shared_domain_memories(
+  scope TEXT NOT NULL,
+  id TEXT NOT NULL,
+  source_project_id TEXT NOT NULL,
+  system_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source_task_id TEXT NOT NULL,
+  plugin_version TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(scope,id)
+);
+CREATE INDEX IF NOT EXISTS idx_shared_domain_memories_lookup
+  ON shared_domain_memories(system_id,scope,status,updated_at);
+CREATE TABLE IF NOT EXISTS domain_governance_migrations(
+  id TEXT PRIMARY KEY,
+  system_id TEXT NOT NULL,
+  from_version TEXT NOT NULL,
+  to_version TEXT NOT NULL,
+  status TEXT NOT NULL,
+  report TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 "#;
 
@@ -532,6 +582,15 @@ CREATE TABLE IF NOT EXISTS draft_domains(
   plugin_version TEXT,
   legacy INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS domain_governance_migrations(
+  id TEXT PRIMARY KEY,
+  system_id TEXT NOT NULL,
+  from_version TEXT NOT NULL,
+  to_version TEXT NOT NULL,
+  status TEXT NOT NULL,
+  report TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 "#;
 
@@ -773,6 +832,64 @@ mod tests {
     }
 
     #[test]
+    fn failed_schema_migration_restores_backup_without_partial_ddl() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-migration-rollback-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("fixture.sqlite");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                 INSERT INTO metadata(key,value) VALUES('schema_version','1');
+                 CREATE TABLE sentinel(value TEXT NOT NULL);
+                 INSERT INTO sentinel(value) VALUES('preserved');",
+            )
+            .unwrap();
+        drop(connection);
+
+        let error = migrate_database(
+            &path,
+            "CREATE TABLE partial_write(value TEXT); THIS IS NOT VALID SQL;",
+            "TEST_DATABASE",
+        )
+        .unwrap_err();
+        assert!(error.starts_with("TEST_DATABASE_MIGRATION_FAILED:"));
+        let backup = path.with_extension("sqlite.v1.bak");
+        assert!(backup.is_file());
+        let restored = Connection::open(&path).unwrap();
+        assert_eq!(
+            restored
+                .query_row("SELECT value FROM sentinel", [], |row| row
+                    .get::<_, String>(0))
+                .unwrap(),
+            "preserved"
+        );
+        assert_eq!(
+            restored
+                .query_row(
+                    "SELECT value FROM metadata WHERE key='schema_version'",
+                    [],
+                    |row| row.get::<_, String>(0)
+                )
+                .unwrap(),
+            "1"
+        );
+        let partial_count: i64 = restored
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='partial_write'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(partial_count, 0);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn newer_registry_schema_starts_readonly_without_hiding_projects() {
         let base = std::env::temp_dir().join(format!(
             "mir3-readonly-schema-{}-{}",
@@ -823,6 +940,48 @@ mod tests {
             .any(|value| value.starts_with("DOMAIN_KERNEL_READONLY:")));
         let denied = reopened.import_project(&project).unwrap_err();
         assert!(denied.starts_with("DOMAIN_KERNEL_READONLY:"));
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn newer_project_schema_keeps_registry_and_project_reads_available() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-readonly-project-schema-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("项目/只读");
+        let data = base.join("data");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200/Envir/Shop")).unwrap();
+        fs::write(
+            project.join("引擎/Mir200/Envir/Shop/shop.txt"),
+            "shopId=1\n",
+        )
+        .unwrap();
+        let store = DomainStore::new(&data).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        store.scan_project(&imported.id, || false).unwrap();
+        store
+            .project_connection(&imported.id)
+            .unwrap()
+            .execute(
+                "UPDATE metadata SET value='999' WHERE key='schema_version'",
+                [],
+            )
+            .unwrap();
+        drop(store);
+
+        let reopened = DomainStore::new(&data).unwrap();
+        assert!(reopened
+            .read_only_reason()
+            .is_some_and(|reason| reason.starts_with("PROJECT_DATABASE_SCHEMA_NEWER:")));
+        assert_eq!(reopened.list_projects().unwrap().len(), 1);
+        assert_eq!(reopened.index_stats(&imported.id).unwrap().total_files, 1);
+        assert!(reopened
+            .open_draft(&imported.id, "denied")
+            .unwrap_err()
+            .starts_with("DOMAIN_KERNEL_READONLY:"));
         fs::remove_dir_all(base).ok();
     }
 }

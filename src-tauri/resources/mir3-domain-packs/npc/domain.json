@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "npc",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -467,6 +467,309 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-npc"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "npcId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            },
+            "required": [
+              "npcId",
+              "scriptPath",
+              "mapId",
+              "coordinateX",
+              "coordinateY",
+              "shopId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "clone-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-npc"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-npc"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -530,7 +833,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -611,7 +914,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -714,7 +1017,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -801,7 +1104,322 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-npc"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "npcId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            },
+            "required": [
+              "npcId",
+              "scriptPath",
+              "mapId",
+              "coordinateX",
+              "coordinateY",
+              "shopId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "add-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "clone-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "clone-npc"
+          },
+          "sourceResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "sourceResourceId",
+          "newResourceId",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "clone-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-npc",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-npc"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\.(txt|lua)$"
+              },
+              "mapId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "map"
+              },
+              "coordinateX": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "coordinateY": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              },
+              "shopId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "shop"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "npc",
+        "map",
+        "quest",
+        "shop",
+        "item"
+      ],
+      "writeSystems": [
+        "npc"
+      ],
+      "preconditions": [
+        "npc.resource-index-ready",
+        "npc.schema-loaded",
+        "npc.draft-open",
+        "npc.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "graph",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "graph",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-npc"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

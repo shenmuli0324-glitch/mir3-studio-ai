@@ -1,6 +1,6 @@
 # resource_production
 
-MIR3 Studio resource_production domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio resource_production domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,9 @@ Unique key: `pointId`. Runtime rule: `production.point-inside-map-and-rate-posit
 - `inspect-production` via `graph`
 - `edit-production-rate` via `graph`
 - `clone-production-point` via `graph`
+- `add-resource_production` via `graph`
+- `batch-update-resource_production` via `graph`
+- `replace-resource_production-reference` via `text`
 
 ## Contract fixtures
 

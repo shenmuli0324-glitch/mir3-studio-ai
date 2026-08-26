@@ -4,6 +4,7 @@
 //! 避免项目索引、知识与 Draft 出现两套状态。
 
 mod draft;
+mod fixtures;
 mod governance;
 mod knowledge;
 mod map_adapter;
@@ -15,6 +16,7 @@ mod store;
 mod systems;
 
 pub use draft::*;
+pub use fixtures::*;
 pub use governance::*;
 pub use knowledge::*;
 pub use map_adapter::*;

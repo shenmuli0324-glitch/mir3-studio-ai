@@ -35,6 +35,16 @@ function isProtectedTarget(projectRoot, target) {
   return Boolean(path) && isWithin(projectRoot, path)
 }
 
+function managedWriteViolation(projectRoot, session, target) {
+  if (!isMir3ManagedSession(session))
+    return null
+  if (!projectRoot || !session?.header?.cwd || !isWithin(projectRoot, session.header.cwd))
+    return 'MIR3_SYSTEM_SESSION_SCOPE_UNAVAILABLE'
+  if (isProtectedTarget(projectRoot, target))
+    return 'MIR3_SYSTEM_SESSION_DRAFT_REQUIRED'
+  return null
+}
+
 export {
   GLOBAL_SESSION_PREFIX,
   isGlobalSession,
@@ -42,5 +52,6 @@ export {
   isProtectedTarget,
   isSystemSession,
   isWithin,
+  managedWriteViolation,
   SYSTEM_SESSION_PREFIX,
 }

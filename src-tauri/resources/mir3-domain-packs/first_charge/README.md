@@ -1,6 +1,6 @@
 # first_charge
 
-MIR3 Studio first_charge domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio first_charge domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -17,6 +17,8 @@ Unique key: `tierId`. Runtime rule: `first-charge.first-tier-is-minimum`.
 - `inspect-first-charge` via `graph`
 - `replace-first-charge-reward` via `graph`
 - `clone-first-charge-tier` via `graph`
+- `add-first_charge` via `graph`
+- `batch-update-first_charge` via `graph`
 
 ## Contract fixtures
 

@@ -1,6 +1,6 @@
 # monster
 
-MIR3 Studio monster domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio monster domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,8 @@ Unique key: `monsterId`. Runtime rule: `monster.drop-weight-positive`.
 - `clone-monster` via `graph`
 - `tune-monster` via `graph`
 - `edit-drop-table` via `text`
+- `add-monster` via `graph`
+- `replace-monster-reference` via `text`
 
 ## Contract fixtures
 

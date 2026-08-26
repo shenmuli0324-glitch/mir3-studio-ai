@@ -1,6 +1,6 @@
 # season
 
-MIR3 Studio season domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio season domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,9 @@ Unique key: `seasonId`. Runtime rule: `season.window-and-settlement-ordered`.
 - `clone-season` via `timeline`
 - `shift-season` via `timeline`
 - `validate-season-settlement` via `timeline`
+- `add-season` via `timeline`
+- `batch-update-season` via `timeline`
+- `replace-season-reference` via `text`
 
 ## Contract fixtures
 

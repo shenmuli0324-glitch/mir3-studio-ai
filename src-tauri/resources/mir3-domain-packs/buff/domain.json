@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "buff",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": "*",
   "manifestSchemaVersion": 1,
@@ -384,6 +384,288 @@
         "validationRequired": true,
         "confirmationRequired": true
       }
+    },
+    {
+      "id": "add-buff",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-buff"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "buffId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stackMode": {
+                "type": "string",
+                "enum": [
+                  "replace",
+                  "refresh",
+                  "stack",
+                  "independent"
+                ]
+              },
+              "maximumStacks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999
+              },
+              "durationMilliseconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "effectSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              }
+            },
+            "required": [
+              "buffId",
+              "stackMode",
+              "maximumStacks",
+              "durationMilliseconds",
+              "effectSkillId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "buff",
+        "skill",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "buff"
+      ],
+      "preconditions": [
+        "buff.resource-index-ready",
+        "buff.schema-loaded",
+        "buff.draft-open",
+        "buff.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-buff"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "batch-update-buff",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-buff"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "stackMode": {
+                "type": "string",
+                "enum": [
+                  "replace",
+                  "refresh",
+                  "stack",
+                  "independent"
+                ]
+              },
+              "maximumStacks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999
+              },
+              "durationMilliseconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "effectSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "buff",
+        "skill",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "buff"
+      ],
+      "preconditions": [
+        "buff.resource-index-ready",
+        "buff.schema-loaded",
+        "buff.draft-open",
+        "buff.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-buff"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
+    },
+    {
+      "id": "replace-buff-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-buff-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "effectSkillId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "buff",
+        "skill",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "buff"
+      ],
+      "preconditions": [
+        "buff.resource-index-ready",
+        "buff.schema-loaded",
+        "buff.draft-open",
+        "buff.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-buff-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      }
     }
   ],
   "capabilities": [
@@ -446,7 +728,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -545,7 +827,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -646,7 +928,301 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "add-buff",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "add-buff"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "buffId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stackMode": {
+                "type": "string",
+                "enum": [
+                  "replace",
+                  "refresh",
+                  "stack",
+                  "independent"
+                ]
+              },
+              "maximumStacks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999
+              },
+              "durationMilliseconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "effectSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              }
+            },
+            "required": [
+              "buffId",
+              "stackMode",
+              "maximumStacks",
+              "durationMilliseconds",
+              "effectSkillId"
+            ]
+          },
+          "insertAfterResourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "record",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "buff",
+        "skill",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "buff"
+      ],
+      "preconditions": [
+        "buff.resource-index-ready",
+        "buff.schema-loaded",
+        "buff.draft-open",
+        "buff.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "add-buff"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "batch-update-buff",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "batch-update-buff"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "stackMode": {
+                "type": "string",
+                "enum": [
+                  "replace",
+                  "refresh",
+                  "stack",
+                  "independent"
+                ]
+              },
+              "maximumStacks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 999
+              },
+              "durationMilliseconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "effectSkillId": {
+                "type": "string",
+                "minLength": 1,
+                "x-mir3-reference-system": "skill"
+              }
+            }
+          },
+          "stopOnFirstError": {
+            "type": "boolean",
+            "default": true
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "changes",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "buff",
+        "skill",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "buff"
+      ],
+      "preconditions": [
+        "buff.resource-index-ready",
+        "buff.schema-loaded",
+        "buff.draft-open",
+        "buff.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "timeline",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "timeline",
+          "action": "record-reversible-draft-step",
+          "operation": "batch-update-buff"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
+      "previewRequired": true,
+      "validationRequired": true,
+      "confirmationRequired": true
+    },
+    {
+      "id": "replace-buff-reference",
+      "parameterSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "replace-buff-reference"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true
+          },
+          "fromReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "toReference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceField": {
+            "enum": [
+              "effectSkillId"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operation",
+          "resourceIds",
+          "fromReference",
+          "toReference",
+          "referenceField",
+          "expectedRevision"
+        ]
+      },
+      "readSystems": [
+        "buff",
+        "skill",
+        "equipment",
+        "item"
+      ],
+      "writeSystems": [
+        "buff"
+      ],
+      "preconditions": [
+        "buff.resource-index-ready",
+        "buff.schema-loaded",
+        "buff.draft-open",
+        "buff.revision-match"
+      ],
+      "steps": [
+        {
+          "primitive": "text",
+          "action": "resolve-and-preview",
+          "schema": "schemas/resource.schema.json"
+        },
+        {
+          "primitive": "text",
+          "action": "record-reversible-draft-step",
+          "operation": "replace-buff-reference"
+        }
+      ],
+      "reversible": true,
+      "unknownFormatPolicy": "readonly",
+      "previewPolicy": {
+        "previewRequired": true,
+        "validationRequired": true,
+        "confirmationRequired": true
+      },
+      "version": "1.1.0",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

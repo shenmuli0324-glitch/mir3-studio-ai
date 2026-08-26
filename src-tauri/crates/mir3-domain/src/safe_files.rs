@@ -1071,6 +1071,54 @@ mod tests {
     }
 
     #[test]
+    fn ten_thousand_row_xls_opens_with_bounded_dimensions_and_cache_reuse() {
+        const ROWS: usize = 10_000;
+        const COLUMNS: usize = 8;
+        let started = std::time::Instant::now();
+        let base = std::env::temp_dir().join(format!(
+            "mir3-large-xls-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let project_root = base.join("项目/大表");
+        let relative = "引擎/Mir200/Envir/Shop/large-shop.xls";
+        let target = project_root.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
+        let mut sheet = Biff8Sheet::new("商品");
+        for row in 0..ROWS {
+            for column in 0..COLUMNS {
+                sheet
+                    .set(
+                        row as u32,
+                        column,
+                        Biff8Cell::general(Biff8Value::Text(format!("{row}:{column}"))),
+                    )
+                    .unwrap();
+            }
+        }
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        fs::write(&target, book.to_cfb_bytes().unwrap()).unwrap();
+
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let workbook = store.safe_xls_open(&project.id, relative).unwrap();
+        assert_eq!(workbook.sheets[0].row_count, ROWS);
+        assert_eq!(workbook.sheets[0].column_count, COLUMNS);
+        let sheet = store
+            .safe_xls_sheet_read(&project.id, relative, "商品", &workbook.sha256)
+            .unwrap();
+        assert_eq!(sheet.rows.len(), ROWS);
+        assert_eq!(sheet.rows[ROWS - 1][COLUMNS - 1], "9999:7");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(60),
+            "10k-row XLS fixture exceeded the 60 second G4 gate"
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn safe_patch_creates_external_draft_before_applying_preserved_bytes() {
         let base = std::env::temp_dir().join(format!("mir3-safe-file-{}", std::process::id()));
         let project_root = base.join("项目/木立");
@@ -1090,7 +1138,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "安全编辑任务配置").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.0.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.1.0", None)
             .unwrap();
         let result = store
             .safe_text_patch(
@@ -1191,7 +1239,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "修改商品价格").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.0.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.1.0", None)
             .unwrap();
         let result = store
             .safe_xls_patch(

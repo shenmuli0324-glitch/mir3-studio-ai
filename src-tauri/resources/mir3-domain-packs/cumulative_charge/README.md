@@ -1,6 +1,6 @@
 # cumulative_charge
 
-MIR3 Studio cumulative_charge domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio cumulative_charge domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -17,6 +17,8 @@ Unique key: `cycleId + chargeThreshold`. Runtime rule: `cumulative-charge.thresh
 - `inspect-cumulative-charge` via `timeline`
 - `generate-charge-tiers` via `timeline`
 - `clone-charge-cycle` via `timeline`
+- `batch-update-cumulative_charge` via `timeline`
+- `replace-cumulative_charge-reference` via `text`
 
 ## Contract fixtures
 

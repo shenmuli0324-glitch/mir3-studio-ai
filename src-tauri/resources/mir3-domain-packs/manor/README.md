@@ -1,6 +1,6 @@
 # manor
 
-MIR3 Studio manor domain pack for MIR3 System Kernel v1. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
+MIR3 Studio manor domain pack for MIR3 System Kernel v1. Pack version: `1.1.0`; compiler compatibility: MIR3 System Kernel `^1.0.0`; engine range: `*`. Unknown formats are always read-only. Mutations use registered safe primitives and external drafts.
 
 ## Resource schema
 
@@ -18,6 +18,9 @@ Unique key: `manorId`. Runtime rule: `manor.entry-and-exit-loop-reachable`.
 - `clone-manor` via `map`
 - `edit-manor-entrance` via `map`
 - `validate-manor-loop` via `map`
+- `add-manor` via `map`
+- `batch-update-manor` via `map`
+- `replace-manor-reference` via `text`
 
 ## Contract fixtures
 

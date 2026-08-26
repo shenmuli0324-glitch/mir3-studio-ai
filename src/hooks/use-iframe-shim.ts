@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
+import { runCoreCandidateCanary } from '@/features/projects/core-candidate-canary'
 import { bridgeRequestId, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, postProjectActivation, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
 import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
@@ -57,7 +58,7 @@ interface Mir3PluginMessage {
     protocolVersion?: number
     code?: string
     message?: string
-    capabilities?: { sessions?: boolean, workspaces?: boolean, archive?: boolean, snapshot?: boolean, pendingInteraction?: boolean }
+    capabilities?: { sessions?: boolean, workspaces?: boolean, archive?: boolean, snapshot?: boolean, pendingInteraction?: boolean, globalSession?: boolean, ordinarySessionCanary?: boolean }
   }
 }
 
@@ -198,13 +199,22 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
       return
     }
     coreCanaryRunning = true
-    void runCoreCanary()
-      .then(() => invoke<boolean>('mark_core_ready'))
-      .then(() => {
+    void runCoreCandidateCanary({
+      runCanary: runCoreCanary,
+      markReady: async () => void await invoke<boolean>('mark_core_ready'),
+      rollback: () => invoke<boolean>('rollback_core_update'),
+      relaunch: async () => void await invoke('launch_harness'),
+      refresh: () => store.harness.refreshIframe(),
+    })
+      .then((outcome) => {
+        if (outcome.status === 'rejected') {
+          console.error('[MIR3 Core Plugin] LKG canary failed; candidate rollback result:', outcome.error, outcome.rolledBack)
+          return
+        }
         coreReadyCommitted = true
         store.harness.markCorePluginReady()
       })
-      .catch(error => console.error('[MIR3 Core Plugin] LKG canary failed; candidate was not committed:', error))
+      .catch(error => console.error('[MIR3 Core Plugin] LKG rollback failed:', error))
       .finally(() => {
         coreCanaryRunning = false
       })
@@ -332,6 +342,8 @@ function passesCoreCanary(payload: Mir3PluginMessage['payload']): boolean {
     && capabilities.archive === true
     && capabilities.snapshot === true
     && capabilities.pendingInteraction === true
+    && capabilities.globalSession === true
+    && capabilities.ordinarySessionCanary === true
 }
 
 async function runCoreCanary() {
@@ -343,7 +355,24 @@ async function runCoreCanary() {
     throw new Error(`DOMAIN_REGISTRY_CANARY_FAILED: expected 33 unique systems, received ${systems.length}`)
   if (!diagnostics.mcpBinary)
     throw new Error('MCP_CANARY_FAILED: MIR3 MCP sidecar is unavailable')
+  await invoke('core_mcp_canary_run')
+  await runOrdinarySessionCanary(diagnostics.dataRoot)
   await runSystemSessionCanary(diagnostics.dataRoot)
+}
+
+async function runOrdinarySessionCanary(cwd: string) {
+  const nonce = bridgeRequestId()
+  const response = await requestCanary(
+    'mir3/bridge.ordinarySessionCanary',
+    '__mir3_core_canary__',
+    'kernel',
+    'mir3-core-ordinary-session-canary',
+    '',
+    { cwd, sessionId: `harness-canary-${nonce}` },
+  )
+  const payload = response.payload as { managed?: boolean, archived?: boolean, sessionId?: string }
+  if (response.type !== 'mir3/bridge.ordinarySessionCanary' || payload.managed !== false || payload.archived !== true || !payload.sessionId?.startsWith('harness-canary-'))
+    throw new Error('ORDINARY_SESSION_CANARY_FAILED: Harness ordinary Session is unavailable or was marked as managed')
 }
 
 async function runSystemSessionCanary(cwd: string) {

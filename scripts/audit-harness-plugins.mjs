@@ -124,8 +124,8 @@ for (const pluginRoot of pluginRoots) {
         failures.push(`${manifest.name}: client entry is missing ${contract}`)
     }
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
-      if (manifest.version !== '1.0.1')
-        failures.push(`${manifest.name}: compatibility adapter must be version 1.0.1`)
+      if (manifest.version !== '1.0.3')
+        failures.push(`${manifest.name}: compatibility adapter must be version 1.0.3`)
       for (const contract of [
         'const PROTOCOL_VERSION = 2',
         'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',
@@ -150,6 +150,11 @@ for (const pluginRoot of pluginRoots) {
         'SYSTEM_SESSION_SCOPE_UNVERIFIED',
         'GLOBAL_SESSION_SCOPE_UNVERIFIED',
         'typeof message.sessionId === \'string\'',
+        'Object.hasOwn(message, \'payload\')',
+        'SESSION_IDENTITY_MISMATCH',
+        'sessionOwners',
+        'ordinarySessionCanary',
+        'harness-canary-',
         'nextOutboundSequence',
         'acceptInboundSequence',
       ]) {

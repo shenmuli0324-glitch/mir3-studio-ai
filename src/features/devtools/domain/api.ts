@@ -10,6 +10,7 @@ import type {
   DomainSnapshot,
   DomainSystemDescription,
   DomainValidationReport,
+  LegacyDraftCloneRequest,
   SafeTextOpen,
   SafeTextPatchResult,
   SystemSessionBinding,
@@ -109,6 +110,10 @@ export function associateDomainDraftComposite(projectId: string, draftId: string
 
 export function previewDomainDraft(projectId: string, draftId: string) {
   return invoke<DomainDraftConfirmation>('draft_preview', { projectId, draftId })
+}
+
+export function cloneLegacyDomainDraft(projectId: string, request: LegacyDraftCloneRequest) {
+  return invoke<DomainDraftConfirmation>('draft_legacy_clone', { projectId, request })
 }
 
 export function applyDomainDraft(projectId: string, draftId: string, confirmationToken: string) {

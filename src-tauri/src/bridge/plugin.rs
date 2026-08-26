@@ -5,6 +5,7 @@
 
 use crate::config;
 use crate::service::plugin;
+use semver::{Version, VersionReq};
 use tauri::Emitter;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -128,20 +129,43 @@ pub fn domain_pack_activate(
         );
     }
     let root = config::get_dsh_data_path(&app_handle).join("domain-packs");
-    let activated = plugin::system::activate_domain_pack_candidate(&root, &system_id)?;
-    let expected = activated
+    let before = plugin::system::domain_pack_state(&root, &system_id)?.state;
+    let from_version = before
         .current
         .as_ref()
-        .map(|release| release.version.as_str())
+        .map(|release| release.version.clone())
         .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
-    if let Err(error) = assert_runtime_domain_version(&app_handle, &system_id, expected) {
-        let rollback = plugin::system::rollback_domain_pack(&root, &system_id);
-        return Err(format!(
-            "DOMAIN_PACK_RUNTIME_CANARY_FAILED: {error}; rollback={}",
-            rollback
-                .map(|_| "ok".to_string())
-                .unwrap_or_else(|rollback_error| rollback_error)
-        ));
+    let project_service = app_handle.state::<crate::service::project::ProjectService>();
+    let governance_snapshot = project_service
+        .store()
+        .snapshot_domain_governance(&system_id)?;
+    let activation =
+        plugin::system::activate_domain_pack_with_canary(&root, &system_id, |activated| {
+            let expected = activated
+                .current
+                .as_ref()
+                .map(|release| release.version.as_str())
+                .ok_or_else(|| format!("DOMAIN_PACK_CURRENT_MISSING: {system_id}"))?;
+            assert_runtime_domain_version(&app_handle, &system_id, expected)?;
+            let migration = project_service.store().migrate_domain_governance(
+                &system_id,
+                &from_version,
+                expected,
+            )?;
+            if !migration.compatible {
+                return Err(format!(
+                    "DOMAIN_GOVERNANCE_MIGRATION_BLOCKED: {}",
+                    migration.conflicts.join(" | ")
+                ));
+            }
+            Ok(())
+        });
+    if let Err(error) = activation {
+        project_service
+            .store()
+            .restore_domain_governance_snapshot(&governance_snapshot)
+            .map_err(|restore| format!("{error}; governance_restore={restore}"))?;
+        return Err(error);
     }
     plugin::system::domain_pack_state(&root, &system_id)
 }
@@ -214,7 +238,44 @@ fn assert_runtime_domain_version(
             active.version
         ));
     }
+    let engine_requirement = VersionReq::parse(&active.supported_engine_range)
+        .map_err(|error| format!("DOMAIN_PACK_ENGINE_RANGE_INVALID: {error}"))?;
+    if active.supported_engine_range != "*" {
+        let project = project_service
+            .store()
+            .active_project()?
+            .ok_or_else(|| "DOMAIN_PACK_ENGINE_PROJECT_REQUIRED: no active project".to_string())?;
+        let detected = project.engine_version.ok_or_else(|| {
+            "DOMAIN_PACK_ENGINE_VERSION_UNDETECTED: active project has no engine version"
+                .to_string()
+        })?;
+        let engine_version = parse_engine_version(&detected)?;
+        if !engine_requirement.matches(&engine_version) {
+            return Err(format!(
+                "DOMAIN_PACK_ENGINE_INCOMPATIBLE: {} does not match {}",
+                engine_version, active.supported_engine_range
+            ));
+        }
+    }
     Ok(())
+}
+
+fn parse_engine_version(value: &str) -> Result<Version, String> {
+    let normalized = value.trim().trim_start_matches(['v', 'V']);
+    if let Ok(version) = Version::parse(normalized) {
+        return Ok(version);
+    }
+    if normalized.matches('.').count() == 1
+        && normalized
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+    {
+        return Version::parse(&format!("{normalized}.0"))
+            .map_err(|error| format!("DOMAIN_PACK_ENGINE_VERSION_INVALID: {value}: {error}"));
+    }
+    Err(format!(
+        "DOMAIN_PACK_ENGINE_VERSION_INVALID: {value}: expected SemVer"
+    ))
 }
 
 /// 升级单个已安装插件：`dsh plugin --profile <当前档案> update <id>`，
@@ -292,4 +353,18 @@ pub fn recover_plugin(app_handle: AppHandle, id: String) -> Result<(), String> {
     plugin::uninstall_recovery(&app_handle, &id)?;
     plugin::watch::force_emit(&app_handle);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_engine_version;
+
+    #[test]
+    fn engine_version_canary_accepts_semver_and_two_component_aliases() {
+        assert_eq!(parse_engine_version("1.2.3").unwrap().to_string(), "1.2.3");
+        assert_eq!(parse_engine_version("v2.7").unwrap().to_string(), "2.7.0");
+        assert!(parse_engine_version("V8M2")
+            .unwrap_err()
+            .starts_with("DOMAIN_PACK_ENGINE_VERSION_INVALID:"));
+    }
 }
