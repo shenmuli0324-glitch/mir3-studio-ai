@@ -1,4 +1,5 @@
 import type { DomainManifest, TaskScopeLease } from '../src/features/devtools/domain/types'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { assertSystemTaskScopeLease, buildSystemTaskRenewalContract, buildSystemTaskScopeContract, systemTaskSafetyInstructions } from '../src/features/system-ai/system-task-scope'
 
@@ -49,6 +50,13 @@ describe('system task scope', () => {
     expect(instructions).toContain('Unknown, generated, shared-without-ownership, and dependency files are read-only')
     expect(instructions).toContain('Never write project files through shell, terminal, generic filesystem, or editor tools')
     expect(instructions).toContain('scoped MIR3 MCP Draft tools')
+  })
+
+  it('keeps the cross-system write selector closed until the user opens it', () => {
+    const panel = readFileSync(new URL('../src/features/system-ai/system-ai-panel.tsx', import.meta.url), 'utf8')
+    expect(panel).toContain('const [globalScopeOpen, setGlobalScopeOpen] = useState(false)')
+    expect(panel).toContain('open={globalScopeOpen}')
+    expect(panel).toContain('onToggle={event => setGlobalScopeOpen(event.currentTarget.open)}')
   })
 })
 

@@ -63,6 +63,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   const [reusableReceipts, setReusableReceipts] = useState<TaskReceipt[]>([])
   const [resolvedCapabilities, setResolvedCapabilities] = useState<CapabilityResolution[]>([])
   const [globalWriteSystems, setGlobalWriteSystems] = useState<string[]>([])
+  const [globalScopeOpen, setGlobalScopeOpen] = useState(false)
   const [globalPending, setGlobalPending] = useState(false)
   const resumedSessionRef = useRef('')
   const lastSequenceRef = useRef(new Map<string, number>())
@@ -335,6 +336,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     setReusableReceipts([])
     setResolvedCapabilities([])
     setGlobalWriteSystems([])
+    setGlobalScopeOpen(false)
     setGlobalPending(false)
     lastSequenceRef.current.clear()
     awaitingSnapshotRef.current.clear()
@@ -705,7 +707,11 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         <If cond={error != null}><p className="rounded-xl border border-danger/30 bg-danger/8 p-3 text-xs text-danger">{error}</p></If>
       </div>
       <div className="shrink-0 border-t border-line p-3">
-        <details className="mb-2 rounded-lg border border-line bg-panel2 px-2 py-1.5">
+        <details
+          className="mb-2 rounded-lg border border-line bg-panel2 px-2 py-1.5"
+          open={globalScopeOpen}
+          onToggle={event => setGlobalScopeOpen(event.currentTarget.open)}
+        >
           <summary className="cursor-pointer text-[9px] text-muted">{t('studio.devtools.ai.global_scope')}</summary>
           <div className="mt-2 max-h-36 space-y-1.5 overflow-auto">
             <label className="flex items-center gap-2 text-[10px] text-ink">
