@@ -143,6 +143,7 @@ describe('studio shell contract', () => {
     expect(aiPanel).toContain('scopeToken: lease.token')
     expect(aiPanel).toContain('allowedWriteSystems: lease.writeSystems')
     expect(aiPanel).toContain('pluginVersions: lease.pluginVersions')
+    expect(aiPanel).toContain('domainPluginVersions(manifests, readSystems)')
     expect(aiPanel).toContain('outcome: \'allowed-once\'')
     expect(aiPanel).toContain('pendingKey')
     expect(aiPanel).toContain('lastSequenceRef')

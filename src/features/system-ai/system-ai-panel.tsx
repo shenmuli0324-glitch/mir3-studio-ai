@@ -228,13 +228,15 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       try {
         if (activeLease)
           await stopScopeLease(leaseIdentity)
+        const readSystems = uniqueStrings([manifest.systemId, ...manifest.dependencies])
+        const manifests = await listDomainSystems()
         activeLease = await issueTaskScope(
           project.id,
           taskId,
-          [manifest.systemId, ...manifest.dependencies],
+          readSystems,
           [manifest.systemId],
           optionalValue(draftId),
-          { [manifest.systemId]: manifest.version },
+          domainPluginVersions(manifests, readSystems),
         )
         manageSystemLease(activeLease, leaseIdentity, project, manifest, draftId, reason => setError(String(reason)))
         setScopeDraftId(draftId ?? null)
