@@ -65,14 +65,17 @@ export function parseMacosConsoleSession(json) {
   }
 
   const consoleLocked = root.IOConsoleLocked
-  const screenLocked = consoleSession.CGSSessionScreenIsLocked
+  const reportedScreenLocked = consoleSession.CGSSessionScreenIsLocked
   const loginDone = consoleSession.kCGSessionLoginDoneKey
-  if (typeof consoleLocked !== 'boolean' || typeof screenLocked !== 'boolean' || loginDone !== true) {
+  if (typeof consoleLocked !== 'boolean'
+    || (reportedScreenLocked !== undefined && typeof reportedScreenLocked !== 'boolean')
+    || loginDone !== true) {
     throw sessionError(
       'NATIVE_UI_SESSION_UNVERIFIED',
-      `macOS console state was incomplete (${formatSessionEvidence({ consoleLocked, consoleSession, screenLocked })}); unlock this Mac and rerun pnpm smoke:mac`,
+      `macOS console state was incomplete (${formatSessionEvidence({ consoleLocked, consoleSession, screenLocked: reportedScreenLocked })}); unlock this Mac and rerun pnpm smoke:mac`,
     )
   }
+  const screenLocked = reportedScreenLocked ?? consoleLocked
 
   return {
     consoleLocked,

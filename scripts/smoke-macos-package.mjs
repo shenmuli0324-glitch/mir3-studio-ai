@@ -153,6 +153,7 @@ function assertRetiredSystemPluginMigrated(root) {
     || !Array.isArray(bundles)
     || !bundles.includes('@deepseek-ai/dsh-base')
     || !bundles.includes('@deepseek-ai/dsh-web-app')
+    || !bundles.includes(currentSystemPlugin)
     || bundles.includes(retiredSystemPlugin)) {
     throw new Error(`Legacy system plugin profile was not migrated: ${profilePath}`)
   }

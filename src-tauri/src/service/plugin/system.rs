@@ -1397,10 +1397,24 @@ fn ensure_manifest_dependency(path: &Path) -> Result<(), String> {
         Value::String(LOCAL_PLUGIN_SPEC.to_string()),
     );
     dependencies.remove(RETIRED_SAFE_FILES_PACKAGE);
-    for pointer in ["/dsh/profile/bundles", "/dsh/bundle/plugins"] {
-        if let Some(plugins) = manifest.pointer_mut(pointer).and_then(Value::as_array_mut) {
-            plugins.retain(|plugin| plugin.as_str() != Some(RETIRED_SAFE_FILES_PACKAGE));
-        }
+    let profile_bundles = manifest
+        .pointer_mut("/dsh/profile/bundles")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| {
+            "MIR3_SYSTEM_MANIFEST_INVALID: dsh.profile.bundles must be an array".to_string()
+        })?;
+    profile_bundles.retain(|plugin| plugin.as_str() != Some(RETIRED_SAFE_FILES_PACKAGE));
+    if !profile_bundles
+        .iter()
+        .any(|plugin| plugin.as_str() == Some(PACKAGE_NAME))
+    {
+        profile_bundles.push(Value::String(PACKAGE_NAME.to_string()));
+    }
+    if let Some(plugins) = manifest
+        .pointer_mut("/dsh/bundle/plugins")
+        .and_then(Value::as_array_mut)
+    {
+        plugins.retain(|plugin| plugin.as_str() != Some(RETIRED_SAFE_FILES_PACKAGE));
     }
     let content = serde_json::to_string_pretty(&manifest)
         .map_err(|e| format!("MIR3_SYSTEM_MANIFEST_RENDER_FAILED: {e}"))?;
@@ -1573,6 +1587,7 @@ mod tests {
         )
         .unwrap();
         ensure_manifest_dependency(&path).unwrap();
+        ensure_manifest_dependency(&path).unwrap();
         let manifest: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
             manifest.pointer("/dependencies/@mir3-studio~1dsh-mir3-core"),
@@ -1584,7 +1599,11 @@ mod tests {
         );
         assert_eq!(
             manifest.pointer("/dsh/profile/bundles"),
-            Some(&serde_json::json!(["@deepseek-ai/dsh-base", "regular"]))
+            Some(&serde_json::json!([
+                "@deepseek-ai/dsh-base",
+                "regular",
+                "@mir3-studio/dsh-mir3-core"
+            ]))
         );
         assert_eq!(
             manifest.pointer("/dsh/bundle/plugins"),

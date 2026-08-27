@@ -1,5 +1,10 @@
 # MIR3 Studio AI 更新记录
 
+## 0.9.8 - 2026-08-27
+
+- 完成旧版真机 Profile 的 Core bundle 原子替换：迁移会移除已退役的 Safe Files bundle，并幂等注册 `@mir3-studio/dsh-mir3-core`，避免服务虽启动但兼容桥与 canary 未加载。
+- macOS 原生烟测覆盖旧 Profile 启动迁移，并兼容系统仅报告根控制台锁定状态的情形；真实锁屏仍会严格拒绝运行 UI 验收。
+
 ## 0.9.7 - 2026-08-27
 
 - 修复从旧版真机 Profile 升级时仍加载已合并的 `@mir3-studio/dsh-mir3-safe-files` bundle，导致 MIR3 AI Core 在监听端口前退出的问题；启动迁移现在同时清理正式的 `dsh.profile.bundles` 与早期兼容结构。

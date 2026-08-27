@@ -51,6 +51,16 @@ describe('macOS console session smoke prerequisite', () => {
     expect(assertUnlocked).not.toThrowError(/private-user-name-must-not-appear/u)
   })
 
+  it('uses the root console lock state when macOS omits the per-session lock field', () => {
+    const unlocked = parseMacosConsoleSession(sessionJson({ consoleLocked: false }))
+    const locked = parseMacosConsoleSession(sessionJson({ consoleLocked: true }))
+
+    expect(unlocked.screenLocked).toBe(false)
+    expect(locked.screenLocked).toBe(true)
+    expect(() => assertUnlockedMacosConsoleSession(() => unlocked)).not.toThrow()
+    expect(() => assertUnlockedMacosConsoleSession(() => locked)).toThrowError(/NATIVE_UI_SESSION_LOCKED/u)
+  })
+
   it('fails closed when no on-console session exists', () => {
     const json = JSON.stringify({
       IOConsoleLocked: false,
