@@ -230,7 +230,11 @@ window.__ModuleLoader__.load({
         if (!sessionId.startsWith('harness-canary-') || isSystemSessionId(sessionId) || isGlobalSessionId(sessionId) || typeof payload.cwd !== 'string')
           throw new Error('ORDINARY_SESSION_CANARY_INVALID: an unreserved canary sessionId and cwd are required')
         requireActiveProject(request)
-        requireResult(await ctx.sessions.create({ cwd: payload.cwd, sessionId }), 'ORDINARY_SESSION_CANARY_CREATE_FAILED')
+        await createHarnessSession(
+          ctx,
+          { cwd: payload.cwd, sessionId },
+          'ORDINARY_SESSION_CANARY_CREATE_FAILED',
+        )
         let openError = null
         try {
           const session = requireSession(sessionId)
@@ -264,8 +268,11 @@ window.__ModuleLoader__.load({
         try {
           claimSessionOwner(request)
           if (!recoverableSystemSessions.has(request.sessionId)) {
-            const created = await ctx.sessions.create({ cwd: payload.cwd, sessionId: request.sessionId })
-            requireResult(created, 'SYSTEM_SESSION_CREATE_FAILED')
+            await createHarnessSession(
+              ctx,
+              { cwd: payload.cwd, sessionId: request.sessionId },
+              'SYSTEM_SESSION_CREATE_FAILED',
+            )
             recoverableSystemSessions.add(request.sessionId)
           }
           session = requireSession(request.sessionId)
@@ -399,8 +406,9 @@ window.__ModuleLoader__.load({
         claimSessionOwner(request)
         const workspace = await ctx.workspaces.create({ path: payload.cwd })
         const globalSessionId = request.sessionId
-        requireResult(
-          await ctx.sessions.create({ workspaceId: workspace.workspaceId, sessionId: globalSessionId }),
+        await createHarnessSession(
+          ctx,
+          { workspaceId: workspace.workspaceId, sessionId: globalSessionId },
           'GLOBAL_SESSION_CREATE_FAILED',
         )
         ctx.sessions.open(globalSessionId)
@@ -814,6 +822,32 @@ window.__ModuleLoader__.load({
       if (!result?.ok)
         throw new Error(`${prefix}: ${result?.error?.code || 'unknown'}: ${result?.error?.message || 'operation failed'}`)
       return result.value
+    }
+
+    async function createHarnessSession(ctx, options, prefix) {
+      const expectedSessionId = options.sessionId
+      let result
+      try {
+        result = await ctx.sessions.create(options)
+      }
+      catch (error) {
+        throw new Error(`${prefix}: ${String(error)}`)
+      }
+      let createdSessionId
+      if (typeof result === 'string') {
+        createdSessionId = result
+      }
+      else if (result?.ok === true) {
+        createdSessionId = result.value?.sessionId
+      }
+      else if (result?.ok === false) {
+        requireResult(result, prefix)
+      }
+      if (typeof createdSessionId !== 'string' || !createdSessionId)
+        throw new Error(`${prefix}: SESSION_CREATE_RESULT_INVALID: Harness did not return a Session id`)
+      if (typeof expectedSessionId === 'string' && createdSessionId !== expectedSessionId)
+        throw new Error(`${prefix}: SESSION_CREATE_ID_MISMATCH: Harness returned a different Session id`)
+      return createdSessionId
     }
 
     function encodePendingResponse(wait, response) {

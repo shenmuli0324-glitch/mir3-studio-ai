@@ -19,9 +19,12 @@ export interface Mir3BridgeEnvelope<T = unknown> {
 }
 
 type BridgeListener = (message: Mir3BridgeEnvelope) => void
+type HarnessProjectScope = Pick<Mir3Project, 'id' | 'root' | 'activeWorkspaceRoot'>
 
 let activeIframeRef: RefObject<HTMLIFrameElement | null> | null = null
 let bridgePort: MessagePort | null = null
+let activeProjectScopeKey: string | null = null
+const pendingProjectActivations = new Map<string, Promise<void>>()
 const bridgeListeners = new Set<BridgeListener>()
 const outgoingSequences = new BridgeSequenceRegistry()
 const incomingSequences = new BridgeSequenceRegistry()
@@ -41,6 +44,8 @@ export function connectHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | nu
       activeIframeRef = null
       bridgePort?.close()
       bridgePort = null
+      activeProjectScopeKey = null
+      pendingProjectActivations.clear()
     }
   }
 }
@@ -52,6 +57,8 @@ export function bootstrapHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | 
   if (!origin || !target)
     return false
   bridgePort?.close()
+  activeProjectScopeKey = null
+  pendingProjectActivations.clear()
   const channel = new MessageChannel()
   bridgePort = channel.port1
   bridgePort.addEventListener('message', event => dispatchBridgeMessage(event.data))
@@ -132,14 +139,74 @@ export function postProjectActivation(
   return true
 }
 
+/** 在创建或恢复 AI Session 前确认 Harness 已接受当前项目作用域。 */
+export function ensureHarnessProjectActive(project: HarnessProjectScope): Promise<void> {
+  const scopeKey = projectScopeKey(project)
+  if (activeProjectScopeKey === scopeKey)
+    return Promise.resolve()
+  const pending = pendingProjectActivations.get(scopeKey)
+  if (pending)
+    return pending
+  const activation = activateHarnessProject(project, scopeKey)
+  pendingProjectActivations.set(scopeKey, activation)
+  void activation.then(
+    () => pendingProjectActivations.delete(scopeKey),
+    () => pendingProjectActivations.delete(scopeKey),
+  )
+  return activation
+}
+
+async function activateHarnessProject(project: HarnessProjectScope, scopeKey: string): Promise<void> {
+  const requestId = bridgeRequestId()
+  const response = waitForHarnessBridge(message => message.requestId === requestId
+    && (message.type === 'mir3/project.activated' || message.type === 'mir3/bridge.error'))
+  const posted = postHarnessBridge({
+    type: 'mir3/project.activate',
+    requestId,
+    projectId: project.id,
+    systemId: '__project__',
+    taskId: 'project-activation',
+    sessionId: '',
+    payload: {
+      projectRoot: project.root,
+      workspaceRoot: project.activeWorkspaceRoot,
+      startSession: false,
+    },
+  })
+  if (!posted) {
+    void response.catch(() => {})
+    throw new Error('HARNESS_BRIDGE_UNAVAILABLE: project activation was not delivered')
+  }
+  const result = await response
+  if (result.type === 'mir3/bridge.error')
+    throw new Error(bridgeError(result.payload))
+  if (result.projectId !== project.id)
+    throw new Error('PROJECT_SCOPE_MISMATCH: Harness activated another project')
+  activeProjectScopeKey = scopeKey
+}
+
 function dispatchBridgeMessage(value: unknown) {
   if (!isBridgeEnvelope(value) || value.source !== 'mir3-core-plugin')
     return
-  if (value.type === 'mir3/plugin.ready')
+  if (value.type === 'mir3/plugin.ready') {
     incomingSequences.clear()
+    activeProjectScopeKey = null
+    pendingProjectActivations.clear()
+  }
   if (!incomingSequences.accept(value, value.sequence))
     return
   bridgeListeners.forEach(listener => listener(value))
+}
+
+function projectScopeKey(project: HarnessProjectScope): string {
+  return `${project.id}\u241F${project.root}\u241F${project.activeWorkspaceRoot}`
+}
+
+function bridgeError(payload: unknown): string {
+  if (!payload || typeof payload !== 'object')
+    return String(payload)
+  const error = payload as { code?: string, message?: string }
+  return [error.code, error.message].filter(Boolean).join(': ')
 }
 
 export function bridgeRequestId() {

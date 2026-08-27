@@ -154,12 +154,8 @@ describe('mir3 Core Plugin public runtime contract', () => {
     let createAttempts = 0
     context.sessions.create = async (options) => {
       createAttempts += 1
-      if (createAttempts === 1) {
-        return {
-          ok: false,
-          error: { code: 'fixture-create-failed', message: 'fixture create failed' },
-        }
-      }
+      if (createAttempts === 1)
+        throw new Error('session create failed: fixture-create-failed: fixture create failed')
       return create(options)
     }
     runtime.plugin.apply(context)
@@ -481,7 +477,7 @@ function createHarnessContext({ calls, sessions }) {
         const sessionId = options.sessionId
         sessions.set(sessionId, createSession(sessionId, calls))
         calls.push(['session-create', sessionId, options.cwd ?? null, options.workspaceId ?? null])
-        return { ok: true, value: { sessionId } }
+        return sessionId
       },
       open(sessionId) {
         calls.push(['sessions-open', sessionId])

@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
-import { bootstrapHarnessBridge, connectHarnessBridge, postHarnessBridge, postProjectActivation } from '@/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, postHarnessBridge } from '@/features/projects/workspace-bridge'
 import { useIframeShim } from '@/hooks/use-iframe-shim'
 import { Loadable } from '@/layout/components/loadable'
 import { store } from '@/store'
@@ -23,6 +23,9 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
   const harnessState: HarnessWorkbenchState = useStore(store.harness)
   const { serviceHealthy, iframeError, iframeKey, iframeLoaded, iframeSrc } = harnessState
   const serviceUrl = serviceOrigin(iframeSrc)
+  const projectId = project?.id
+  const projectRoot = project?.root
+  const projectWorkspaceRoot = project?.activeWorkspaceRoot
   useIframeShim(iframeRef)
 
   useEffect(() => connectHarnessBridge(iframeRef), [iframeRef])
@@ -40,23 +43,23 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
   }, [iframeKey, iframeLoaded, iframeRef, surface])
 
   useEffect(() => {
-    if (iframeLoaded && project)
-      postProjectActivation(iframeRef, project)
-  }, [iframeKey, iframeLoaded, iframeRef, project])
-
-  useEffect(() => {
     if (!iframeLoaded)
       return
-    bootstrapHarnessBridge(iframeRef)
+    if (!bootstrapHarnessBridge(iframeRef))
+      return
     postHarnessBridge({
       type: 'mir3/bridge.describe',
-      projectId: project?.id ?? '',
+      projectId: projectId ?? '',
       systemId: '',
       taskId: '',
       sessionId: '',
       payload: {},
     })
-  }, [iframeKey, iframeLoaded, iframeRef, project?.id])
+    if (projectId && projectRoot && projectWorkspaceRoot) {
+      void ensureHarnessProjectActive({ id: projectId, root: projectRoot, activeWorkspaceRoot: projectWorkspaceRoot })
+        .catch(error => console.error('[MIR3 Core Plugin] project activation failed:', error))
+    }
+  }, [iframeKey, iframeLoaded, iframeRef, projectId, projectRoot, projectWorkspaceRoot])
 
   return (
     <section className={workbenchClass(active)} aria-hidden={!active}>

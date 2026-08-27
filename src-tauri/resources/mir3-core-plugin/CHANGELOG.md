@@ -1,5 +1,10 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.2.1 - 2026-08-27
+
+- 兼容 Harness 公共 `SessionRuntime.create()` 成功返回 Session ID、失败抛出结构化异常的新契约，同时保留对旧 Result 返回的兼容。
+- 修复 33 个系统共用的归档 AI 会话、普通会话 canary 和全局任务把成功创建误判为 `unknown: operation failed` 的问题。
+
 ## 1.2.0 - 2026-08-27
 
 - 将 996 的 GBK/CP936 领域脚本统一路由到 MIR3 资源工具，普通工作台可在当前项目边界内只读调用 33 个领域包，写入仍强制使用短期任务作用域和外置 Draft。

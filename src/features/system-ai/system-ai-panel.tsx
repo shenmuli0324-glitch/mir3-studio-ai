@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
 import { associateDomainDraftComposite, bindSystemSession, getSystemSession, issueTaskScope, listDomainMemories, listDomainSystems, listTaskReceipts, openDomainDraft, resolveUserCapabilities, revokeTaskScope, revokeTaskScopes } from '@/features/devtools/domain/api'
-import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
+import { bridgeRequestId, ensureHarnessProjectActive, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
 import { draftHandoffs, includeGlobalTaskDraft, markGlobalTaskMcpDisabled, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask } from './ai-handoff'
 import { compensateGlobalDraftSetup } from './global-draft-compensation'
 import { appendScopedUserRequest, buildGlobalTaskHandoff, projectTaskMessages, taskGoalFromMessages } from './global-task-handoff'
@@ -42,6 +42,8 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   onDraftHandoff?: (handoff: DomainDraftHandoff) => Promise<void>
 }) {
   const { t } = useTranslation()
+  const projectRoot = project.root
+  const projectWorkspaceRoot = project.activeWorkspaceRoot
   const [taskId, setTaskId] = useState(() => activeSystemTaskId(project.id, manifest.systemId))
   const [sessionId, setSessionId] = useState('')
   const [connected, setConnected] = useState(false)
@@ -62,6 +64,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   const resumedSessionRef = useRef('')
   const lastSequenceRef = useRef(new Map<string, number>())
   const awaitingSnapshotRef = useRef(new Set<string>())
+  const establishedSessionsRef = useRef(new Set<string>())
   const expectedSessionRef = useRef('')
 
   const usedCapabilities = extractUsedCapabilities(taskToolCalls, manifest)
@@ -139,12 +142,23 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         lastSequenceRef.current.set(message.sessionId, message.sequence)
       }
       if (message.type === 'mir3/bridge.error') {
-        setError(bridgeError(message))
+        const reason = bridgeError(message)
+        setError(reason)
         setRunning(false)
         void stopScopeLease(identity)
+        if (!establishedSessionsRef.current.has(message.sessionId) && isRecoverableSessionStartupError(reason)) {
+          const nextTaskId = createSystemTaskId(project.id, manifest.systemId)
+          rememberSystemTaskId(project.id, manifest.systemId, nextTaskId)
+          expectedSessionRef.current = ''
+          resumedSessionRef.current = ''
+          setSessionId('')
+          setSessionReady(false)
+          setTaskId(nextTaskId)
+        }
         return
       }
       if (message.type === 'mir3/systemSession.created') {
+        establishedSessionsRef.current.add(message.sessionId)
         setConnected(true)
         setSessionReady(false)
         if (message.sessionId) {
@@ -153,6 +167,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         }
       }
       if (message.type === 'mir3/systemSession.resumed') {
+        establishedSessionsRef.current.add(message.sessionId)
         setConnected(true)
         setSessionReady(true)
         const snapshot = message.payload as SessionSnapshot
@@ -199,10 +214,26 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   useEffect(() => {
     if (!connected || !sessionId || resumedSessionRef.current === sessionId)
       return
+    let cancelled = false
     resumedSessionRef.current = sessionId
     lastSequenceRef.current.delete(sessionId)
-    postSessionMessage('mir3/systemSession.resume', project.id, manifest.systemId, taskId, sessionId, {})
-  }, [connected, manifest.systemId, project.id, sessionId, taskId])
+    void ensureHarnessProjectActive({ id: project.id, root: projectRoot, activeWorkspaceRoot: projectWorkspaceRoot })
+      .then(() => {
+        if (cancelled)
+          return
+        if (!postSessionMessage('mir3/systemSession.resume', project.id, manifest.systemId, taskId, sessionId, {}))
+          throw new Error('HARNESS_BRIDGE_UNAVAILABLE: system Session resume was not delivered')
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          resumedSessionRef.current = ''
+          setError(String(reason))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connected, manifest.systemId, project.id, projectRoot, projectWorkspaceRoot, sessionId, taskId])
 
   async function sendPrompt() {
     const content = input.trim()
@@ -210,6 +241,13 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       return
     if (!connected) {
       setError(t('studio.devtools.ai.unavailable'))
+      return
+    }
+    try {
+      await ensureHarnessProjectActive(project)
+    }
+    catch (reason) {
+      setError(String(reason))
       return
     }
     if (globalWriteSystems.length > 0) {
@@ -315,6 +353,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     let associatedDraft: { draftId: string, systemId: string, pluginVersion: string, compositeId: string } | null = null
     let globalIdentity: { projectId: string, taskId: string, sessionId: string } | null = null
     try {
+      await ensureHarnessProjectActive(project)
       const [manifests, taskReceipts] = await Promise.all([
         listDomainSystems(),
         listTaskReceipts(project.id, manifest.systemId),
@@ -462,8 +501,8 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col border-l border-line bg-panel">
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-5">
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-l border-line bg-panel">
+      <div className="min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-4 py-5">
         <If cond={messages.length > 0}>
           {messages.map(message => <AiBubble key={message.id} message={message} />)}
         </If>
@@ -475,13 +514,13 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
             {pending.map(interaction => <PendingCard key={interaction.key} interaction={interaction} onRespond={response => respond(interaction.key, response)} />)}
           </div>
         </If>
-        <If cond={error != null}><p className="whitespace-pre-wrap text-[11px] leading-5 text-danger">{error}</p></If>
+        <If cond={error != null}><p className="max-w-full whitespace-pre-wrap break-words text-[11px] leading-5 text-danger [overflow-wrap:anywhere]">{error}</p></If>
       </div>
       <div className="shrink-0 p-3">
         <div className="rounded-2xl border border-line bg-panel2 p-2 shadow-[0_8px_32px_rgba(0,0,0,0.12)] focus-within:border-accent/70">
           <textarea
             rows={4}
-            className="w-full resize-none bg-transparent px-2 py-1.5 text-xs leading-5 text-ink outline-none placeholder:text-muted"
+            className="w-full resize-none overflow-x-hidden bg-transparent px-2 py-1.5 text-xs leading-5 text-ink outline-none placeholder:text-muted"
             value={input}
             placeholder={t('studio.devtools.ai.placeholder')}
             aria-label={t('studio.devtools.ai.placeholder')}
@@ -531,7 +570,7 @@ function GlobalScopePicker({ manifest, selected, onToggle }: { manifest: DomainM
 }
 
 function AiBubble({ message }: { message: AiMessage }) {
-  return <div className={aiBubbleClass(message.role)}>{message.content}</div>
+  return <div className={aiBubbleClass(message.role)} dir="auto">{message.content}</div>
 }
 
 function isSuccessfulReceipt(status: string): boolean {
@@ -540,8 +579,8 @@ function isSuccessfulReceipt(status: string): boolean {
 
 function aiBubbleClass(role: AiMessage['role']) {
   if (role === 'user')
-    return 'ml-8 rounded-xl bg-accent px-3 py-2 text-xs leading-5 text-white'
-  return 'mr-4 whitespace-pre-wrap rounded-xl border border-line bg-panel2 px-3 py-2 text-xs leading-5 text-ink'
+    return 'ml-8 max-w-full whitespace-pre-wrap break-words rounded-xl bg-accent px-3 py-2 text-xs leading-5 text-white [overflow-wrap:anywhere]'
+  return 'mr-4 max-w-full whitespace-pre-wrap break-words rounded-xl border border-line bg-panel2 px-3 py-2 text-xs leading-5 text-ink [overflow-wrap:anywhere]'
 }
 
 function optionalValue(value?: string | null) {
@@ -794,7 +833,7 @@ function applySnapshot(
   setRunningCalls: (value: unknown[]) => void,
   setError: (value: string | null) => void,
 ) {
-  const projected = projectMessages(snapshot.nodes ?? [])
+  const projected = projectMessages(snapshot.nodes ?? [], snapshot.partial)
   if (projected.length > 0)
     setMessages(projected)
   setRunning(Boolean(snapshot.running))
@@ -821,13 +860,20 @@ function toolCallKey(call: unknown) {
   return String(call)
 }
 
-function projectMessages(nodes: unknown[]): AiMessage[] {
-  return projectTaskMessages(nodes)
+function projectMessages(nodes: unknown[], partial?: unknown): AiMessage[] {
+  return projectTaskMessages(nodes, partial)
 }
 
 function bridgeError(message: Mir3BridgeEnvelope) {
   const payload = message.payload as { code?: string, message?: string }
   return [payload.code, payload.message].filter(Boolean).join(': ')
+}
+
+function isRecoverableSessionStartupError(reason: string): boolean {
+  return reason.includes('PROJECT_SCOPE_')
+    || reason.includes('SESSION_NOT_FOUND')
+    || reason.includes('SESSION_BINDING')
+    || reason.includes('SYSTEM_SESSION_CREATE_FAILED')
 }
 
 interface PendingInteraction {

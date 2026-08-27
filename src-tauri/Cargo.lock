@@ -2802,7 +2802,7 @@ dependencies = [
 
 [[package]]
 name = "mir3-studio-ai"
-version = "0.9.18"
+version = "0.9.19"
 dependencies = [
  "arboard",
  "async-trait",

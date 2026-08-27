@@ -82,22 +82,36 @@ export function appendScopedUserRequest(context: string[], content: string): str
   ].join('\n')
 }
 
-/** 从 Harness Snapshot 节点投影会话展示消息，不在这里推断任务语义。 */
-export function projectTaskMessages(nodes: unknown[]): TaskSemanticMessage[] {
+/** 从 Harness Snapshot 只投影用户正文与助手文本，隐藏上下文、思考、工具调用和工具结果。 */
+export function projectTaskMessages(nodes: unknown[], partial?: unknown): TaskSemanticMessage[] {
   const messages: TaskSemanticMessage[] = []
   nodes.forEach((node, index) => {
-    if (!node || typeof node !== 'object')
+    const record = asRecord(node)
+    if (!record)
       return
-    const record = node as Record<string, unknown>
-    const content = nodeTextContent(record.content ?? record.text ?? record.message)
+    const role = conversationRole(record)
+    if (!role)
+      return
+    const content = role === 'user'
+      ? userMessageText(record)
+      : assistantMessageText(record)
     if (!content)
       return
     messages.push({
       id: String(record.id ?? `node-${index}`),
-      role: record.role === 'user' ? 'user' : 'assistant',
+      role,
       content,
     })
   })
+  const partialRecord = asRecord(partial)
+  const partialContent = assistantBlocksText(partialRecord?.blocks)
+  if (partialContent) {
+    messages.push({
+      id: `partial-${String(partialRecord?.turn ?? 'turn')}-${String(partialRecord?.step ?? 'step')}`,
+      role: 'assistant',
+      content: partialContent,
+    })
+  }
   return messages
 }
 
@@ -353,6 +367,37 @@ function nodeTextContent(value: unknown): string {
     return nodeTextContent(record.text ?? record.content ?? record.value)
   }
   return ''
+}
+
+function conversationRole(record: Record<string, unknown>): 'user' | 'assistant' | null {
+  if (record.kind === 'user' || record.role === 'user' || record.type === 'user/message')
+    return 'user'
+  if (record.kind === 'assistant' || record.role === 'assistant' || record.type === 'assistant/message')
+    return 'assistant'
+  return null
+}
+
+function userMessageText(record: Record<string, unknown>): string {
+  const content = nodeTextContent(record.content ?? record.text ?? record.message)
+  return markedUserRequest(content) ?? content
+}
+
+function assistantMessageText(record: Record<string, unknown>): string {
+  if (Array.isArray(record.blocks))
+    return assistantBlocksText(record.blocks)
+  return nodeTextContent(record.content ?? record.text ?? record.message)
+}
+
+function assistantBlocksText(value: unknown): string {
+  if (!Array.isArray(value))
+    return ''
+  return value.flatMap((block) => {
+    const record = asRecord(block)
+    if (!record || (record.kind !== 'text' && record.type !== 'text'))
+      return []
+    const content = nodeTextContent(record.text ?? record.content)
+    return content ? [content] : []
+  }).join('\n').trim()
 }
 
 function parseSource(value: unknown): GlobalTaskHandoff['source'] | null {

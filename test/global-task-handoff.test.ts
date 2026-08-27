@@ -39,6 +39,37 @@ const ALL_SYSTEMS = [
 ]
 
 describe('global task semantic handoff', () => {
+  it('projects only user requests and assistant text while hiding internal runtime nodes', () => {
+    const userRequest = '只读列出当前地图系统相关文件，不要修改任何文件'
+    const messages = projectTaskMessages([
+      { kind: 'context', content: '[MIR3 System Scope] private runtime context' },
+      { kind: 'user', content: appendScopedUserRequest(['[MIR3 System Scope] scopeToken=secret'], userRequest) },
+      { kind: 'tool-result', content: JSON.stringify({ rows: [{ path: '引擎/Mir200/Envir/Data/cfg_mapinfo.xls' }] }) },
+      {
+        kind: 'assistant',
+        blocks: [
+          { kind: 'thinking', text: 'internal reasoning' },
+          { kind: 'text', text: '已找到地图配置与地图脚本。' },
+          { kind: 'tool-call', text: 'mir3_resource_query payload' },
+        ],
+      },
+    ], {
+      turn: 2,
+      step: 1,
+      blocks: [{ kind: 'text', text: '正在整理文件列表…' }],
+    })
+
+    expect(messages).toEqual([
+      { id: 'node-1', role: 'user', content: userRequest },
+      { id: 'node-3', role: 'assistant', content: '已找到地图配置与地图脚本。' },
+      { id: 'partial-2-1', role: 'assistant', content: '正在整理文件列表…' },
+    ])
+    expect(JSON.stringify(messages)).not.toContain('scopeToken')
+    expect(JSON.stringify(messages)).not.toContain('cfg_mapinfo.xls')
+    expect(JSON.stringify(messages)).not.toContain('internal reasoning')
+    expect(JSON.stringify(messages)).not.toContain('mir3_resource_query payload')
+  })
+
   it('keeps credentials and raw assistant chat out of the real scoped-prompt semantic pipeline', () => {
     const systemScopeToken = 'scope-secret-system-123'
     const toolScopeToken = 'scope-secret-tool-456'

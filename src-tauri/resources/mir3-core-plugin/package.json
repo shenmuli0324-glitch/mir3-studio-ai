@@ -1,7 +1,7 @@
 {
   "name": "@mir3-studio/dsh-mir3-core",
   "type": "module",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "MIR3 Studio Harness compatibility adapter and archived system-session bridge",
   "exports": {
     ".": {

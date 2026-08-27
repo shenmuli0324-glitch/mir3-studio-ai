@@ -4,7 +4,7 @@ import vm from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 import { developmentWriteViolation, isGlobalSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
 import { BridgeSequenceRegistry } from '../src/features/projects/bridge-sequence'
-import { connectHarnessBridge, subscribeHarnessBridge } from '../src/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, subscribeHarnessBridge } from '../src/features/projects/workspace-bridge'
 
 describe('bridge protocol v2 sequence contract', () => {
   it('keeps independent request and response sequences strictly monotonic per session', () => {
@@ -60,6 +60,82 @@ describe('bridge protocol v2 sequence contract', () => {
     messageListener?.({ origin: 'http://127.0.0.1:3081', source: contentWindow, data: { ...valid, sequence: 3 } } as MessageEvent)
     expect(received).toEqual(['mir3/systemSession.snapshot', 'mir3/systemSession.snapshot'])
     unsubscribe()
+    disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('acknowledges the active project over the MessagePort before system AI starts', async () => {
+    const requests: any[] = []
+    let pluginPort: MessagePort | null = null
+    vi.stubGlobal('window', {
+      addEventListener() {},
+      removeEventListener() {},
+      setTimeout,
+      clearTimeout,
+    })
+    const contentWindow = {
+      postMessage(_message: unknown, _origin: string, ports: MessagePort[]) {
+        pluginPort = ports[0]
+        pluginPort.addEventListener('message', (event) => {
+          const request = event.data
+          requests.push(request)
+          if (request.type !== 'mir3/project.activate')
+            return
+          pluginPort?.postMessage({
+            source: 'mir3-core-plugin',
+            protocolVersion: 2,
+            type: 'mir3/project.activated',
+            requestId: request.requestId,
+            projectId: request.projectId,
+            systemId: request.systemId,
+            taskId: request.taskId,
+            sessionId: request.sessionId,
+            sequence: 1,
+            payload: { workspaceId: 'workspace-project-1', canonicalPath: '/project' },
+          })
+        })
+        pluginPort.start()
+        pluginPort.postMessage({
+          source: 'mir3-core-plugin',
+          protocolVersion: 2,
+          type: 'mir3/plugin.ready',
+          requestId: 'ready-project-test',
+          projectId: '',
+          systemId: '',
+          taskId: '',
+          sessionId: '',
+          sequence: 1,
+          payload: { protocolVersion: 2 },
+        })
+      },
+    }
+    const iframeRef = {
+      current: { src: 'http://127.0.0.1:3081/workbench', contentWindow },
+    } as unknown as RefObject<HTMLIFrameElement | null>
+    const project = {
+      id: 'project-1',
+      name: 'Project 1',
+      root: '/project',
+      clientRoot: '/project/客户端',
+      engineRoot: '/project/引擎',
+      activeWorkspaceRoot: '/project',
+      status: 'valid' as const,
+      warnings: [],
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const disconnect = connectHarnessBridge(iframeRef)
+    expect(bootstrapHarnessBridge(iframeRef)).toBe(true)
+
+    await ensureHarnessProjectActive(project)
+    await ensureHarnessProjectActive(project)
+
+    expect(requests.filter(request => request.type === 'mir3/project.activate')).toHaveLength(1)
+    expect(requests.find(request => request.type === 'mir3/project.activate')).toMatchObject({
+      projectId: 'project-1',
+      payload: { projectRoot: '/project', workspaceRoot: '/project', startSession: false },
+    })
+    pluginPort?.close()
     disconnect()
     vi.unstubAllGlobals()
   })
@@ -355,7 +431,7 @@ function loadCoreClientHarness() {
     sessions: {
       async create(options: { sessionId: string, cwd?: string }) {
         calls.push(`session.create:${options.sessionId}:${options.cwd ? 'cwd' : 'workspace'}`)
-        return { ok: true, value: {} }
+        return options.sessionId
       },
       binding() {
         return { session }
