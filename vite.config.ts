@@ -15,6 +15,12 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Node 22 无法从 react-use 的 CommonJS 入口合成 useMount 等命名导出。
+  // 测试服务端需连同上层 React 工具库一起转换，保持与桌面 Vite 构建一致。
+  ssr: {
+    noExternal: ['@hairy/react-lib', 'react-use'],
+  },
+
   // Vite options tailored for Tauri development.
   // 1. prevent vite from obscuring rust errors
   clearScreen: false,
