@@ -40,6 +40,18 @@ describe('33-system simplified workspace contract', () => {
     expect(view).toContain('file.ownership === \'shared\'')
   })
 
+  it('does not evaluate XLS rows before a sheet has loaded', () => {
+    const view = source('src/features/devtools/domain/domain-system-view.tsx')
+    const loadingGuard = view.indexOf('if (sheetLoading)')
+    const missingGuard = view.indexOf('if (sheetError || !sheet)')
+    const preview = view.indexOf('xlsTsvPreview(sheet)')
+
+    expect(loadingGuard).toBeGreaterThan(-1)
+    expect(missingGuard).toBeGreaterThan(loadingGuard)
+    expect(preview).toBeGreaterThan(missingGuard)
+    expect(view).not.toContain('xlsTsvPreview(sheet!)')
+  })
+
   it('keeps owned-selector evidence in every domain package', () => {
     const packRoot = new URL('src-tauri/resources/mir3-domain-packs/', root)
     const registry = JSON.parse(source('src-tauri/resources/mir3-domain-packs/registry.json')) as {

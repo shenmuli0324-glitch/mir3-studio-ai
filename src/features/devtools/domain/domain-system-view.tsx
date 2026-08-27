@@ -448,6 +448,10 @@ function XlsSourcePreview({ file, workbook, workbookLoading, workbookError, shee
     return <CenteredNotice title={t('studio.devtools.source.xls_loading')} description={file.path} />
   if (workbookError || !workbook)
     return <CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(workbookError ?? '')} />
+  if (sheetLoading)
+    return <CenteredNotice title={t('studio.devtools.source.xls_sheet_loading')} description={sheetName} />
+  if (sheetError || !sheet)
+    return <CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(sheetError ?? '')} />
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-canvas">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">
@@ -461,13 +465,9 @@ function XlsSourcePreview({ file, workbook, workbookLoading, workbookError, shee
           </select>
         </If>
       </header>
-      <If cond={!sheetLoading} else={<CenteredNotice title={t('studio.devtools.source.xls_sheet_loading')} description={sheetName} />}>
-        <If cond={!sheetError && sheet != null} else={<CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(sheetError ?? '')} />}>
-          <div className="min-h-0 flex-1 overflow-auto">
-            <pre className="min-w-max whitespace-pre p-4 font-mono text-[11px] leading-5 text-ink">{xlsTsvPreview(sheet!)}</pre>
-          </div>
-        </If>
-      </If>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <pre className="min-w-max whitespace-pre p-4 font-mono text-[11px] leading-5 text-ink">{xlsTsvPreview(sheet)}</pre>
+      </div>
     </div>
   )
 }
