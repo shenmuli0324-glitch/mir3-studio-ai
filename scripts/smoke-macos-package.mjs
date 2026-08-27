@@ -148,13 +148,15 @@ function assertRetiredSystemPluginMigrated(root) {
   const manifest = JSON.parse(readFileSync(profilePath, 'utf8'))
   const dependencies = manifest.dependencies ?? {}
   const bundles = manifest.dsh?.profile?.bundles
+  const patch = readFileSync(join(root, 'profiles', 'web', 'cordis.patch.yml'), 'utf8')
   if (Object.hasOwn(dependencies, retiredSystemPlugin)
     || !Object.hasOwn(dependencies, currentSystemPlugin)
     || !Array.isArray(bundles)
     || !bundles.includes('@deepseek-ai/dsh-base')
     || !bundles.includes('@deepseek-ai/dsh-web-app')
-    || !bundles.includes(currentSystemPlugin)
-    || bundles.includes(retiredSystemPlugin)) {
+    || bundles.includes(currentSystemPlugin)
+    || bundles.includes(retiredSystemPlugin)
+    || !patch.includes(`name: '${currentSystemPlugin}'`)) {
     throw new Error(`Legacy system plugin profile was not migrated: ${profilePath}`)
   }
 }
