@@ -58,7 +58,7 @@ interface Mir3PluginMessage {
     protocolVersion?: number
     code?: string
     message?: string
-    capabilities?: { sessions?: boolean, workspaces?: boolean, archive?: boolean, snapshot?: boolean, pendingInteraction?: boolean, globalSession?: boolean, ordinarySessionCanary?: boolean }
+    capabilities?: { sessions?: boolean, workspaces?: boolean, archive?: boolean, snapshot?: boolean, pendingInteraction?: boolean, globalSession?: boolean, ordinarySessionCanary?: boolean, projectScope?: boolean }
   }
 }
 
@@ -344,27 +344,45 @@ function passesCoreCanary(payload: Mir3PluginMessage['payload']): boolean {
     && capabilities.pendingInteraction === true
     && capabilities.globalSession === true
     && capabilities.ordinarySessionCanary === true
+    && capabilities.projectScope === true
 }
 
 async function runCoreCanary() {
-  const [systems, diagnostics] = await Promise.all([
+  const [systems, diagnostics, project] = await Promise.all([
     invoke<Array<{ systemId?: string }>>('domain_system_list'),
     invoke<{ dataRoot: string, mcpBinary?: string | null }>('diagnostics_get'),
+    invoke<Mir3Project | null>('project_get_active'),
   ])
   if (systems.length !== 33 || new Set(systems.map(system => system.systemId)).size !== 33)
     throw new Error(`DOMAIN_REGISTRY_CANARY_FAILED: expected 33 unique systems, received ${systems.length}`)
   if (!diagnostics.mcpBinary)
     throw new Error('MCP_CANARY_FAILED: MIR3 MCP sidecar is unavailable')
+  if (!project)
+    throw new Error('PROJECT_SCOPE_UNAVAILABLE: activate a MIR3 project before running the Core canary')
+  const activation = await requestCanary(
+    'mir3/project.activate',
+    project.id,
+    '__project__',
+    'project-activation-canary',
+    '',
+    {
+      projectRoot: project.root,
+      workspaceRoot: project.activeWorkspaceRoot,
+      startSession: false,
+    },
+  )
+  if (activation.type !== 'mir3/project.activated')
+    throw new Error(`PROJECT_SCOPE_ACTIVATION_FAILED: ${bridgeErrorMessage(activation.payload)}`)
   await invoke('core_mcp_canary_run')
-  await runOrdinarySessionCanary(diagnostics.dataRoot)
-  await runSystemSessionCanary(diagnostics.dataRoot)
+  await runOrdinarySessionCanary(project.id, project.activeWorkspaceRoot)
+  await runSystemSessionCanary(project.id, project.activeWorkspaceRoot)
 }
 
-async function runOrdinarySessionCanary(cwd: string) {
+async function runOrdinarySessionCanary(projectId: string, cwd: string) {
   const nonce = bridgeRequestId()
   const response = await requestCanary(
     'mir3/bridge.ordinarySessionCanary',
-    '__mir3_core_canary__',
+    projectId,
     'kernel',
     'mir3-core-ordinary-session-canary',
     '',
@@ -375,8 +393,7 @@ async function runOrdinarySessionCanary(cwd: string) {
     throw new Error('ORDINARY_SESSION_CANARY_FAILED: Harness ordinary Session is unavailable or was marked as managed')
 }
 
-async function runSystemSessionCanary(cwd: string) {
-  const projectId = '__mir3_core_canary__'
+async function runSystemSessionCanary(projectId: string, cwd: string) {
   const systemId = 'map'
   const taskId = 'mir3-core-bridge-v2-canary'
   const sessionId = 'mir3-system-core-bridge-v2-canary'

@@ -46,7 +46,7 @@ export function useMir3Projects() {
     onSuccess: async (project) => {
       queryClient.setQueryData(['mir3-active-project'], project)
       await invalidateProjectQueries(queryClient)
-      restartHarnessAfterProjectChange()
+      await restartHarnessAfterProjectChange()
     },
   })
 
@@ -77,7 +77,7 @@ export function useMir3Projects() {
         queryClient.setQueryData(['mir3-active-project'], null)
       await invalidateProjectQueries(queryClient)
       if (wasActive)
-        restartHarnessAfterProjectChange()
+        await restartHarnessAfterProjectChange()
     },
   })
 
@@ -88,7 +88,7 @@ export function useMir3Projects() {
         return null
       const project = await invoke<Mir3Project>('project_relink', { projectId, path })
       if (active.data?.id === projectId)
-        restartHarnessAfterProjectChange()
+        await restartHarnessAfterProjectChange()
       return project
     },
     onSuccess: () => invalidateProjectQueries(queryClient),
@@ -118,10 +118,14 @@ export function useMir3Projects() {
   }
 }
 
-function restartHarnessAfterProjectChange() {
-  void store.harness.restart().catch((error) => {
+async function restartHarnessAfterProjectChange() {
+  try {
+    await store.harness.restart()
+  }
+  catch (error) {
     console.error('[MIR3 project] Harness restart failed after project change:', error)
-  })
+    throw error
+  }
 }
 
 export async function invalidateProjectQueries(queryClient: ReturnType<typeof useQueryClient>) {

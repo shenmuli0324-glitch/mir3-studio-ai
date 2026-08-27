@@ -1,3 +1,4 @@
+mod project_scope;
 pub mod status;
 pub mod utils;
 pub(crate) mod win_inspector;
@@ -524,6 +525,10 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     // 第一方 MIR3 插件、Skill 与项目绑定 MCP 为产品能力，启动前幂等安装；
     // 不进入可跳过的社区预装流程。
     crate::service::plugin::system::ensure(&app_handle)?;
+    let project_service = app_handle.state::<crate::service::project::ProjectService>();
+    let projects = project_service.store().list_projects()?;
+    let active_project = project_service.store().active_project()?;
+    project_scope::prepare(&dsh_home, &projects, active_project.as_ref())?;
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert(
         config::core_compat::CORE_HOME_ENV.to_string(),
@@ -536,11 +541,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
         "MIR3_STUDIO_HOME".to_string(),
         dsh_home.to_string_lossy().into_owned(),
     );
-    if let Some(project) = app_handle
-        .state::<crate::service::project::ProjectService>()
-        .store()
-        .active_project()?
-    {
+    if let Some(project) = active_project {
         envs.insert("MIR3_ACTIVE_PROJECT_ID".to_string(), project.id);
         envs.insert("MIR3_ACTIVE_PROJECT_ROOT".to_string(), project.root);
         envs.insert(

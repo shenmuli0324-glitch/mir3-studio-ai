@@ -170,10 +170,14 @@ fn validate_output(stdout: &str) -> Result<CoreMcpCanaryReport, String> {
         || system_list
             .pointer("/result/structuredContent/systems")
             .and_then(Value::as_array)
-            .is_none_or(|systems| systems.len() != 33)
+            .is_none_or(|systems| {
+                systems.len() != 1
+                    || systems[0].get("systemId").and_then(Value::as_str) != Some("level")
+            })
     {
         return Err(
-            "CORE_MCP_CANARY_TOOL_FAILED: mir3_system_list did not return 33 systems".to_string(),
+            "CORE_MCP_CANARY_TOOL_FAILED: mir3_system_list did not enforce the level-only scope"
+                .to_string(),
         );
     }
     let capability = response(&responses, 2)?;

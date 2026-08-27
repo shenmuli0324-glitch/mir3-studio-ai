@@ -59,6 +59,88 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       let bridgePort = null
+      let activeProject = null
+      const originalWorkspaceMethods = wrapWorkspaceBoundary()
+      const originalSessionCreate = ctx.sessions.create.bind(ctx.sessions)
+      ctx.sessions.create = async (options = {}) => {
+        requireActiveSessionTarget(options)
+        return originalSessionCreate(options)
+      }
+
+      function wrapWorkspaceBoundary() {
+        const methods = {}
+        for (const method of ['create', 'pickDirectory', 'listDirectory', 'createDirectory', 'openPath']) {
+          if (typeof ctx.workspaces?.[method] === 'function')
+            methods[method] = ctx.workspaces[method].bind(ctx.workspaces)
+        }
+        if (methods.create) {
+          ctx.workspaces.create = async (input) => {
+            requireProjectPath(input?.path)
+            return methods.create(input)
+          }
+        }
+        if (methods.pickDirectory) {
+          ctx.workspaces.pickDirectory = async () => {
+            requireActiveProject()
+            const selected = await methods.pickDirectory()
+            if (selected != null)
+              requireProjectPath(selected)
+            return selected
+          }
+        }
+        if (methods.listDirectory) {
+          ctx.workspaces.listDirectory = async (path, signal) => {
+            const target = path ?? requireActiveProject().projectRoot
+            requireProjectPath(target)
+            return methods.listDirectory(target, signal)
+          }
+        }
+        if (methods.createDirectory) {
+          ctx.workspaces.createDirectory = async (path, name) => {
+            requireProjectPath(path)
+            return methods.createDirectory(path, name)
+          }
+        }
+        if (methods.openPath) {
+          ctx.workspaces.openPath = async (path) => {
+            requireProjectPath(path)
+            return methods.openPath(path)
+          }
+        }
+        return methods
+      }
+
+      function requireActiveProject(request) {
+        if (!activeProject)
+          throw new Error('PROJECT_SCOPE_UNAVAILABLE: activate a MIR3 project before starting development')
+        if (request?.projectId && request.projectId !== activeProject.projectId)
+          throw new Error('PROJECT_SCOPE_MISMATCH: request belongs to another MIR3 project')
+        return activeProject
+      }
+
+      function requireProjectPath(path, request) {
+        const project = requireActiveProject(request)
+        if (typeof path !== 'string' || !isWithinPath(project.projectRoot, path))
+          throw new Error('PROJECT_PATH_OUTSIDE_SCOPE: development paths must stay inside the active MIR3 project')
+        return path
+      }
+
+      function requireActiveSessionTarget(options, request) {
+        const project = requireActiveProject(request)
+        if (typeof options.cwd === 'string') {
+          requireProjectPath(options.cwd, request)
+          return
+        }
+        if (typeof options.workspaceId !== 'string')
+          throw new Error('SESSION_SCOPE_UNAVAILABLE: cwd or a project Workspace is required')
+        const workspace = ctx.workspaces
+          ?.list
+          ?.getSnapshot?.()
+          .items
+          ?.find(item => item.workspaceId === options.workspaceId)
+        if (!workspace || !isWithinPath(project.projectRoot, workspace.path))
+          throw new Error('SESSION_WORKSPACE_OUTSIDE_SCOPE: Session Workspace must belong to the active MIR3 project')
+      }
 
       function post(type, request, payload) {
         const message = {
@@ -117,14 +199,22 @@ window.__ModuleLoader__.load({
             pendingInteraction: true,
             globalSession: typeof ctx.sessions?.open === 'function',
             ordinarySessionCanary: typeof ctx.sessions?.create === 'function' && typeof ctx.workspaces?.archiveSession === 'function',
+            projectScope: true,
           },
         })
       }
 
       async function activateProject(request) {
         const payload = request.payload || {}
-        if (typeof payload.workspaceRoot !== 'string')
-          throw new Error('PROJECT_MESSAGE_INVALID: workspaceRoot is required')
+        if (typeof payload.projectRoot !== 'string' || typeof payload.workspaceRoot !== 'string')
+          throw new Error('PROJECT_MESSAGE_INVALID: projectRoot and workspaceRoot are required')
+        if (!isWithinPath(payload.projectRoot, payload.workspaceRoot))
+          throw new Error('PROJECT_WORKSPACE_OUTSIDE_SCOPE: workspaceRoot must be inside projectRoot')
+        activeProject = {
+          projectId: request.projectId,
+          projectRoot: normalizePath(payload.projectRoot),
+          workspaceRoot: normalizePath(payload.workspaceRoot),
+        }
         const workspace = await ctx.workspaces.create({ path: payload.workspaceRoot })
         if (payload.startSession !== false)
           ctx.workspaces.startSession(workspace.workspaceId)
@@ -139,6 +229,7 @@ window.__ModuleLoader__.load({
         const sessionId = String(payload.sessionId || '')
         if (!sessionId.startsWith('harness-canary-') || isSystemSessionId(sessionId) || isGlobalSessionId(sessionId) || typeof payload.cwd !== 'string')
           throw new Error('ORDINARY_SESSION_CANARY_INVALID: an unreserved canary sessionId and cwd are required')
+        requireActiveProject(request)
         requireResult(await ctx.sessions.create({ cwd: payload.cwd, sessionId }), 'ORDINARY_SESSION_CANARY_CREATE_FAILED')
         let openError = null
         try {
@@ -165,6 +256,7 @@ window.__ModuleLoader__.load({
         if (!isSystemSessionId(request.sessionId) || typeof payload.cwd !== 'string')
           throw new Error('SYSTEM_SESSION_INVALID: sessionId and cwd are required')
         requireScopedIdentity(request)
+        requireProjectPath(payload.cwd, request)
         if (sessionPreparations.has(request.sessionId))
           throw new Error('SYSTEM_SESSION_CREATE_IN_PROGRESS: session is already being prepared')
         sessionPreparations.add(request.sessionId)
@@ -198,6 +290,7 @@ window.__ModuleLoader__.load({
 
       async function resumeSystemSession(request) {
         requireScopedIdentity(request)
+        requireActiveProject(request)
         if (sessionPreparations.has(request.sessionId))
           throw new Error('SYSTEM_SESSION_PREPARATION_IN_PROGRESS: session is not archived and ready yet')
         sessionPreparations.add(request.sessionId)
@@ -302,6 +395,7 @@ window.__ModuleLoader__.load({
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
         requireScopedIdentity(request)
+        requireProjectPath(payload.cwd, request)
         claimSessionOwner(request)
         const workspace = await ctx.workspaces.create({ path: payload.cwd })
         const globalSessionId = request.sessionId
@@ -326,6 +420,7 @@ window.__ModuleLoader__.load({
         if (!isGlobalSessionId(request.sessionId))
           throw new Error('GLOBAL_SESSION_SCOPE_UNVERIFIED: reserved Studio global session id is required')
         requireScopedIdentity(request)
+        requireActiveProject(request)
         try {
           claimSessionOwner(request)
           const session = requireSession(request.sessionId)
@@ -514,7 +609,43 @@ window.__ModuleLoader__.load({
         recoverableSystemSessions.clear()
         inboundSequences.clear()
         outboundSequences.clear()
+        ctx.sessions.create = originalSessionCreate
+        for (const [method, original] of Object.entries(originalWorkspaceMethods))
+          ctx.workspaces[method] = original
+        activeProject = null
       }
+    }
+
+    function normalizePath(value) {
+      const source = String(value).replace(/\\/g, '/')
+      const drive = source.match(/^([a-z]:)\//i)?.[1] ?? null
+      const unc = !drive && source.startsWith('//')
+      if (!drive && !unc && !source.startsWith('/'))
+        return null
+      const prefix = drive ? `${drive}/` : unc ? '//' : '/'
+      const offset = drive ? drive.length + 1 : unc ? 2 : 1
+      const parts = []
+      for (const part of source.slice(offset).split('/')) {
+        if (!part || part === '.')
+          continue
+        if (part === '..') {
+          if (parts.length === 0)
+            return null
+          parts.pop()
+          continue
+        }
+        parts.push(part)
+      }
+      const normalized = `${prefix}${parts.join('/')}`.replace(/\/$/, '') || prefix
+      return drive || unc ? normalized.toLowerCase() : normalized
+    }
+
+    function isWithinPath(root, candidate) {
+      const normalizedRoot = normalizePath(root)
+      const normalizedCandidate = normalizePath(candidate)
+      const descendantPrefix = normalizedRoot === '/' ? '/' : `${normalizedRoot}/`
+      return Boolean(normalizedRoot && normalizedCandidate
+        && (normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(descendantPrefix)))
     }
 
     function projectSnapshot(snapshot, request) {

@@ -1,5 +1,12 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.1.0 - 2026-08-27
+
+- 将 Harness 工作区、普通会话、全局会话和 Agent 运行记录绑定到当前 Studio 项目；切换项目后只恢复对应项目的数据槽。
+- 使用 Harness 公共 Workspace/Session 服务限制目录选择、工作区创建、Session cwd 和路径操作，拒绝当前项目根之外的开发入口。
+- 服务端对所有 Session 执行 cwd 校验，并拒绝普通 Harness 会话写入当前项目之外；系统/全局会话继续强制通过 MIR3 MCP Draft 修改项目。
+- 插件、模型、凭证、Profile 与明确的全局设置继续共享，不随项目运行数据槽复制。
+
 ## 1.0.6 - 2026-08-27
 
 - 增加一次性 `MessagePort` 桥接，在 macOS Tauri 不透明 origin 下仍保持专用双向通道，恢复 Bridge v2、系统会话和候选 canary。

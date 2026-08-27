@@ -62,12 +62,15 @@ export function App() {
 
   useEffect(() => {
     restoreGlobalTasks()
-    function showGlobalWorkbench() {
+    function showGlobalWorkbench(event: Event) {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail
+      if (!detail?.projectId || detail.projectId !== activeProject?.id)
+        return
       setShellState(value => ({ ...value, activeView: 'workbench' }))
     }
     window.addEventListener(GLOBAL_WORKBENCH_EVENT, showGlobalWorkbench)
     return () => window.removeEventListener(GLOBAL_WORKBENCH_EVENT, showGlobalWorkbench)
-  }, [])
+  }, [activeProject?.id])
 
   useEffect(() => {
     // 项目数据来自 Tauri Query；同步进壳层状态以保证顶栏、页面和工作台使用同一快照。
@@ -135,7 +138,8 @@ export function App() {
     const unsubscribe = subscribeHarnessBridge((message) => {
       if (message.type === 'mir3/plugin.ready' || message.type === 'mir3/bridge.description') {
         for (const task of registeredGlobalTasks()) {
-          void recoverAndResumeGlobalTask(task)
+          if (task.projectId === activeProject?.id)
+            void recoverAndResumeGlobalTask(task)
         }
         return
       }

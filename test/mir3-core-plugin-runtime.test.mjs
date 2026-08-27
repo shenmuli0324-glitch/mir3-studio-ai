@@ -21,6 +21,26 @@ describe('mir3 Core Plugin public runtime contract', () => {
     expect(opaque.messages).toHaveLength(0)
   })
 
+  it('rejects Workspace and Session targets outside the activated project', async () => {
+    const runtime = loadAdapter()
+    const context = createHarnessContext({ calls: [], sessions: new Map() })
+    runtime.plugin.apply(context)
+    await runtime.send(request('mir3/bridge.describe', 1))
+
+    await expect(
+      context.workspaces.create({ path: '/tmp/foreign-project' }),
+    ).rejects.toThrow('PROJECT_PATH_OUTSIDE_SCOPE')
+    await expect(
+      context.workspaces.create({ path: '/tmp/mir3-runtime/../foreign-project' }),
+    ).rejects.toThrow('PROJECT_PATH_OUTSIDE_SCOPE')
+    await expect(
+      context.sessions.create({ cwd: '/tmp/foreign-project', sessionId: 'session-foreign' }),
+    ).rejects.toThrow('PROJECT_PATH_OUTSIDE_SCOPE')
+    await expect(
+      context.workspaces.listDirectory('/tmp/foreign-project'),
+    ).rejects.toThrow('PROJECT_PATH_OUTSIDE_SCOPE')
+  })
+
   it('runs ordinary, system, and global Session flows through the real adapter', async () => {
     const runtime = loadAdapter()
     const calls = []
@@ -377,6 +397,7 @@ function loadAdapter(referrer = 'https://studio.mir3.test/workbench') {
   let descriptor
   let listener
   let removed = false
+  let activated = false
   const parent = {
     postMessage(message, origin) {
       messages.push({ ...message, postedOrigin: origin })
@@ -416,6 +437,27 @@ function loadAdapter(referrer = 'https://studio.mir3.test/workbench') {
     messages,
     plugin,
     async send(data, overrides = {}) {
+      if (!activated
+        && data.type !== 'mir3/project.activate'
+        && (overrides.origin === undefined || overrides.origin === 'https://studio.mir3.test')
+        && (overrides.source === undefined || overrides.source === parent)) {
+        listener({
+          data: request('mir3/project.activate', 1, {
+            payload: {
+              projectRoot: '/tmp/mir3-runtime',
+              workspaceRoot: '/tmp/mir3-runtime',
+              startSession: false,
+            },
+            sessionId: '',
+            systemId: '__project__',
+            taskId: 'project-activation',
+          }),
+          origin: 'https://studio.mir3.test',
+          source: parent,
+        })
+        activated = true
+        await new Promise(resolve => setImmediate(resolve))
+      }
       listener({
         data,
         origin: overrides.origin ?? 'https://studio.mir3.test',
@@ -428,6 +470,7 @@ function loadAdapter(referrer = 'https://studio.mir3.test/workbench') {
 
 function createHarnessContext({ calls, sessions }) {
   let workspaceSequence = 0
+  const workspaces = []
   return {
     sessions: {
       binding(sessionId) {
@@ -445,13 +488,24 @@ function createHarnessContext({ calls, sessions }) {
       },
     },
     workspaces: {
+      list: {
+        getSnapshot() {
+          return { items: workspaces }
+        },
+      },
       async archiveSession(sessionId) {
         calls.push(['archive', sessionId])
+      },
+      async listDirectory(path) {
+        calls.push(['workspace-list-directory', path])
+        return { path, entries: [] }
       },
       async create({ path }) {
         workspaceSequence += 1
         calls.push(['workspace-create', path])
-        return { path, workspaceId: `workspace-${workspaceSequence}` }
+        const workspace = { path, workspaceId: `workspace-${workspaceSequence}` }
+        workspaces.push(workspace)
+        return workspace
       },
       startSession(workspaceId) {
         calls.push(['workspace-start', workspaceId])

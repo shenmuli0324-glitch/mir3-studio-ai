@@ -45,7 +45,28 @@ function managedWriteViolation(projectRoot, session, target) {
   return null
 }
 
+function sessionScopeViolation(projectRoot, session) {
+  if (!projectRoot || !session?.header?.cwd)
+    return 'MIR3_PROJECT_SCOPE_UNAVAILABLE'
+  if (!isWithin(projectRoot, session.header.cwd))
+    return 'MIR3_PROJECT_SESSION_OUTSIDE_SCOPE'
+  return null
+}
+
+function developmentWriteViolation(projectRoot, session, target) {
+  const sessionViolation = sessionScopeViolation(projectRoot, session)
+  if (sessionViolation)
+    return sessionViolation
+  const path = targetPath(target)
+  if (path && !isWithin(projectRoot, path))
+    return 'MIR3_PROJECT_WRITE_OUTSIDE_SCOPE'
+  if (isMir3ManagedSession(session) && path && isWithin(projectRoot, path))
+    return 'MIR3_SYSTEM_SESSION_DRAFT_REQUIRED'
+  return null
+}
+
 export {
+  developmentWriteViolation,
   GLOBAL_SESSION_PREFIX,
   isGlobalSession,
   isMir3ManagedSession,
@@ -53,5 +74,6 @@ export {
   isSystemSession,
   isWithin,
   managedWriteViolation,
+  sessionScopeViolation,
   SYSTEM_SESSION_PREFIX,
 }

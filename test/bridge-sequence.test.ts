@@ -2,7 +2,7 @@ import type { RefObject } from 'react'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
-import { isGlobalSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
+import { developmentWriteViolation, isGlobalSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
 import { BridgeSequenceRegistry } from '../src/features/projects/bridge-sequence'
 import { connectHarnessBridge, subscribeHarnessBridge } from '../src/features/projects/workspace-bridge'
 
@@ -134,7 +134,7 @@ describe('bridge protocol v2 sequence contract', () => {
     harness.send(create, { source: {} })
     harness.send({ ...create, payload: undefined, sequence: 2, __omitPayload: true })
     await flushTasks()
-    expect(harness.posts.filter(message => message.type !== 'mir3/plugin.ready')).toEqual([])
+    expect(harness.posts.filter(message => message.type !== 'mir3/plugin.ready' && message.type !== 'mir3/project.activated')).toEqual([])
 
     harness.send(create)
     await flushTasks()
@@ -255,6 +255,9 @@ describe('mir3 managed-session policy', () => {
     expect(managedWriteViolation('/project', { id: 'global-1', header: { cwd: '/outside' } }, { path: '/tmp/scratch.txt' })).toBe('MIR3_SYSTEM_SESSION_SCOPE_UNAVAILABLE')
     expect(managedWriteViolation('/project', { id: 'mir3-system-1', header: { cwd: '/project' } }, { path: '/tmp/scratch.txt' })).toBeNull()
     expect(managedWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/project/Data/config.json' })).toBeNull()
+    expect(sessionScopeViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/outside' } })).toBe('MIR3_PROJECT_SESSION_OUTSIDE_SCOPE')
+    expect(developmentWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/outside/file.txt' })).toBe('MIR3_PROJECT_WRITE_OUTSIDE_SCOPE')
+    expect(developmentWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/project/file.txt' })).toBeNull()
   })
 })
 
@@ -301,7 +304,8 @@ function loadCoreClientHarness() {
   const parent = {
     postMessage(message: PostedMessage) {
       posts.push(message)
-      calls.push(`post:${message.type}`)
+      if (message.type !== 'mir3/project.activated')
+        calls.push(`post:${message.type}`)
     },
   }
   const session = {
@@ -359,6 +363,11 @@ function loadCoreClientHarness() {
       open() {},
     },
     workspaces: {
+      list: {
+        getSnapshot() {
+          return { items: [{ workspaceId: 'workspace-1', path: '/project' }] }
+        },
+      },
       async archiveSession(sessionId: string) {
         calls.push(`workspace.archive:${sessionId}`)
       },
@@ -371,6 +380,22 @@ function loadCoreClientHarness() {
   })
   if (!listener)
     throw new Error('CORE_CLIENT_TEST_LISTENER_FAILED')
+  listener({
+    source: parent,
+    origin: 'http://studio.local',
+    data: {
+      source: 'mir3-studio',
+      protocolVersion: 2,
+      type: 'mir3/project.activate',
+      requestId: 'activate-project-1',
+      projectId: 'project-1',
+      systemId: '__project__',
+      taskId: 'project-activation',
+      sessionId: '',
+      sequence: 1,
+      payload: { projectRoot: '/project', workspaceRoot: '/project', startSession: false },
+    },
+  })
   calls.length = 0
   return {
     calls,

@@ -1,5 +1,11 @@
 # MIR3 Studio AI 更新记录
 
+## 0.9.17 - 2026-08-27
+
+- Harness 工作区、会话、搜索和 Agent 运行记录改为当前项目独立数据槽，项目切换时保留并恢复各自历史，旧混合数据以可恢复副本按项目迁移。
+- GUI 编辑、33 个开发系统、系统/全局 AI 与 Harness 普通开发统一使用当前 `projectId + projectRoot`；工作区、Session cwd 和文件意图越界时失败关闭。
+- 项目切换和移除现在等待 Harness 完成重启后才结束操作，避免短暂显示上一个项目的开发内容；插件、Profile、模型、凭证及明确全局设置继续共享。
+
 ## 0.9.9 - 2026-08-27
 
 - 修复 macOS 原生包中 Tauri 自定义协议父窗口的精确 origin 规范化，使 MIR3 Core Plugin 1.0.5 能回传 ready、Bridge 描述并执行完整兼容 canary；非可信不透明来源仍保持拒绝。
