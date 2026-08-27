@@ -15,7 +15,7 @@ function cargoVersion(content) {
 }
 
 function lockedCargoVersion(content) {
-  const match = /\[\[package\]\]\nname = "mir3-studio-ai"\nversion = "([^"]+)"/.exec(content)
+  const match = /\[\[package\]\]\r?\nname = "mir3-studio-ai"\r?\nversion = "([^"]+)"/.exec(content)
   return match?.[1]
 }
 
