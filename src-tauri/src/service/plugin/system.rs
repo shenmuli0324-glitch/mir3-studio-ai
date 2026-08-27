@@ -162,6 +162,19 @@ pub fn ensure(app: &AppHandle) -> Result<(), String> {
 
     let active_project = project_service.store().active_project()?;
     let mcp_binary = service::project::mcp_binary_path(app);
+    if active_project.is_none() {
+        log::warn!("MIR3 MCP client not mounted: no active project");
+    }
+    if mcp_binary.is_none() {
+        log::warn!("MIR3 MCP client not mounted: packaged sidecar was not found");
+    }
+    if let (Some(project), Some(binary)) = (&active_project, &mcp_binary) {
+        log::info!(
+            "MIR3 MCP client mounted for project {} with {}",
+            project.id,
+            binary.display()
+        );
+    }
     let patch = render_patch(app, active_project.as_ref(), mcp_binary.as_deref());
     merge_managed_patch(&profile.join("cordis.patch.yml"), &patch)?;
     log::info!("MIR3 system plugin ensured in {}", destination.display());

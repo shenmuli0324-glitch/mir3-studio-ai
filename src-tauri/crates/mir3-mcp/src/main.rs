@@ -149,7 +149,14 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
     let result = match name {
         "mir3_system_list" => store
             .authorize_task_scope(project_id, scope_token, None, None, None)
-            .and_then(|_| store.list_domain_systems())
+            .and_then(|lease| {
+                store.list_domain_systems().map(|systems| {
+                    systems
+                        .into_iter()
+                        .filter(|system| lease.read_systems.contains(&system.system_id))
+                        .collect()
+                })
+            })
             .map(system_list_payload),
         "mir3_system_describe" => required_string(&args, "systemId")
             .and_then(|system_id| {
@@ -312,10 +319,11 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
             let system_id = args.get("systemId").and_then(Value::as_str);
             store
                 .authorize_task_scope(project_id, scope_token, system_id, None, None)
-                .and_then(|_| {
+                .and_then(|lease| {
                     let systems = store.list_domain_systems()?;
                     let mut capabilities = systems
                         .into_iter()
+                        .filter(|system| lease.read_systems.contains(&system.system_id))
                         .filter(|system| system_id.is_none_or(|id| id == system.system_id))
                         .flat_map(|system| {
                             system.capabilities.into_iter().map(move |capability| {
@@ -335,6 +343,17 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         store
                             .resolve_user_capabilities(project_id, system_id)?
                             .into_iter()
+                            .filter(|resolution| {
+                                let capability = &resolution.capability;
+                                if capability.system_id == "__global__" {
+                                    return lease.task_id.starts_with("global-")
+                                        && capability
+                                            .read_systems
+                                            .iter()
+                                            .all(|system| lease.read_systems.contains(system));
+                                }
+                                lease.read_systems.contains(&capability.system_id)
+                            })
                             .map(|resolution| {
                                 let capability = resolution.capability;
                                 json!({
@@ -366,6 +385,13 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         .find(|capability| capability.id == capability_id)
                         .map(|capability| (system.system_id, capability))
                 }) {
+                    store.authorize_task_scope(
+                        project_id,
+                        scope_token,
+                        Some(&found.0),
+                        None,
+                        None,
+                    )?;
                     validate_requested_version(&args, &found.1.version)?;
                     return Ok(
                         json!({"source":"official","systemId":found.0,"capability":found.1}),
@@ -374,6 +400,30 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 let requested_version = args.get("version").and_then(Value::as_str);
                 let resolution =
                     store.resolve_user_capability(project_id, &capability_id, requested_version)?;
+                if resolution.capability.system_id == "__global__" {
+                    let lease =
+                        store.authorize_task_scope(project_id, scope_token, None, None, None)?;
+                    if !lease.task_id.starts_with("global-")
+                        || resolution
+                            .capability
+                            .read_systems
+                            .iter()
+                            .any(|system| !lease.read_systems.contains(system))
+                    {
+                        return Err(
+                            "TASK_SCOPE_READ_DENIED: global capability is outside the lease"
+                                .to_string(),
+                        );
+                    }
+                } else {
+                    store.authorize_task_scope(
+                        project_id,
+                        scope_token,
+                        Some(&resolution.capability.system_id),
+                        None,
+                        None,
+                    )?;
+                }
                 Ok(json!({
                     "source":"user",
                     "systemId":resolution.capability.system_id,
@@ -3717,6 +3767,37 @@ mod tests {
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
+        let systems = call_tool(
+            &store,
+            &project.id,
+            "mir3_system_list",
+            json!({"scopeToken":lease.token.clone()}),
+        );
+        let listed_systems = systems
+            .pointer("/structuredContent/systems")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert_eq!(listed_systems.len(), 1);
+        assert_eq!(listed_systems[0]["systemId"], "quest");
+        let capabilities = call_tool(
+            &store,
+            &project.id,
+            "mir3_capability_list",
+            json!({"scopeToken":lease.token.clone()}),
+        );
+        assert!(capabilities
+            .pointer("/structuredContent/capabilities")
+            .and_then(Value::as_array)
+            .unwrap()
+            .iter()
+            .all(|capability| capability["systemId"] == "quest"));
+        let foreign_capability = call_tool(
+            &store,
+            &project.id,
+            "mir3_capability_describe",
+            json!({"scopeToken":lease.token.clone(),"capabilityId":"inspect-shop"}),
+        );
+        assert!(tool_error(&foreign_capability).starts_with("TASK_SCOPE_READ_DENIED:"));
         let query = call_tool(
             &store,
             &project.id,

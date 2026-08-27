@@ -20,6 +20,8 @@ import type {
   LegacyDraftCloneRequest,
   SafeTextOpen,
   SafeTextPatchResult,
+  SafeXlsSheet,
+  SafeXlsWorkbook,
   SystemSessionBinding,
   TaskReceipt,
   TaskScopeLease,
@@ -104,6 +106,19 @@ export function patchDomainText(projectId: string, opened: SafeTextOpen, newCont
       newContent,
       newline: opened.newline,
     },
+  })
+}
+
+export function openDomainXls(projectId: string, relativePath: string) {
+  return invoke<SafeXlsWorkbook>('safe_xls_open', { projectId, relativePath })
+}
+
+export function readDomainXlsSheet(projectId: string, relativePath: string, sheet: string, expectedSha256: string) {
+  return invoke<SafeXlsSheet>('safe_xls_sheet_read', {
+    projectId,
+    relativePath,
+    sheet,
+    expectedSha256,
   })
 }
 

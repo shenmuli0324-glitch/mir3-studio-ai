@@ -1,8 +1,8 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDependencyGraph, DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainResourceRecord, DomainSnapshot, DomainValidationReport, SafeTextOpen } from './types'
+import type { DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainSnapshot, DomainValidationReport, SafeTextOpen, SafeXlsSheet, SafeXlsWorkbook } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
-import { CircleCheck, CircleExclamation, Magnifier } from '@gravity-ui/icons'
+import { CircleCheck, CircleExclamation, File, Folder, Magnifier } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
@@ -13,33 +13,31 @@ import { toast } from '@/utils'
 import { DevToolWorkspace } from '../shell/devtool-workspace'
 import {
   applyDomainDraft,
-  cloneLegacyDomainDraft,
-  getDomainResource,
-  listDomainDrafts,
+  discardDomainDraft,
   listDomainSystems,
   openDomainDraft,
   openDomainText,
+  openDomainXls,
   patchDomainText,
   previewDomainDraft,
   queryDomainFiles,
-  queryDomainResources,
-  queryUnclaimedDomainFiles,
-  resolveDomainDependencies,
-  restoreDomainSnapshot,
+  readDomainXlsSheet,
   validateDomainDraft,
-  validateDomainSystem,
 } from './api'
-import { ResourceRenderer } from './renderers/resource-renderer'
 
-type ResourceTab = 'resources' | 'files' | 'dependencies'
-type CenterTab = 'domain' | 'source' | 'diff' | 'validation'
-
-interface DraftScopeState {
-  systemId: string | null
-  legacyOrUnscoped: boolean
+interface MutableFileTree {
+  directories: Map<string, MutableFileTree>
+  files: DomainFileRecord[]
 }
 
-export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }: {
+interface FileTreeNode {
+  name: string
+  path: string
+  directories: FileTreeNode[]
+  files: DomainFileRecord[]
+}
+
+export function DomainSystemView({ tool, project, onBack, target }: {
   tool: DevToolDefinition
   project: Mir3Project | null
   onBack: () => void
@@ -48,18 +46,13 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [resourceTab, setResourceTab] = useState<ResourceTab>('resources')
-  const [centerTab, setCenterTab] = useState<CenterTab>('domain')
   const [search, setSearch] = useState('')
-  const [resourceLimit, setResourceLimit] = useState(200)
   const deferredSearch = useDeferredValue(search)
   const [selectedFile, setSelectedFile] = useState<DomainFileRecord | null>(null)
-  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [editedContent, setEditedContent] = useState<string | null>(null)
+  const [selectedSheet, setSelectedSheet] = useState('')
   const [draftPreview, setDraftPreview] = useState<DomainDraftConfirmation | null>(null)
   const [validation, setValidation] = useState<DomainValidationReport | null>(null)
-  const [lastSnapshot, setLastSnapshot] = useState<DomainSnapshot | null>(null)
-  const [draftScopes, setDraftScopes] = useState<Record<string, DraftScopeState>>({})
   const handledTargetRef = useRef('')
 
   const manifests = useQuery({
@@ -68,62 +61,34 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
     enabled: project != null,
   })
   const manifest = manifests.data?.find(item => item.systemId === tool.id) ?? fallbackManifest(tool)
-  const restoreSnapshot = useMutation({
-    mutationFn: (snapshotId: string) => restoreDomainSnapshot(project!.id, snapshotId),
-    onSuccess: () => {
-      setLastSnapshot(null)
-      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-files', project?.id, tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-resources', project?.id, tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-resource', project?.id, tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-source', project?.id] })
-      toast(t('studio.devtools.snapshot.restored'), {})
-    },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
-  })
-  function handleRestoreSnapshot(snapshotId: string) {
-    // eslint-disable-next-line no-alert
-    if (window.confirm(t('studio.devtools.snapshot.restore_confirm')))
-      restoreSnapshot.mutate(snapshotId)
-  }
   const files = useQuery({
     queryKey: ['domain-files', project?.id, tool.id, deferredSearch],
     queryFn: () => queryDomainFiles(project!.id, tool.id, deferredSearch),
     enabled: project != null,
   })
-  const unclaimedFiles = useQuery({
-    queryKey: ['domain-unclaimed-files', project?.id, deferredSearch],
-    queryFn: () => queryUnclaimedDomainFiles(project!.id, deferredSearch),
-    enabled: project != null && resourceTab === 'files',
-  })
-  const resources = useQuery({
-    queryKey: ['domain-resources', project?.id, tool.id, deferredSearch, resourceLimit],
-    queryFn: () => queryDomainResources(project!.id, tool.id, deferredSearch, resourceLimit),
-    enabled: project != null && resourceTab === 'resources',
-  })
-  const dependencyGraph = useQuery({
-    queryKey: ['domain-dependencies', tool.id],
-    queryFn: () => resolveDomainDependencies(tool.id),
-    enabled: project != null && resourceTab === 'dependencies',
-  })
-  const selectedResourceKey = selectedResourceId ?? selectedFile?.resourceId
-  const selectedResource = useQuery({
-    queryKey: ['domain-resource', project?.id, tool.id, selectedResourceKey],
-    queryFn: () => getDomainResource(project!.id, tool.id, selectedResourceKey!),
-    enabled: project != null && selectedResourceKey != null,
-  })
-  const drafts = useQuery({
-    queryKey: ['domain-drafts', project?.id],
-    queryFn: () => listDomainDrafts(project!.id),
-    enabled: project != null,
-  })
+  const projectedFiles = currentSystemFiles(files.data ?? [])
+  const activeDraftId = draftPreview?.preview.draft.id ?? null
   const openedFile = useQuery({
-    queryKey: ['domain-source', project?.id, selectedFile?.path],
-    queryFn: () => openDomainText(project!.id, selectedFile!.path, null),
+    queryKey: ['domain-source', project?.id, selectedFile?.path, activeDraftId],
+    queryFn: () => openDomainText(project!.id, selectedFile!.path, activeDraftId),
     enabled: project != null && isTextFile(selectedFile),
   })
+  const workbook = useQuery({
+    queryKey: ['domain-xls', project?.id, selectedFile?.path],
+    queryFn: () => openDomainXls(project!.id, selectedFile!.path),
+    enabled: project != null && isXlsFile(selectedFile),
+  })
+  const sheetName = selectedSheet || workbook.data?.sheets[0]?.name || ''
+  const sheet = useQuery({
+    queryKey: ['domain-xls-sheet', project?.id, selectedFile?.path, workbook.data?.sha256, sheetName],
+    queryFn: () => readDomainXlsSheet(project!.id, selectedFile!.path, sheetName, workbook.data!.sha256),
+    enabled: project != null && isXlsFile(selectedFile) && workbook.data != null && sheetName.length > 0,
+  })
+
   const patch = useMutation({
     mutationFn: async ({ opened, content }: { opened: SafeTextOpen, content: string }) => {
+      if (opened.draftId)
+        return patchDomainText(project!.id, opened, content)
       const draft = await openDomainDraft(
         project!.id,
         manifest.systemId,
@@ -137,8 +102,9 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
     },
     onSuccess: async (result) => {
       setDraftPreview(await previewDomainDraft(project!.id, result.draftId))
-      setCenterTab('diff')
-      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
+      setValidation(null)
+      setEditedContent(null)
+      await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
       toast(t('studio.devtools.source.staged'), {})
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
@@ -151,120 +117,44 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
         throw new Error('DOMAIN_VALIDATION_FAILED')
       return applyDomainDraft(project!.id, confirmation.preview.draft.id, confirmation.confirmationToken)
     },
-    onSuccess: (snapshot) => {
-      setLastSnapshot(snapshot)
+    onSuccess: async (_snapshot: DomainSnapshot) => {
       setDraftPreview(null)
+      setValidation(null)
       setEditedContent(null)
-      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-files', project?.id, tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-resources', project?.id, tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-source', project?.id] })
+      await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
       toast(t('studio.devtools.diff.applied'), {})
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
-  const cloneLegacyDraft = useMutation({
-    mutationFn: async (confirmation: DomainDraftConfirmation) => {
-      const expectedSources: Record<string, string> = {}
-      for (const change of confirmation.preview.changes) {
-        if (!change.baseSha256)
-          throw new Error('DRAFT_LEGACY_SOURCE_REVIEW_REQUIRED')
-        expectedSources[change.path] = change.baseSha256
-      }
-      return cloneLegacyDomainDraft(project!.id, {
-        legacyDraftId: confirmation.preview.draft.id,
-        systemId: manifest.systemId,
-        pluginVersion: manifest.version,
-        expectedSources,
-        intent: t('studio.devtools.diff.legacy_clone_intent', { intent: confirmation.preview.draft.intent }),
-      })
-    },
-    onSuccess: async (confirmation) => {
-      setDraftPreview(confirmation)
-      setValidation(await validateDomainDraft(project!.id, confirmation.preview.draft.id))
-      setDraftScopes(value => ({
-        ...value,
-        [confirmation.preview.draft.id]: { systemId: manifest.systemId, legacyOrUnscoped: false },
-      }))
-      setCenterTab('diff')
-      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', project?.id] })
-      toast(t('studio.devtools.diff.legacy_cloned'), {})
+  const discardDraft = useMutation({
+    mutationFn: (draftId: string) => discardDomainDraft(project!.id, draftId),
+    onSuccess: async () => {
+      setDraftPreview(null)
+      setValidation(null)
+      setEditedContent(null)
+      await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
+      toast(t('studio.devtools.draft.discarded'), {})
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
-
-  useEffect(() => {
-    let cancelled = false
-    const openDrafts = (drafts.data ?? []).filter(draft => draft.status === 'open')
-    void classifyDraftScopes(project?.id, openDrafts).then((scopes) => {
-      if (!cancelled)
-        setDraftScopes(scopes)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [drafts.data, project?.id])
+  const validateDraft = useMutation({
+    mutationFn: (draftId: string) => validateDomainDraft(project!.id, draftId),
+    onSuccess: setValidation,
+    onError: reason => toast(String(reason), { variant: 'danger' }),
+  })
 
   useEffect(() => {
     if (!project || !target || files.isLoading || target.projectId !== project.id || target.systemId !== tool.id || handledTargetRef.current === target.nonce)
       return
     handledTargetRef.current = target.nonce
-    void consumeNavigationTarget(project, target, files.data ?? [], selectFile, setDraftPreview, setValidation, setCenterTab)
+    void consumeNavigationTarget(project, target, projectedFiles, selectFile, setDraftPreview, setValidation)
       .catch(reason => toast(String(reason), { variant: 'danger' }))
-  }, [files.data, files.isLoading, project, target, tool.id])
+  }, [files.data, files.isLoading, project, projectedFiles, target, tool.id])
 
-  function selectFile(file: DomainFileRecord) {
+  function selectFile(file: DomainFileRecord | null) {
     setSelectedFile(file)
-    setSelectedResourceId(null)
     setEditedContent(null)
-    setCenterTab('domain')
-  }
-
-  function selectResource(resource: DomainResourceRecord) {
-    setSelectedResourceId(resource.id)
-    setSelectedFile(resource.files[0] ?? null)
-    setEditedContent(null)
-    setCenterTab('domain')
-  }
-
-  function handleSearch(value: string) {
-    setSearch(value)
-    setResourceLimit(200)
-  }
-
-  async function runValidation() {
-    if (!project)
-      return
-    try {
-      setValidation(await validateDomainSystem(project.id, tool.id))
-      setCenterTab('validation')
-    }
-    catch (reason) {
-      toast(String(reason), { variant: 'danger' })
-    }
-  }
-
-  async function showDraft(draftId: string) {
-    if (!project)
-      return
-    try {
-      setDraftPreview(await previewDomainDraft(project.id, draftId))
-      setCenterTab('diff')
-    }
-    catch (reason) {
-      toast(String(reason), { variant: 'danger' })
-    }
-  }
-
-  function clearDraft() {
-    setDraftPreview(null)
-    setValidation(null)
-  }
-
-  function cloneLegacyPreview(confirmation: DomainDraftConfirmation) {
-    // eslint-disable-next-line no-alert
-    if (window.confirm(t('studio.devtools.diff.legacy_clone_confirm', { count: confirmation.preview.changes.length })))
-      cloneLegacyDraft.mutate(confirmation)
+    setSelectedSheet('')
   }
 
   async function handleAiDraftHandoff(handoff: DomainDraftHandoff) {
@@ -278,18 +168,10 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
       throw new Error('AI_DRAFT_BINDING_MISMATCH')
     setDraftPreview(preview)
     setValidation(report)
-    if (handoff.resourceId) {
-      const resource = await getDomainResource(project.id, tool.id, handoff.resourceId)
-      selectResource(resource)
-    }
-    setCenterTab(report.valid ? 'diff' : 'validation')
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['domain-drafts', project.id] }),
-      queryClient.invalidateQueries({ queryKey: ['domain-files', project.id, tool.id] }),
-      queryClient.invalidateQueries({ queryKey: ['domain-resources', project.id, tool.id] }),
-      queryClient.invalidateQueries({ queryKey: ['domain-resource', project.id, tool.id] }),
-      queryClient.invalidateQueries({ queryKey: ['domain-source', project.id] }),
-    ])
+    const handoffFile = projectedFiles.find(file => file.resourceId === handoff.resourceId)
+    if (handoffFile)
+      selectFile(handoffFile)
+    await invalidateWorkspaceQueries(queryClient, project.id, tool.id)
   }
 
   function saveSource() {
@@ -298,468 +180,199 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
     patch.mutate({ opened: openedFile.data, content: editedContent })
   }
 
+  function validateActiveDraft() {
+    if (!project || !draftPreview)
+      return
+    validateDraft.mutate(draftPreview.preview.draft.id)
+  }
+
+  function applyActiveDraft() {
+    if (!draftPreview)
+      return
+    // eslint-disable-next-line no-alert
+    if (window.confirm(t('studio.devtools.diff.apply_confirm')))
+      applyDraft.mutate(draftPreview)
+  }
+
+  function discardActiveDraft() {
+    if (!draftPreview)
+      return
+    // eslint-disable-next-line no-alert
+    if (window.confirm(t('studio.devtools.draft.discard_confirm')))
+      discardDraft.mutate(draftPreview.preview.draft.id)
+  }
+
   return (
     <DevToolWorkspace
       tool={tool}
       onBack={onBack}
       sidebar={(
-        <ResourceSidebar
-          activeTab={resourceTab}
-          onTab={setResourceTab}
+        <DomainFileSidebar
+          files={projectedFiles}
+          loading={files.isLoading}
           search={search}
-          onSearch={handleSearch}
-          files={files.data ?? []}
-          resources={resources.data ?? []}
-          unclaimedFiles={unclaimedFiles.data ?? []}
-          manifest={manifest}
-          dependencyGraph={dependencyGraph.data}
           selectedPath={selectedFile?.path}
-          selectedResourceId={selectedResourceId}
-          onSelectFile={selectFile}
-          onSelectResource={selectResource}
-          onOpenSystem={onOpenSystem}
-          loading={files.isLoading || unclaimedFiles.isLoading || resources.isLoading}
-          hasMoreResources={(resources.data?.length ?? 0) >= resourceLimit}
-          onLoadMoreResources={() => setResourceLimit(value => value + 200)}
+          onSearch={setSearch}
+          onSelect={selectFile}
         />
       )}
-      toolbar={(
-        <WorkspaceToolbar
-          manifest={manifest}
-          project={project}
-          drafts={drafts.data ?? []}
-          draftScopes={draftScopes}
-          activeDraftId={draftPreview?.preview.draft.id ?? ''}
-          onDraft={draftId => void showDraft(draftId)}
-          onClearDraft={clearDraft}
-          activeTab={centerTab}
-          onTab={setCenterTab}
-          onValidate={() => void runValidation()}
-        />
-      )}
-      rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedResourceKey, draftPreview?.preview.draft.id, handleAiDraftHandoff)}
+      toolbar={<FileWorkspaceToolbar manifest={manifest} project={project} selectedPath={selectedFile?.path} />}
+      rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedFile?.resourceId, activeDraftId ?? undefined, handleAiDraftHandoff)}
     >
       <If cond={project != null} else={<NoProject />}>
-        <CenterWorkspace
-          activeTab={centerTab}
-          manifest={manifest}
-          files={files.data ?? []}
-          description={describeLoadedFiles(files.data ?? [])}
-          resource={selectedResource.data}
-          resourceLoading={selectedResource.isLoading}
-          resourceError={selectedResource.error}
-          selectedFile={selectedFile}
-          openedFile={openedFile.data}
-          sourceLoading={openedFile.isLoading}
-          sourceError={openedFile.error}
-          editedContent={editedContent}
-          onEditedContent={setEditedContent}
-          onSaveSource={saveSource}
-          saving={patch.isPending}
-          drafts={drafts.data ?? []}
-          draftPreview={draftPreview}
-          onShowDraft={draftId => void showDraft(draftId)}
-          onApplyDraft={(confirmation) => {
-            if (draftScopes[confirmation.preview.draft.id]?.legacyOrUnscoped !== false)
-              return
-            // eslint-disable-next-line no-alert
-            if (window.confirm(t('studio.devtools.diff.apply_confirm')))
-              applyDraft.mutate(confirmation)
-          }}
-          draftScopes={draftScopes}
-          onCloneLegacy={cloneLegacyPreview}
-          cloningLegacy={cloneLegacyDraft.isPending}
-          applying={applyDraft.isPending}
-          lastSnapshot={lastSnapshot}
-          restoringSnapshot={restoreSnapshot.isPending}
-          onRestoreSnapshot={handleRestoreSnapshot}
-          validation={validation}
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          <If cond={draftPreview != null}>
+            <CompactDraftBar
+              preview={draftPreview}
+              validation={validation}
+              validating={validateDraft.isPending}
+              applying={applyDraft.isPending}
+              discarding={discardDraft.isPending}
+              onValidate={() => void validateActiveDraft()}
+              onApply={applyActiveDraft}
+              onDiscard={discardActiveDraft}
+            />
+          </If>
+          <FileSourceWorkspace
+            selectedFile={selectedFile}
+            openedFile={openedFile.data}
+            sourceLoading={openedFile.isLoading}
+            sourceError={openedFile.error}
+            editedContent={editedContent}
+            onEditedContent={setEditedContent}
+            onSaveSource={saveSource}
+            saving={patch.isPending}
+            workbook={workbook.data}
+            workbookLoading={workbook.isLoading}
+            workbookError={workbook.error}
+            sheetName={sheetName}
+            sheet={sheet.data}
+            sheetLoading={sheet.isLoading}
+            sheetError={sheet.error}
+            onSheet={setSelectedSheet}
+          />
+        </div>
       </If>
     </DevToolWorkspace>
   )
 }
 
-function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources, unclaimedFiles, manifest, dependencyGraph, selectedPath, selectedResourceId, onSelectFile, onSelectResource, onOpenSystem, loading, hasMoreResources, onLoadMoreResources }: {
-  activeTab: ResourceTab
-  onTab: (tab: ResourceTab) => void
-  search: string
-  onSearch: (value: string) => void
+function DomainFileSidebar({ files, loading, search, selectedPath, onSearch, onSelect }: {
   files: DomainFileRecord[]
-  resources: DomainResourceRecord[]
-  unclaimedFiles: DomainFileRecord[]
-  manifest: DomainManifest
-  dependencyGraph?: DomainDependencyGraph
-  selectedPath?: string
-  selectedResourceId: string | null
-  onSelectFile: (file: DomainFileRecord) => void
-  onSelectResource: (resource: DomainResourceRecord) => void
-  onOpenSystem?: (systemId: string) => void
   loading: boolean
-  hasMoreResources: boolean
-  onLoadMoreResources: () => void
+  search: string
+  selectedPath?: string
+  onSearch: (value: string) => void
+  onSelect: (file: DomainFileRecord) => void
 }) {
   const { t } = useTranslation()
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="grid grid-cols-3 gap-1 border-b border-line p-2">
-        {(['resources', 'files', 'dependencies'] as const).map(tab => <SidebarTab key={tab} tab={tab} active={activeTab === tab} onPress={() => onTab(tab)} />)}
+      <div className="border-b border-line p-2">
+        <label className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-2">
+          <Magnifier className="size-3.5 text-muted" />
+          <input className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-muted" value={search} placeholder={t('studio.devtools.files.search')} aria-label={t('studio.devtools.files.search')} onChange={event => onSearch(event.target.value)} />
+        </label>
       </div>
-      <If cond={activeTab !== 'dependencies'}>
-        <div className="border-b border-line p-2">
-          <label className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-2">
-            <Magnifier className="size-3.5 text-muted" />
-            <input className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-muted" value={search} placeholder={t('studio.devtools.resources.search')} aria-label={t('studio.devtools.resources.search')} onChange={event => onSearch(event.target.value)} />
-          </label>
-        </div>
-      </If>
       <div className="min-h-0 flex-1 overflow-auto p-2">
-        <If cond={activeTab === 'dependencies'} else={renderResourceOrFileList(activeTab, resources, files, unclaimedFiles, selectedResourceId, selectedPath, onSelectResource, onSelectFile, loading, hasMoreResources, onLoadMoreResources)}>
-          <DependencyList manifest={manifest} graph={dependencyGraph} files={files.filter(file => file.ownership === 'dependency')} selectedPath={selectedPath} onSelect={onSelectFile} onOpenSystem={onOpenSystem} loading={loading} />
+        <If cond={!loading} else={<p className="p-4 text-center text-xs text-muted">{t('studio.devtools.resources.loading')}</p>}>
+          <If cond={files.length > 0} else={<p className="p-4 text-center text-xs leading-5 text-muted">{t('studio.devtools.files.empty')}</p>}>
+            <DirectoryTree files={files} selectedPath={selectedPath} onSelect={onSelect} />
+          </If>
         </If>
       </div>
     </div>
   )
 }
 
-function renderResourceOrFileList(
-  activeTab: ResourceTab,
-  resources: DomainResourceRecord[],
-  files: DomainFileRecord[],
-  unclaimedFiles: DomainFileRecord[],
-  selectedResourceId: string | null,
-  selectedPath: string | undefined,
-  onSelectResource: (resource: DomainResourceRecord) => void,
-  onSelectFile: (file: DomainFileRecord) => void,
-  loading: boolean,
-  hasMoreResources: boolean,
-  onLoadMoreResources: () => void,
-) {
-  if (activeTab === 'resources')
-    return <ResourceRecordList resources={resources} selectedId={selectedResourceId} onSelect={onSelectResource} loading={loading} hasMore={hasMoreResources} onLoadMore={onLoadMoreResources} />
-  return <FileProjectionList files={[...files, ...unclaimedFiles]} resourceMode={false} selectedPath={selectedPath} onSelect={onSelectFile} loading={loading} />
-}
-
-function ResourceRecordList({ resources, selectedId, onSelect, loading, hasMore, onLoadMore }: {
-  resources: DomainResourceRecord[]
-  selectedId: string | null
-  onSelect: (resource: DomainResourceRecord) => void
-  loading: boolean
-  hasMore: boolean
-  onLoadMore: () => void
-}) {
-  const { t } = useTranslation()
-  if (loading)
-    return <p className="p-4 text-center text-xs text-muted">{t('studio.devtools.resources.loading')}</p>
-  if (resources.length === 0)
-    return <p className="p-4 text-center text-xs leading-5 text-muted">{t('studio.devtools.resources.empty')}</p>
+function DirectoryTree({ files, selectedPath, onSelect }: { files: DomainFileRecord[], selectedPath?: string, onSelect: (file: DomainFileRecord) => void }) {
+  const tree = buildFileTree(files)
   return (
-    <div className="space-y-1">
-      {resources.map(resource => (
-        <button key={resource.id} type="button" className={projectionButtonClass(selectedId === resource.id)} onClick={() => onSelect(resource)}>
-          <strong className="block truncate text-[11px] font-medium text-ink">{resource.label}</strong>
-          <span className="mt-0.5 block truncate text-[9px] text-muted">{resource.source.path}</span>
-          <span className="mt-1 flex gap-1">
-            <small className={accessBadgeClass(resourceAccess(resource))}>{t(resourceAccessKey(resource))}</small>
-            <small className="rounded bg-accent/10 px-1 text-[8px] text-accent">{resource.resourceType}</small>
-            <If cond={hasUnresolvedDependency(resource)}><small className="rounded bg-danger/10 px-1 text-[8px] text-danger">{t('studio.devtools.resources.unresolved')}</small></If>
-          </span>
-        </button>
-      ))}
-      <If cond={hasMore}>
-        <Button className="mt-2 w-full" size="sm" variant="ghost" onPress={onLoadMore}>{t('studio.devtools.resources.load_more')}</Button>
-      </If>
+    <div className="space-y-0.5">
+      {tree.files.map(file => <FileTreeButton key={file.path} file={file} selected={selectedPath === file.path} onSelect={onSelect} />)}
+      {tree.directories.map(directory => <DirectoryBranch key={directory.path} node={directory} selectedPath={selectedPath} onSelect={onSelect} depth={0} />)}
     </div>
   )
 }
 
-function hasUnresolvedDependency(resource: DomainResourceRecord) {
-  return resource.dependencies.some(dependency => dependency.required && dependency.resolvedResourceId == null)
-}
-
-function resourceAccess(resource: DomainResourceRecord) {
-  if (resource.writable)
-    return 'editable'
-  return 'readonly'
-}
-
-function resourceAccessKey(resource: DomainResourceRecord) {
-  if (resource.writable)
-    return 'studio.devtools.access.editable'
-  return 'studio.devtools.access.readonly'
-}
-
-function SidebarTab({ tab, active, onPress }: { tab: ResourceTab, active: boolean, onPress: () => void }) {
-  const { t } = useTranslation()
-  return <button type="button" className={sidebarTabClass(active)} onClick={onPress}>{t(`studio.devtools.resources.${tab}`)}</button>
-}
-
-function FileProjectionList({ files, resourceMode, selectedPath, onSelect, loading }: {
-  files: DomainFileRecord[]
-  resourceMode: boolean
-  selectedPath?: string
-  onSelect: (file: DomainFileRecord) => void
-  loading: boolean
-}) {
-  const { t } = useTranslation()
-  if (loading)
-    return <p className="p-4 text-center text-xs text-muted">{t('studio.devtools.resources.loading')}</p>
-  if (files.length === 0)
-    return <p className="p-4 text-center text-xs leading-5 text-muted">{t('studio.devtools.resources.empty')}</p>
-  if (!resourceMode) {
-    return (
-      <div className="space-y-1">
-        {groupFilesByDirectory(files).map(group => (
-          <details key={group.directory} open={files.length < 200} className="rounded-lg border border-line/70 bg-panel2/40">
-            <summary className="cursor-pointer truncate px-2 py-2 text-[10px] font-medium text-muted">
-              {group.directory}
-              {' '}
-              ·
-              {' '}
-              {group.files.length}
-            </summary>
-            <div className="space-y-1 border-t border-line p-1">
-              {group.files.map(file => <ProjectionButton key={file.resourceId} file={file} resourceMode={false} selected={selectedPath === file.path} onSelect={onSelect} />)}
-            </div>
-          </details>
-        ))}
+function DirectoryBranch({ node, selectedPath, onSelect, depth }: { node: FileTreeNode, selectedPath?: string, onSelect: (file: DomainFileRecord) => void, depth: number }) {
+  return (
+    <details open={depth < 1} className="group">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] text-muted hover:bg-panel2 hover:text-ink">
+        <Folder className="size-3 shrink-0 text-accent" />
+        <span className="truncate">{node.name}</span>
+      </summary>
+      <div className="ml-2 border-l border-line/70 pl-1.5">
+        {node.files.map(file => <FileTreeButton key={file.path} file={file} selected={selectedPath === file.path} onSelect={onSelect} />)}
+        {node.directories.map(directory => <DirectoryBranch key={directory.path} node={directory} selectedPath={selectedPath} onSelect={onSelect} depth={depth + 1} />)}
       </div>
-    )
-  }
-  return (
-    <div className="space-y-1">
-      {files.map(file => <ProjectionButton key={file.resourceId} file={file} resourceMode selected={selectedPath === file.path} onSelect={onSelect} />)}
-    </div>
+    </details>
   )
 }
 
-function ProjectionButton({ file, resourceMode, selected, onSelect }: { file: DomainFileRecord, resourceMode: boolean, selected: boolean, onSelect: (file: DomainFileRecord) => void }) {
-  const { t } = useTranslation()
+function FileTreeButton({ file, selected, onSelect }: { file: DomainFileRecord, selected: boolean, onSelect: (file: DomainFileRecord) => void }) {
   return (
-    <button type="button" className={projectionButtonClass(selected)} onClick={() => onSelect(file)}>
-      <strong className="block truncate text-[11px] font-medium text-ink">{projectionLabel(file, resourceMode)}</strong>
-      <span className="mt-0.5 block truncate text-[9px] text-muted">{file.path}</span>
-      <span className="mt-1 flex gap-1">
-        <small className={accessBadgeClass(file.access)}>{t(`studio.devtools.access.${file.access}`)}</small>
-        <If cond={file.ownership !== 'owned'}><small className="rounded bg-accent/10 px-1 text-[8px] text-accent">{t(`studio.devtools.resources.${file.ownership}`)}</small></If>
-      </span>
+    <button type="button" className={fileTreeButtonClass(selected)} title={file.path} onClick={() => onSelect(file)}>
+      <File className="size-3 shrink-0 text-muted" />
+      <span className="truncate">{fileName(file.path)}</span>
     </button>
   )
 }
 
-function groupFilesByDirectory(files: DomainFileRecord[]) {
-  const groups = new Map<string, DomainFileRecord[]>()
-  files.forEach((file) => {
-    const segments = file.path.split('/')
-    const directory = directoryPath(segments)
-    const entries = groups.get(directory) ?? []
-    entries.push(file)
-    groups.set(directory, entries)
-  })
-  return [...groups.entries()].map(([directory, entries]) => ({ directory, files: entries }))
-}
-
-function directoryPath(segments: string[]) {
-  if (segments.length > 1)
-    return segments.slice(0, -1).join('/')
-  return '.'
-}
-
-function DependencyList({ manifest, graph, files, selectedPath, onSelect, onOpenSystem, loading }: {
-  manifest: DomainManifest
-  graph?: DomainDependencyGraph
-  files: DomainFileRecord[]
-  selectedPath?: string
-  onSelect: (file: DomainFileRecord) => void
-  onOpenSystem?: (systemId: string) => void
-  loading: boolean
-}) {
+function FileWorkspaceToolbar({ manifest, project, selectedPath }: { manifest: DomainManifest, project: Mir3Project | null, selectedPath?: string }) {
   const { t } = useTranslation()
   return (
-    <If cond={manifest.dependencies.length > 0} else={<p className="p-4 text-center text-xs text-muted">{t('studio.devtools.dependencies.empty')}</p>}>
-      <div className="space-y-2">
-        {manifest.dependencies.map(dependency => (
-          <button key={dependency} type="button" className="block w-full rounded-lg border border-line bg-panel2 p-3 text-left hover:border-accent/40" onClick={() => onOpenSystem?.(dependency)}>
-            <strong className="text-xs text-ink">{t(`studio.devtools.tool.${dependency}.title`)}</strong>
-            <p className="mt-1 text-[10px] text-muted">{t('studio.devtools.dependencies.readonly')}</p>
-          </button>
-        ))}
-        <DependencyGraphSummary graph={graph} onOpenSystem={onOpenSystem} />
-        <FileProjectionList files={files} resourceMode={false} selectedPath={selectedPath} onSelect={onSelect} loading={loading} />
-      </div>
-    </If>
-  )
-}
-
-function DependencyGraphSummary({ graph, onOpenSystem }: { graph?: DomainDependencyGraph, onOpenSystem?: (systemId: string) => void }) {
-  const { t } = useTranslation()
-  if (!graph)
-    return <p className="p-3 text-center text-[10px] text-muted">{t('studio.devtools.dependencies.loading')}</p>
-  return (
-    <section className="rounded-lg border border-line bg-panel2 p-3">
-      <strong className="text-[10px] uppercase tracking-wider text-muted">{t('studio.devtools.dependencies.graph')}</strong>
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
-        <DependencyMetric label={t('studio.devtools.dependencies.direct')} value={graph.direct.length} />
-        <DependencyMetric label={t('studio.devtools.dependencies.transitive')} value={graph.transitive.length} />
-        <DependencyMetric label={t('studio.devtools.dependencies.cycles')} value={graph.cycles.length} />
-      </dl>
-      <If cond={graph.transitive.length > 0}>
-        <div className="mt-3 flex flex-wrap gap-1">
-          {graph.transitive.map(systemId => <button key={systemId} type="button" className="rounded border border-line bg-panel px-2 py-1 text-[9px] text-ink hover:border-accent/40" onClick={() => onOpenSystem?.(systemId)}>{t(`studio.devtools.tool.${systemId}.title`)}</button>)}
-        </div>
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <span className="min-w-0 shrink-0">
+        <strong className="block truncate text-xs font-medium text-ink">{t(`studio.devtools.tool.${manifest.systemId}.title`)}</strong>
+        <small className="block truncate text-[9px] text-muted">{project?.name ?? t('studio.devtools.no_project')}</small>
+      </span>
+      <If cond={selectedPath != null}>
+        <span className="min-w-0 truncate border-l border-line pl-3 font-mono text-[10px] text-muted">{selectedPath}</span>
       </If>
-      <If cond={graph.missing.length > 0}>
-        <p className="mt-3 break-words text-[9px] text-danger">{t('studio.devtools.dependencies.missing', { systems: graph.missing.join(', ') })}</p>
-      </If>
-      <If cond={graph.cycles.length > 0}>
-        <div className="mt-2 space-y-1">{graph.cycles.map(cycle => <p key={cycle.join('>')} className="break-words text-[9px] text-warning">{cycle.join(' → ')}</p>)}</div>
-      </If>
-    </section>
-  )
-}
-
-function DependencyMetric({ label, value }: { label: string, value: number }) {
-  return (
-    <div className="rounded border border-line bg-panel px-2 py-1.5">
-      <dt className="text-[8px] text-muted">{label}</dt>
-      <dd className="mt-0.5 text-xs tabular-nums text-ink">{value}</dd>
     </div>
   )
 }
 
-function WorkspaceToolbar({ manifest, project, drafts, draftScopes, activeDraftId, onDraft, onClearDraft, activeTab, onTab, onValidate }: {
-  manifest: DomainManifest
-  project: Mir3Project | null
-  drafts: DomainDraft[]
-  draftScopes: Record<string, DraftScopeState>
-  activeDraftId: string
-  onDraft: (draftId: string) => void
-  onClearDraft: () => void
-  activeTab: CenterTab
-  onTab: (tab: CenterTab) => void
-  onValidate: () => void
-}) {
-  const { t } = useTranslation()
-  const availableDrafts = drafts.filter((draft) => {
-    const scope = draftScopes[draft.id]
-    return draft.status === 'open' && (scope?.systemId === manifest.systemId || scope?.legacyOrUnscoped === true)
-  })
-  function selectDraft(value: string) {
-    if (value) {
-      onDraft(value)
-      return
-    }
-    onClearDraft()
-  }
-  return (
-    <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0">
-          <strong className="block truncate text-xs font-medium text-ink">{t(`studio.devtools.tool.${manifest.systemId}.title`)}</strong>
-          <small className="block truncate text-[9px] text-muted">{project?.name ?? t('studio.devtools.no_project')}</small>
-        </div>
-        <If cond={availableDrafts.length > 0}>
-          <label className="shrink-0 rounded-lg border border-line bg-panel2 px-2 py-1">
-            <span className="block text-[8px] text-muted">{t('studio.devtools.controls.draft')}</span>
-            <select className="max-w-48 bg-transparent text-[10px] text-ink outline-none" value={activeDraftId} aria-label={t('studio.devtools.controls.draft')} onChange={event => selectDraft(event.target.value)}>
-              <option value="">{t('studio.devtools.controls.no_draft')}</option>
-              {availableDrafts.map(draft => <option key={draft.id} value={draft.id}>{draft.intent}</option>)}
-            </select>
-          </label>
-        </If>
-      </div>
-      <div className="flex items-center gap-1 overflow-auto">
-        {(['domain', 'source', 'diff'] as const).map(tab => <Button key={tab} size="sm" variant="ghost" className={centerTabClass(activeTab === tab)} onPress={() => onTab(tab)}>{t(`studio.devtools.center.${tab}`)}</Button>)}
-        <Button size="sm" variant="ghost" className={centerTabClass(activeTab === 'validation')} onPress={onValidate}>{t('studio.devtools.center.validation')}</Button>
-      </div>
-    </div>
-  )
-}
-
-function CenterWorkspace(props: {
-  activeTab: CenterTab
-  manifest: DomainManifest
-  files: DomainFileRecord[]
-  description?: { ownedFiles: number, sharedFiles: number, writableFiles: number, readonlyFiles: number, diagnostics: string[] }
-  resource?: DomainResourceRecord
-  resourceLoading: boolean
-  resourceError: Error | null
-  selectedFile: DomainFileRecord | null
-  openedFile?: SafeTextOpen
-  sourceLoading: boolean
-  sourceError: Error | null
-  editedContent: string | null
-  onEditedContent: (content: string) => void
-  onSaveSource: () => void
-  saving: boolean
-  drafts: Array<{ id: string, intent: string, revision: number, status: string }>
-  draftScopes: Record<string, DraftScopeState>
-  draftPreview: DomainDraftConfirmation | null
-  onShowDraft: (draftId: string) => void
-  onApplyDraft: (confirmation: DomainDraftConfirmation) => void
-  applying: boolean
-  onCloneLegacy: (confirmation: DomainDraftConfirmation) => void
-  cloningLegacy: boolean
-  lastSnapshot: DomainSnapshot | null
-  restoringSnapshot: boolean
-  onRestoreSnapshot: (snapshotId: string) => void
+function CompactDraftBar({ preview, validation, validating, applying, discarding, onValidate, onApply, onDiscard }: {
+  preview: DomainDraftConfirmation | null
   validation: DomainValidationReport | null
-}) {
-  return (
-    <div className="h-full min-h-0 overflow-auto p-4">
-      <If cond={props.activeTab === 'domain'}><DomainRenderer manifest={props.manifest} description={props.description} resource={props.resource} resourceLoading={props.resourceLoading} resourceError={props.resourceError} /></If>
-      <If cond={props.activeTab === 'source'}><SourcePanel {...props} /></If>
-      <If cond={props.activeTab === 'diff'}><DiffPanel drafts={props.drafts} draftScopes={props.draftScopes} preview={props.draftPreview} onShow={props.onShowDraft} onApply={props.onApplyDraft} applying={props.applying} onCloneLegacy={props.onCloneLegacy} cloningLegacy={props.cloningLegacy} lastSnapshot={props.lastSnapshot} restoringSnapshot={props.restoringSnapshot} onRestoreSnapshot={props.onRestoreSnapshot} /></If>
-      <If cond={props.activeTab === 'validation'}><ValidationPanel report={props.validation} /></If>
-    </div>
-  )
-}
-
-function DomainRenderer({ manifest, description, resource, resourceLoading, resourceError }: {
-  manifest: DomainManifest
-  description?: { ownedFiles: number, sharedFiles: number, writableFiles: number, readonlyFiles: number, diagnostics: string[] }
-  resource?: DomainResourceRecord
-  resourceLoading: boolean
-  resourceError: Error | null
+  validating: boolean
+  applying: boolean
+  discarding: boolean
+  onValidate: () => void
+  onApply: () => void
+  onDiscard: () => void
 }) {
   const { t } = useTranslation()
+  if (!preview)
+    return null
+  const valid = validation?.valid === true
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <div className="grid grid-cols-4 gap-3 max-[1000px]:grid-cols-2">
-        <Metric label={t('studio.devtools.metrics.owned')} value={description?.ownedFiles ?? 0} />
-        <Metric label={t('studio.devtools.metrics.shared')} value={description?.sharedFiles ?? 0} />
-        <Metric label={t('studio.devtools.metrics.writable')} value={description?.writableFiles ?? 0} />
-        <Metric label={t('studio.devtools.metrics.readonly')} value={description?.readonlyFiles ?? 0} />
-      </div>
-      <div className="rounded-2xl border border-line bg-panel p-5">
-        <span className="text-[10px] uppercase tracking-[0.16em] text-accent">{manifest.renderer}</span>
-        <h2 className="mt-2 text-lg font-semibold text-ink">{t(`studio.devtools.tool.${manifest.systemId}.title`)}</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">{t(`studio.devtools.tool.${manifest.systemId}.description`)}</p>
-        <ResourceRenderer renderer={manifest.renderer} resource={resource} loading={resourceLoading} error={resourceError} />
-      </div>
-      <div className="rounded-2xl border border-line bg-panel p-5">
-        <strong className="text-xs text-ink">{t('studio.devtools.capabilities.title')}</strong>
-        <div className="mt-3 grid grid-cols-2 gap-2 max-[900px]:grid-cols-1">
-          {manifest.capabilities.map(capability => (
-            <div key={capability.id} className="rounded-lg border border-line bg-panel2 px-3 py-2">
-              <strong className="block text-[11px] text-ink">{capability.id}</strong>
-              <small className="text-[9px] text-muted">
-                v
-                {capability.version}
-                {' '}
-                ·
-                {' '}
-                {t('studio.devtools.capabilities.guards')}
-              </small>
-            </div>
-          ))}
-        </div>
+    <div className="flex shrink-0 items-center gap-3 border-b border-line bg-panel px-4 py-2">
+      <DraftStateIcon validation={validation} />
+      <span className="min-w-0 flex-1">
+        <strong className="block truncate text-[11px] text-ink">{preview.preview.draft.intent}</strong>
+        <small className={draftMessageClass(validation)}>{draftMessage(t, preview, validation)}</small>
+      </span>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button size="sm" variant="ghost" isPending={validating} onPress={onValidate}>{t('studio.devtools.draft.validate')}</Button>
+        <Button size="sm" className="bg-accent text-white" isDisabled={!valid} isPending={applying} onPress={onApply}>{t('studio.devtools.draft.apply')}</Button>
+        <Button size="sm" variant="ghost" className="text-danger" isPending={discarding} onPress={onDiscard}>{t('studio.devtools.draft.discard')}</Button>
       </div>
     </div>
   )
 }
 
-function SourcePanel(props: {
+function DraftStateIcon({ validation }: { validation: DomainValidationReport | null }) {
+  if (validation?.valid === true)
+    return <CircleCheck className="size-4 shrink-0 text-success" />
+  if (validation?.valid === false)
+    return <CircleExclamation className="size-4 shrink-0 text-danger" />
+  return <span className="size-2 shrink-0 rounded-full bg-warning" />
+}
+
+function FileSourceWorkspace(props: {
   selectedFile: DomainFileRecord | null
   openedFile?: SafeTextOpen
   sourceLoading: boolean
@@ -768,12 +381,35 @@ function SourcePanel(props: {
   onEditedContent: (content: string) => void
   onSaveSource: () => void
   saving: boolean
+  workbook?: SafeXlsWorkbook
+  workbookLoading: boolean
+  workbookError: Error | null
+  sheetName: string
+  sheet?: SafeXlsSheet
+  sheetLoading: boolean
+  sheetError: Error | null
+  onSheet: (sheet: string) => void
 }) {
   const { t } = useTranslation()
   if (!props.selectedFile)
-    return <CenteredNotice title={t('studio.devtools.source.empty')} description={t('studio.devtools.source.empty_desc')} />
+    return <CenteredNotice title={t('studio.devtools.source.empty')} description={t('studio.devtools.source.empty_desc_simple')} />
+  if (isXlsFile(props.selectedFile)) {
+    return (
+      <XlsSourcePreview
+        file={props.selectedFile}
+        workbook={props.workbook}
+        workbookLoading={props.workbookLoading}
+        workbookError={props.workbookError}
+        sheetName={props.sheetName}
+        sheet={props.sheet}
+        sheetLoading={props.sheetLoading}
+        sheetError={props.sheetError}
+        onSheet={props.onSheet}
+      />
+    )
+  }
   if (!isTextFile(props.selectedFile))
-    return <CenteredNotice title={t('studio.devtools.source.readonly')} description={t('studio.devtools.source.readonly_desc', { extension: props.selectedFile.extension ?? '' })} />
+    return <CenteredNotice title={t('studio.devtools.source.readonly')} description={t('studio.devtools.source.readonly_desc_simple', { extension: props.selectedFile.extension ?? '' })} />
   if (props.sourceLoading)
     return <CenteredNotice title={t('studio.devtools.source.loading')} description={props.selectedFile.path} />
   if (props.sourceError || !props.openedFile)
@@ -781,139 +417,64 @@ function SourcePanel(props: {
   const content = props.editedContent ?? props.openedFile.content
   const editable = canEditSource(props.selectedFile)
   return (
-    <div className="flex h-full min-h-[420px] flex-col rounded-xl border border-line bg-panel">
-      <header className="flex items-center justify-between border-b border-line px-4 py-2">
-        <span>
-          <strong className="block text-xs text-ink">{props.selectedFile.path}</strong>
-          <small className="text-[9px] text-muted">
-            {props.openedFile.encoding}
-            {' '}
-            · SHA
-            {' '}
-            {props.openedFile.sha256.slice(0, 10)}
-          </small>
+    <div className="flex min-h-0 flex-1 flex-col bg-canvas">
+      <header className="flex shrink-0 items-center justify-between border-b border-line px-4 py-2">
+        <span className="min-w-0">
+          <strong className="block truncate text-xs text-ink">{props.selectedFile.path}</strong>
+          <small className="text-[9px] text-muted">{props.openedFile.encoding}</small>
         </span>
         <If cond={editable}>
           <Button size="sm" className="bg-accent text-white" isDisabled={content === props.openedFile.content} isPending={props.saving} onPress={props.onSaveSource}>{t('studio.devtools.source.stage')}</Button>
         </If>
       </header>
-      <textarea readOnly={!editable} className="h-full min-h-[360px] flex-1 resize-none bg-canvas p-4 font-mono text-xs leading-5 text-ink outline-none" value={content} aria-label={t('studio.devtools.source.editor')} onChange={event => props.onEditedContent(event.target.value)} />
+      <textarea readOnly={!editable} className="min-h-0 flex-1 resize-none bg-canvas p-4 font-mono text-xs leading-5 text-ink outline-none" value={content} aria-label={t('studio.devtools.source.editor')} onChange={event => props.onEditedContent(event.target.value)} />
     </div>
   )
 }
 
-function DiffPanel({ drafts, draftScopes, preview, onShow, onApply, applying, onCloneLegacy, cloningLegacy, lastSnapshot, restoringSnapshot, onRestoreSnapshot }: {
-  drafts: Array<{ id: string, intent: string, revision: number, status: string }>
-  draftScopes: Record<string, DraftScopeState>
-  preview: DomainDraftConfirmation | null
-  onShow: (draftId: string) => void
-  onApply: (confirmation: DomainDraftConfirmation) => void
-  applying: boolean
-  onCloneLegacy: (confirmation: DomainDraftConfirmation) => void
-  cloningLegacy: boolean
-  lastSnapshot: DomainSnapshot | null
-  restoringSnapshot: boolean
-  onRestoreSnapshot: (snapshotId: string) => void
+function XlsSourcePreview({ file, workbook, workbookLoading, workbookError, sheetName, sheet, sheetLoading, sheetError, onSheet }: {
+  file: DomainFileRecord
+  workbook?: SafeXlsWorkbook
+  workbookLoading: boolean
+  workbookError: Error | null
+  sheetName: string
+  sheet?: SafeXlsSheet
+  sheetLoading: boolean
+  sheetError: Error | null
+  onSheet: (sheet: string) => void
 }) {
   const { t } = useTranslation()
-  const previewScope = preview ? draftScopes[preview.preview.draft.id] : undefined
-  function applyPreview() {
-    if (preview)
-      onApply(preview)
-  }
+  if (workbookLoading)
+    return <CenteredNotice title={t('studio.devtools.source.xls_loading')} description={file.path} />
+  if (workbookError || !workbook)
+    return <CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(workbookError ?? '')} />
   return (
-    <div className="grid min-h-[420px] grid-cols-[220px_1fr] overflow-hidden rounded-xl border border-line bg-panel max-[900px]:grid-cols-1">
-      <aside className="border-r border-line p-2 max-[900px]:border-b max-[900px]:border-r-0">
-        <strong className="px-2 text-[10px] uppercase tracking-wider text-muted">{t('studio.devtools.diff.drafts')}</strong>
-        <div className="mt-2 space-y-1">
-          {drafts.map(draft => (
-            <button key={draft.id} type="button" className="w-full rounded-lg p-2 text-left hover:bg-panel2" onClick={() => onShow(draft.id)}>
-              <strong className="block truncate text-[11px] text-ink">{draft.intent}</strong>
-              <small className="text-[9px] text-muted">
-                r
-                {draft.revision}
-                {' '}
-                ·
-                {draft.status}
-              </small>
-              <If cond={draftScopes[draft.id]?.legacyOrUnscoped === true}>
-                <small className="mt-1 block text-[9px] text-warning">{t('studio.devtools.diff.legacy_readonly')}</small>
-              </If>
-            </button>
-          ))}
-        </div>
-      </aside>
-      <div className="min-w-0 p-4">
-        <If cond={lastSnapshot != null}>
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 p-3">
-            <span className="min-w-0">
-              <strong className="block text-xs text-success">{t('studio.devtools.snapshot.created')}</strong>
-              <small className="block truncate text-[9px] text-muted">{lastSnapshot?.id}</small>
-            </span>
-            <Button size="sm" variant="outline" isPending={restoringSnapshot} onPress={() => lastSnapshot && onRestoreSnapshot(lastSnapshot.id)}>{t('studio.devtools.snapshot.restore')}</Button>
+    <div className="flex min-h-0 flex-1 flex-col bg-canvas">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">
+        <span className="min-w-0">
+          <strong className="block truncate text-xs text-ink">{file.path}</strong>
+          <small className="text-[9px] text-muted">{t('studio.devtools.source.xls_readonly')}</small>
+        </span>
+        <If cond={workbook.sheets.length > 1}>
+          <select className="max-w-52 rounded-md border border-line bg-panel2 px-2 py-1 text-[10px] text-ink outline-none" value={sheetName} aria-label={t('studio.devtools.source.xls_sheet')} onChange={event => onSheet(event.target.value)}>
+            {workbook.sheets.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+          </select>
+        </If>
+      </header>
+      <If cond={!sheetLoading} else={<CenteredNotice title={t('studio.devtools.source.xls_sheet_loading')} description={sheetName} />}>
+        <If cond={!sheetError && sheet != null} else={<CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(sheetError ?? '')} />}>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <pre className="min-w-max whitespace-pre p-4 font-mono text-[11px] leading-5 text-ink">{xlsTsvPreview(sheet!)}</pre>
           </div>
         </If>
-        <If cond={preview != null} else={<CenteredNotice title={t('studio.devtools.diff.empty')} description={t('studio.devtools.diff.empty_desc')} />}>
-          <div>
-            <If cond={previewScope?.legacyOrUnscoped === true}>
-              <div className="mb-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
-                <strong className="text-xs text-warning">{t('studio.devtools.diff.legacy_readonly')}</strong>
-                <p className="mt-1 text-[10px] leading-5 text-muted">{t('studio.devtools.diff.legacy_desc')}</p>
-                <Button className="mt-2 bg-accent text-white" size="sm" isPending={cloningLegacy} onPress={() => preview && onCloneLegacy(preview)}>{t('studio.devtools.diff.legacy_clone')}</Button>
-              </div>
-            </If>
-            <div className="mb-3 flex justify-end">
-              <If cond={previewScope?.legacyOrUnscoped === false}>
-                <Button className="bg-accent text-white" size="sm" isPending={applying} onPress={applyPreview}>{t('studio.devtools.diff.apply')}</Button>
-              </If>
-            </div>
-            <div className="space-y-3">
-              {preview?.preview.changes.map(change => (
-                <div key={change.path} className="overflow-hidden rounded-lg border border-line">
-                  <header className="bg-panel2 px-3 py-2 text-[10px] text-ink">{change.path}</header>
-                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap p-3 text-[10px] leading-5 text-muted">{change.unifiedDiff ?? t('studio.devtools.diff.binary')}</pre>
-                </div>
-              ))}
-            </div>
-          </div>
-        </If>
-      </div>
-    </div>
-  )
-}
-
-function ValidationPanel({ report }: { report: DomainValidationReport | null }) {
-  const { t } = useTranslation()
-  if (!report)
-    return <CenteredNotice title={t('studio.devtools.validation.empty')} description={t('studio.devtools.validation.empty_desc')} />
-  return (
-    <div className="mx-auto max-w-3xl rounded-2xl border border-line bg-panel p-6">
-      <ValidationStateIcon valid={report.valid} />
-      <h2 className="mt-3 text-lg font-semibold text-ink">{t(validationTitleKey(report.valid))}</h2>
-      <p className="mt-1 text-sm text-muted">{t('studio.devtools.validation.summary', { owned: report.ownedFiles, writable: report.writableFiles, readonly: report.readonlyFiles })}</p>
-      <div className="mt-5 space-y-2">{report.diagnostics.map(diagnostic => <div key={diagnostic} className="rounded-lg border border-line bg-panel2 px-3 py-2 text-xs text-muted">{diagnostic}</div>)}</div>
-    </div>
-  )
-}
-
-function ValidationStateIcon({ valid }: { valid: boolean }) {
-  if (valid)
-    return <CircleCheck className={validationIconClass(valid)} />
-  return <CircleExclamation className={validationIconClass(valid)} />
-}
-
-function Metric({ label, value }: { label: string, value: number }) {
-  return (
-    <div className="rounded-xl border border-line bg-panel px-4 py-3">
-      <strong className="block text-xl tabular-nums text-ink">{value}</strong>
-      <span className="text-[10px] text-muted">{label}</span>
+      </If>
     </div>
   )
 }
 
 function CenteredNotice({ title, description }: { title: string, description: string }) {
   return (
-    <div className="grid min-h-[360px] place-items-center">
+    <div className="grid min-h-0 flex-1 place-items-center p-6">
       <div className="max-w-sm text-center">
         <strong className="text-sm text-ink">{title}</strong>
         <p className="mt-2 text-xs leading-5 text-muted">{description}</p>
@@ -927,39 +488,69 @@ function NoProject() {
   return <CenteredNotice title={t('studio.devtools.no_project')} description={t('studio.devtools.no_project_desc')} />
 }
 
-async function classifyDraftScopes(projectId: string | undefined, drafts: DomainDraft[]) {
-  if (!projectId)
-    return {}
-  const entries = await Promise.all(drafts.map(async (draft) => {
-    try {
-      const report = await validateDomainDraft(projectId, draft.id)
-      return [draft.id, { systemId: report.systemId, legacyOrUnscoped: false }] as const
-    }
-    catch (reason) {
-      return [draft.id, { systemId: null, legacyOrUnscoped: isLegacyOrUnscopedError(reason) }] as const
-    }
-  }))
-  return Object.fromEntries(entries)
+function currentSystemFiles(files: DomainFileRecord[]) {
+  const unique = new Map<string, DomainFileRecord>()
+  files.forEach((file) => {
+    if ((file.ownership === 'owned' || file.ownership === 'shared') && !unique.has(file.path))
+      unique.set(file.path, file)
+  })
+  return [...unique.values()].sort((left, right) => left.path.localeCompare(right.path, 'zh-CN'))
 }
 
-function isLegacyOrUnscopedError(reason: unknown) {
-  const message = String(reason)
-  return message.includes('DRAFT_DOMAIN_REQUIRED') || message.includes('DRAFT_LEGACY_READONLY')
+function buildFileTree(files: DomainFileRecord[]): FileTreeNode {
+  const root: MutableFileTree = { directories: new Map(), files: [] }
+  files.forEach((file) => {
+    const segments = file.path.split('/').filter(Boolean)
+    let cursor = root
+    segments.slice(0, -1).forEach((segment) => {
+      let child = cursor.directories.get(segment)
+      if (!child) {
+        child = { directories: new Map(), files: [] }
+        cursor.directories.set(segment, child)
+      }
+      cursor = child
+    })
+    cursor.files.push(file)
+  })
+  return finalizeFileTree('', '', root)
 }
 
-function describeLoadedFiles(files: DomainFileRecord[]) {
+function finalizeFileTree(name: string, path: string, node: MutableFileTree): FileTreeNode {
+  const directories = [...node.directories.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
+    .map(([childName, child]) => finalizeFileTree(childName, joinPath(path, childName), child))
   return {
-    ownedFiles: files.filter(file => file.ownership === 'owned').length,
-    sharedFiles: files.filter(file => file.ownership === 'shared').length,
-    writableFiles: files.filter(file => file.access !== 'readonly').length,
-    readonlyFiles: files.filter(file => file.access === 'readonly').length,
-    diagnostics: [],
+    name,
+    path,
+    directories,
+    files: [...node.files].sort((left, right) => fileName(left.path).localeCompare(fileName(right.path), 'zh-CN')),
   }
+}
+
+function joinPath(parent: string, name: string) {
+  if (parent.length === 0)
+    return name
+  return `${parent}/${name}`
+}
+
+function fileName(path: string) {
+  return path.split('/').at(-1) ?? path
+}
+
+function xlsTsvPreview(sheet: SafeXlsSheet) {
+  return sheet.rows
+    .slice(0, 500)
+    .map(row => row.slice(0, 100).join('\t'))
+    .join('\n')
 }
 
 function isTextFile(file?: DomainFileRecord | null): boolean {
   const extension = file?.extension?.toLowerCase()
   return extension === 'txt' || extension === 'lua'
+}
+
+function isXlsFile(file?: DomainFileRecord | null): boolean {
+  return file?.extension?.toLowerCase() === 'xls'
 }
 
 function canEditSource(file?: DomainFileRecord | null): boolean {
@@ -1012,10 +603,9 @@ async function consumeNavigationTarget(
   project: Mir3Project,
   target: VerifiedDevtoolsTarget,
   files: DomainFileRecord[],
-  selectFile: (file: DomainFileRecord) => void,
+  selectFile: (file: DomainFileRecord | null) => void,
   setDraftPreview: (preview: DomainDraftConfirmation | null) => void,
   setValidation: (report: DomainValidationReport | null) => void,
-  setCenterTab: (tab: CenterTab) => void,
 ): Promise<void> {
   if (target.relativePath) {
     const file = files.find(item => item.path === target.relativePath)
@@ -1033,47 +623,35 @@ async function consumeNavigationTarget(
     throw new Error('DEVTOOLS_RETURN_DRAFT_SCOPE_MISMATCH')
   setDraftPreview(preview)
   setValidation(report)
-  setCenterTab(report.valid ? 'diff' : 'validation')
 }
 
-function sidebarTabClass(active: boolean) {
-  if (active)
-    return 'rounded-md bg-accent/14 px-1 py-1.5 text-[10px] font-medium text-accent'
-  return 'rounded-md px-1 py-1.5 text-[10px] text-muted hover:bg-panel2 hover:text-ink'
+async function invalidateWorkspaceQueries(queryClient: ReturnType<typeof useQueryClient>, projectId: string, systemId: string) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['domain-files', projectId, systemId] }),
+    queryClient.invalidateQueries({ queryKey: ['domain-source', projectId] }),
+    queryClient.invalidateQueries({ queryKey: ['domain-xls', projectId] }),
+    queryClient.invalidateQueries({ queryKey: ['domain-xls-sheet', projectId] }),
+  ])
 }
 
-function projectionButtonClass(selected: boolean) {
+function draftMessage(t: ReturnType<typeof useTranslation>['t'], preview: DomainDraftConfirmation, validation: DomainValidationReport | null) {
+  if (validation?.valid === true)
+    return t('studio.devtools.draft.valid', { count: preview.preview.changes.length })
+  if (validation?.valid === false)
+    return validation.diagnostics[0] ?? t('studio.devtools.draft.invalid')
+  return t('studio.devtools.draft.pending', { count: preview.preview.changes.length })
+}
+
+function draftMessageClass(validation: DomainValidationReport | null) {
+  if (validation?.valid === true)
+    return 'block truncate text-[9px] text-success'
+  if (validation?.valid === false)
+    return 'block truncate text-[9px] text-danger'
+  return 'block truncate text-[9px] text-muted'
+}
+
+function fileTreeButtonClass(selected: boolean) {
   if (selected)
-    return 'w-full rounded-lg border border-accent/30 bg-accent/8 p-2 text-left'
-  return 'w-full rounded-lg border border-transparent p-2 text-left hover:border-line hover:bg-panel2'
-}
-
-function projectionLabel(file: DomainFileRecord, resourceMode: boolean) {
-  if (resourceMode)
-    return file.resourceId
-  return file.path.split('/').at(-1)
-}
-
-function accessBadgeClass(access: DomainFileRecord['access']) {
-  if (access === 'readonly')
-    return 'rounded bg-warning/10 px-1 text-[8px] text-warning'
-  return 'rounded bg-success/10 px-1 text-[8px] text-success'
-}
-
-function centerTabClass(active: boolean) {
-  if (active)
-    return 'bg-accent/14 text-accent'
-  return 'text-muted'
-}
-
-function validationIconClass(valid: boolean) {
-  if (valid)
-    return 'size-7 text-success'
-  return 'size-7 text-warning'
-}
-
-function validationTitleKey(valid: boolean) {
-  if (valid)
-    return 'studio.devtools.validation.passed'
-  return 'studio.devtools.validation.failed'
+    return 'flex w-full items-center gap-1.5 rounded-md bg-accent/14 px-1.5 py-1 text-left text-[11px] text-accent'
+  return 'flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] text-ink hover:bg-panel2'
 }

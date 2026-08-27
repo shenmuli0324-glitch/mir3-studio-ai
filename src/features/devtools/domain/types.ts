@@ -202,6 +202,27 @@ export interface SafeTextPatchResult {
   preview: DomainDraftPreview
 }
 
+export interface SafeXlsSheetMeta {
+  name: string
+  rowCount: number
+  columnCount: number
+}
+
+export interface SafeXlsWorkbook {
+  relativePath: string
+  sha256: string
+  sheets: SafeXlsSheetMeta[]
+  readOnly: boolean
+}
+
+export interface SafeXlsSheet {
+  sheet: string
+  rowCount: number
+  columnCount: number
+  rows: string[][]
+  sourceSha256: string
+}
+
 export interface DomainDraft {
   id: string
   intent: string

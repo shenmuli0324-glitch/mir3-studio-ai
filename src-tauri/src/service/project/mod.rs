@@ -269,6 +269,13 @@ pub fn mcp_binary_path(app: &AppHandle) -> Option<PathBuf> {
         "mir3-mcp"
     };
     let mut candidates = Vec::new();
+    // macOS 打包后的 AppHandle 路径解析可能在 WebView 尚未就绪时返回资源目录；
+    // 当前进程路径始终指向 Contents/MacOS，优先用它定位同目录 sidecar。
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            candidates.push(parent.join(binary));
+        }
+    }
     if let Ok(executable) = app.path().executable_dir() {
         // Tauri externalBin 在 macOS app 中位于 Contents/MacOS，而不是 Resources。
         candidates.push(executable.join(binary));

@@ -16,6 +16,7 @@ import { compensateGlobalDraftSetup } from './global-draft-compensation'
 import { appendScopedUserRequest, buildGlobalTaskHandoff, buildTaskSemanticSummary, formatTaskReceiptSummary, projectTaskMessages, sanitizeTaskSemanticList, taskGoalFromMessages } from './global-task-handoff'
 import { retireSourceTaskScope } from './global-task-recovery'
 import { currentScopeLease, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from './scope-lease-manager'
+import { assertSystemTaskScopeLease, buildSystemTaskRenewalContract, buildSystemTaskScopeContract, systemTaskSafetyInstructions } from './system-task-scope'
 
 interface AiMessage {
   id: string
@@ -73,8 +74,19 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
 
   useEffect(() => {
     let cancelled = false
-    void getSystemSession(project.id, taskId).then((binding) => {
+    void getSystemSession(project.id, taskId).then(async (binding) => {
       if (!cancelled && binding) {
+        if (binding.systemId !== manifest.systemId || binding.pluginVersion !== manifest.version) {
+          await revokeTaskScopes(project.id, binding.taskId)
+          if (cancelled)
+            return
+          const nextTaskId = createSystemTaskId(project.id, manifest.systemId)
+          rememberSystemTaskId(project.id, manifest.systemId, nextTaskId)
+          expectedSessionRef.current = ''
+          setSessionId('')
+          setTaskId(nextTaskId)
+          return
+        }
         expectedSessionRef.current = binding.sessionId
         setSessionId(binding.sessionId)
       }
@@ -82,7 +94,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     return () => {
       cancelled = true
     }
-  }, [project.id, taskId])
+  }, [manifest.systemId, manifest.version, project.id, taskId])
 
   useEffect(() => {
     void Promise.all([
@@ -228,16 +240,23 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       try {
         if (activeLease)
           await stopScopeLease(leaseIdentity)
-        const readSystems = uniqueStrings([manifest.systemId, ...manifest.dependencies])
         const manifests = await listDomainSystems()
-        activeLease = await issueTaskScope(
+        const contract = buildSystemTaskScopeContract(manifest, taskId, draftId, manifests)
+        const issued = await issueTaskScope(
           project.id,
-          taskId,
-          readSystems,
-          [manifest.systemId],
-          optionalValue(draftId),
-          domainPluginVersions(manifests, readSystems),
+          contract.taskId,
+          contract.readSystems,
+          [contract.systemId],
+          contract.draftIds,
+          contract.pluginVersions,
         )
+        try {
+          activeLease = assertSystemTaskScopeLease(issued, contract)
+        }
+        catch (reason) {
+          await revokeTaskScope(project.id, issued.token).catch(() => {})
+          throw reason
+        }
         manageSystemLease(activeLease, leaseIdentity, project, manifest, draftId, reason => setError(String(reason)))
         setScopeDraftId(draftId ?? null)
       }
@@ -986,14 +1005,23 @@ function manageSystemLease(
     identity,
     lease,
     renew: async (previous) => {
-      const renewed = await issueTaskScope(
+      const contract = buildSystemTaskRenewalContract(manifest, identity.taskId, previous)
+      const issued = await issueTaskScope(
         project.id,
-        identity.taskId,
-        previous.readSystems,
-        previous.writeSystems,
-        previous.draftIds,
-        previous.pluginVersions,
+        contract.taskId,
+        contract.readSystems,
+        [contract.systemId],
+        contract.draftIds,
+        contract.pluginVersions,
       )
+      let renewed: TaskScopeLease
+      try {
+        renewed = assertSystemTaskScopeLease(issued, contract)
+      }
+      catch (reason) {
+        await revokeTaskScope(project.id, issued.token).catch(() => {})
+        throw reason
+      }
       const posted = postSessionMessage(
         'mir3/systemSession.prompt',
         project.id,
@@ -1093,6 +1121,7 @@ function scopedPrompt(
 ) {
   const context = [
     `[MIR3 System Scope] project=${project.id}; system=${manifest.systemId}; plugin=${manifest.version}; writeSystems=${manifest.systemId}; readSystems=${[manifest.systemId, ...manifest.dependencies].join(',')}; draft=${draftId ?? 'none'}; selectedFile=${selectedPath ?? 'none'}; selectedResource=${selectedResourceId ?? 'none'}; scopeToken=${scopeToken ?? 'none'}.`,
+    systemTaskSafetyInstructions(manifest),
   ]
   if (memories.length > 0)
     context.push(`[Activated domain memories]\n${memories.slice(0, 8).map(memory => `- ${memory.summary}`).join('\n')}`)
