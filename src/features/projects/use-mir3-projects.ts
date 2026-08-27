@@ -42,12 +42,12 @@ export function useMir3Projects() {
   })
 
   const activateProject = useMutation({
-    mutationFn: async (projectId: string) => {
-      const project = await invoke<Mir3Project>('project_activate', { projectId })
+    mutationFn: (projectId: string) => invoke<Mir3Project>('project_activate', { projectId }),
+    onSuccess: async (project) => {
+      queryClient.setQueryData(['mir3-active-project'], project)
+      await invalidateProjectQueries(queryClient)
       restartHarnessAfterProjectChange()
-      return project
     },
-    onSuccess: () => invalidateProjectQueries(queryClient),
   })
 
   const selectWorkspace = useMutation({
@@ -69,10 +69,16 @@ export function useMir3Projects() {
     mutationFn: async (projectId: string) => {
       const wasActive = active.data?.id === projectId
       await invoke<void>('project_remove', { projectId })
+      return { projectId, wasActive }
+    },
+    onSuccess: async ({ projectId, wasActive }) => {
+      queryClient.setQueryData<Mir3Project[]>(['mir3-projects'], current => current?.filter(project => project.id !== projectId))
+      if (wasActive)
+        queryClient.setQueryData(['mir3-active-project'], null)
+      await invalidateProjectQueries(queryClient)
       if (wasActive)
         restartHarnessAfterProjectChange()
     },
-    onSuccess: () => invalidateProjectQueries(queryClient),
   })
 
   const relinkProject = useMutation({
@@ -118,12 +124,14 @@ function restartHarnessAfterProjectChange() {
   })
 }
 
-export function invalidateProjectQueries(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: ['mir3-projects'] })
-  void queryClient.invalidateQueries({ queryKey: ['mir3-active-project'] })
-  void queryClient.invalidateQueries({ queryKey: ['mir3-scan'] })
-  void queryClient.invalidateQueries({ queryKey: ['mir3-index-stats'] })
-  void queryClient.invalidateQueries({ queryKey: ['mir3-drafts'] })
-  void queryClient.invalidateQueries({ queryKey: ['mir3-snapshots'] })
-  void queryClient.invalidateQueries({ queryKey: ['mir3-knowledge'] })
+export async function invalidateProjectQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['mir3-projects'] }),
+    queryClient.invalidateQueries({ queryKey: ['mir3-active-project'] }),
+    queryClient.invalidateQueries({ queryKey: ['mir3-scan'] }),
+    queryClient.invalidateQueries({ queryKey: ['mir3-index-stats'] }),
+    queryClient.invalidateQueries({ queryKey: ['mir3-drafts'] }),
+    queryClient.invalidateQueries({ queryKey: ['mir3-snapshots'] }),
+    queryClient.invalidateQueries({ queryKey: ['mir3-knowledge'] }),
+  ])
 }

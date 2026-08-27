@@ -1,6 +1,8 @@
 import { FolderOpen } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
+import { useOverlay } from '@overlastic/react'
 import { useTranslation } from 'react-i18next'
+import { Modal } from '@/components/modal'
 import { isGuiDesignerDirty } from '@/features/gui-designer/gui-designer-scope'
 import { ProjectDetails } from '@/features/projects/project-details'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
@@ -9,6 +11,7 @@ import { EmptyPanel, ViewFrame, ViewHeader } from './view-primitives'
 
 export function ProjectView() {
   const { t } = useTranslation()
+  const [confirmationHolder, openConfirmation] = useOverlay(Modal, { type: 'holder' })
   const {
     projects,
     activeProject,
@@ -37,32 +40,37 @@ export function ProjectView() {
 
   async function handleActivate(projectId: string) {
     // 切换当前项目会销毁编辑器 Working Copy，只在确有修改时追加保护。
-    // eslint-disable-next-line no-alert
-    if (projectId !== activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
+    if (projectId !== activeProject?.id && hasDirtyStudioEditor() && !await confirmProjectAction('warning', t('studio.project.activate'), t('studio.project.editor_leave_warning')))
       return
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(t('studio.project.switch_confirm')))
+    if (!await confirmProjectAction('warning', t('studio.project.activate'), t('studio.project.switch_confirm')))
       return
     await runProjectAction(() => activateProject(projectId), 'studio.project.switched')
   }
 
   async function handleRemove(projectId: string) {
     // 删除当前项目会销毁编辑器 Working Copy，删除其他项目不额外拦截。
-    // eslint-disable-next-line no-alert
-    if (projectId === activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
+    if (projectId === activeProject?.id && hasDirtyStudioEditor() && !await confirmProjectAction('danger', t('studio.project.remove'), t('studio.project.editor_leave_warning')))
       return
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(t('studio.project.remove_confirm')))
+    if (!await confirmProjectAction('danger', t('studio.project.remove'), t('studio.project.remove_confirm')))
       return
     await runProjectAction(() => removeProject(projectId), 'studio.project.removed')
   }
 
   async function handleRelink(projectId: string) {
     // 重绑定会销毁当前项目的编辑器 Working Copy，只在确有修改时额外确认。
-    // eslint-disable-next-line no-alert
-    if (projectId === activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
+    if (projectId === activeProject?.id && hasDirtyStudioEditor() && !await confirmProjectAction('warning', t('studio.project.relink'), t('studio.project.editor_leave_warning')))
       return
     await runProjectAction(() => relinkProject(projectId), 'studio.project.relinked')
+  }
+
+  async function confirmProjectAction(status: 'warning' | 'danger', title: string, description: string) {
+    try {
+      await openConfirmation({ status, title, description: <p>{description}</p> })
+      return true
+    }
+    catch {
+      return false
+    }
   }
 
   async function handleWorkspace(projectId: string) {
@@ -119,6 +127,7 @@ export function ProjectView() {
               onRelink={projectId => void handleRelink(projectId)}
             />
           )}
+      {confirmationHolder}
     </ViewFrame>
   )
 }
