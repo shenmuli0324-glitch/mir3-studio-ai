@@ -333,6 +333,14 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::gui_draft_prepare,
         crate::bridge::gui_draft_confirm,
         crate::bridge::gui_draft_apply,
+        crate::bridge::gui_working_save,
+        crate::bridge::gui_save_node_list,
+        crate::bridge::gui_save_node_restore,
+        crate::bridge::gui_document_probe,
+        crate::bridge::gui_external_change_record,
+        crate::bridge::gui_game_process_status,
+        crate::bridge::gui_ai_workspace_sync,
+        crate::bridge::gui_ai_workspace_get,
     ];
     move |invoke| {
         let command = invoke.message.command().to_string();

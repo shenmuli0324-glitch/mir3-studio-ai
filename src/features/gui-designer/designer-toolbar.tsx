@@ -1,4 +1,4 @@
-import { ArrowUturnCcwLeft, ArrowUturnCwRight, CodeCompare, Display, MagnifierMinus, MagnifierPlus, Plus, Smartphone } from '@gravity-ui/icons'
+import { ArrowUturnCcwLeft, ArrowUturnCwRight, ClockArrowRotateLeft, Display, FloppyDisk, MagnifierMinus, MagnifierPlus, Plus, Smartphone } from '@gravity-ui/icons'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useScope } from '@/hooks/use-scope'
@@ -45,6 +45,7 @@ export function DesignerToolbar() {
         <If cond={file == null}><span>{t('studio.gui.no_file')}</span></If>
         <If cond={file != null}><span>{file?.path}</span></If>
         <If cond={file != null && (file?.workingSource !== file?.originalSource || file?.isNew)}><span className="ml-2 text-accent">●</span></If>
+        <If cond={scope.diskConflict != null || scope.aiConflict != null}><span className="ml-2 text-danger">{t('studio.gui.conflict')}</span></If>
       </span>
       <ToolbarIcon label={t('studio.gui.zoom_out')} onPress={() => scope.setZoom(scope.zoom - 0.1)}><MagnifierMinus /></ToolbarIcon>
       <button className="h-8 min-w-14 rounded-lg px-2 text-[11px] tabular-nums text-muted hover:bg-panel-hover hover:text-ink" type="button" title={t('studio.gui.fit_canvas')} onClick={scope.fitCanvas}>
@@ -57,13 +58,22 @@ export function DesignerToolbar() {
         {t('studio.gui.new_page')}
       </button>
       <button
+        className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-muted hover:bg-panel-hover hover:text-ink disabled:opacity-40"
+        type="button"
+        disabled={!scope.canRestoreSave || scope.busy}
+        onClick={() => void scope.restorePreviousSave().catch(() => {})}
+      >
+        <ClockArrowRotateLeft className="size-3.5" />
+        {t('studio.gui.restore_save')}
+      </button>
+      <button
         className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-[11px] font-medium text-white transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] disabled:opacity-40"
         type="button"
-        disabled={!scope.dirty || scope.busy || file?.valid === false}
-        onClick={() => void scope.prepareDiff().catch(() => {})}
+        disabled={!scope.dirty || scope.busy || file?.valid === false || scope.diskConflict != null}
+        onClick={() => void scope.saveWorkingFiles().catch(() => {})}
       >
-        <CodeCompare className="size-3.5" />
-        {t('studio.gui.diff')}
+        <FloppyDisk className="size-3.5" />
+        {t('studio.gui.save')}
       </button>
     </header>
   )

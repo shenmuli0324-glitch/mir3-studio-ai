@@ -1,15 +1,15 @@
+import type { AiConversationMessage, AiPendingInteraction } from './ai-conversation-panel'
 import type { DomainDraftHandoff } from './ai-handoff'
 import type { CapabilityResolution, DomainManifest, DomainMemory, TaskReceipt, TaskScopeLease } from '@/features/devtools/domain/types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
-import { ArrowUp, ChevronDown, CircleStop } from '@gravity-ui/icons'
-import { Button } from '@heroui/react'
+import { ChevronDown } from '@gravity-ui/icons'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { If } from 'react-if-lite'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
 import { associateDomainDraftComposite, bindSystemSession, getSystemSession, issueTaskScope, listDomainMemories, listDomainSystems, listTaskReceipts, openDomainDraft, resolveUserCapabilities, revokeTaskScope, revokeTaskScopes } from '@/features/devtools/domain/api'
 import { bridgeRequestId, ensureHarnessProjectActive, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
+import { AiConversationPanel } from './ai-conversation-panel'
 import { draftHandoffs, includeGlobalTaskDraft, markGlobalTaskMcpDisabled, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask } from './ai-handoff'
 import { compensateGlobalDraftSetup } from './global-draft-compensation'
 import { appendScopedUserRequest, buildGlobalTaskHandoff, projectTaskMessages, taskGoalFromMessages } from './global-task-handoff'
@@ -17,17 +17,13 @@ import { retireSourceTaskScope } from './global-task-recovery'
 import { currentScopeLease, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from './scope-lease-manager'
 import { assertSystemTaskScopeLease, buildSystemTaskRenewalContract, buildSystemTaskScopeContract, systemTaskSafetyInstructions } from './system-task-scope'
 
-interface AiMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-}
+type AiMessage = AiConversationMessage
 
 interface SessionSnapshot {
   nodes?: unknown[]
   partial?: unknown
   runningCalls?: unknown[]
-  pending?: PendingInteraction[]
+  pending?: AiPendingInteraction[]
   running?: boolean
   openError?: string | null
   promptError?: string | null
@@ -49,7 +45,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   const [connected, setConnected] = useState(false)
   const [sessionReady, setSessionReady] = useState(false)
   const [running, setRunning] = useState(false)
-  const [pending, setPending] = useState<PendingInteraction[]>([])
+  const [pending, setPending] = useState<AiPendingInteraction[]>([])
   const [runningCalls, setRunningCalls] = useState<unknown[]>([])
   const [taskToolCalls, setTaskToolCalls] = useState<unknown[]>([])
   const [messages, setMessages] = useState<AiMessage[]>([])
@@ -502,44 +498,20 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
 
   return (
     <aside className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-l border-line bg-panel">
-      <div className="min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-4 py-5">
-        <If cond={messages.length > 0}>
-          {messages.map(message => <AiBubble key={message.id} message={message} />)}
-        </If>
-        <If cond={running}>
-          <p className="text-[11px] text-accent">{t('studio.devtools.ai.running')}</p>
-        </If>
-        <If cond={pending.length > 0}>
-          <div className="space-y-2">
-            {pending.map(interaction => <PendingCard key={interaction.key} interaction={interaction} onRespond={response => respond(interaction.key, response)} />)}
-          </div>
-        </If>
-        <If cond={error != null}><p className="max-w-full whitespace-pre-wrap break-words text-[11px] leading-5 text-danger [overflow-wrap:anywhere]">{error}</p></If>
-      </div>
-      <div className="shrink-0 p-3">
-        <div className="rounded-2xl border border-line bg-panel2 p-2 shadow-[0_8px_32px_rgba(0,0,0,0.12)] focus-within:border-accent/70">
-          <textarea
-            rows={4}
-            className="w-full resize-none overflow-x-hidden bg-transparent px-2 py-1.5 text-xs leading-5 text-ink outline-none placeholder:text-muted"
-            value={input}
-            placeholder={t('studio.devtools.ai.placeholder')}
-            aria-label={t('studio.devtools.ai.placeholder')}
-            onChange={event => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                void sendPrompt()
-              }
-            }}
-          />
-          <div className="flex items-end justify-between gap-2 px-1 pb-0.5">
-            <GlobalScopePicker manifest={manifest} selected={globalWriteSystems} onToggle={toggleGlobalWriteSystem} />
-            <If cond={running && globalWriteSystems.length === 0} else={<Button isIconOnly size="sm" className="size-8 shrink-0 rounded-full bg-accent text-white" isDisabled={input.trim().length === 0 || globalPending} isPending={globalPending} aria-label={t('studio.devtools.ai.send')} onPress={() => void sendPrompt()}><ArrowUp className="size-4" /></Button>}>
-              <Button isIconOnly size="sm" variant="ghost" className="size-8 shrink-0 rounded-full" aria-label={t('studio.devtools.ai.cancel')} onPress={cancel}><CircleStop className="size-4" /></Button>
-            </If>
-          </div>
-        </div>
-      </div>
+      <AiConversationPanel
+        messages={messages}
+        running={running}
+        pending={pending}
+        error={error}
+        input={input}
+        placeholder={t('studio.devtools.ai.placeholder')}
+        sending={globalPending}
+        scopeControl={<GlobalScopePicker manifest={manifest} selected={globalWriteSystems} onToggle={toggleGlobalWriteSystem} />}
+        onInputChange={setInput}
+        onSend={() => void sendPrompt()}
+        onCancel={cancel}
+        onRespond={respond}
+      />
     </aside>
   )
 }
@@ -569,18 +541,8 @@ function GlobalScopePicker({ manifest, selected, onToggle }: { manifest: DomainM
   )
 }
 
-function AiBubble({ message }: { message: AiMessage }) {
-  return <div className={aiBubbleClass(message.role)} dir="auto">{message.content}</div>
-}
-
 function isSuccessfulReceipt(status: string): boolean {
   return status === 'applied'
-}
-
-function aiBubbleClass(role: AiMessage['role']) {
-  if (role === 'user')
-    return 'ml-8 max-w-full whitespace-pre-wrap break-words rounded-xl bg-accent px-3 py-2 text-xs leading-5 text-white [overflow-wrap:anywhere]'
-  return 'mr-4 max-w-full whitespace-pre-wrap break-words rounded-xl border border-line bg-panel2 px-3 py-2 text-xs leading-5 text-ink [overflow-wrap:anywhere]'
 }
 
 function optionalValue(value?: string | null) {
@@ -829,7 +791,7 @@ function applySnapshot(
   snapshot: SessionSnapshot,
   setMessages: (value: AiMessage[]) => void,
   setRunning: (value: boolean) => void,
-  setPending: (value: PendingInteraction[]) => void,
+  setPending: (value: AiPendingInteraction[]) => void,
   setRunningCalls: (value: unknown[]) => void,
   setError: (value: string | null) => void,
 ) {
@@ -874,36 +836,4 @@ function isRecoverableSessionStartupError(reason: string): boolean {
     || reason.includes('SESSION_NOT_FOUND')
     || reason.includes('SESSION_BINDING')
     || reason.includes('SYSTEM_SESSION_CREATE_FAILED')
-}
-
-interface PendingInteraction {
-  key: string
-  kind: 'approval' | 'question' | string
-  payload: Record<string, unknown>
-}
-
-function PendingCard({ interaction, onRespond }: { interaction: PendingInteraction, onRespond: (response: unknown) => void }) {
-  const { t } = useTranslation()
-  const [answer, setAnswer] = useState('')
-  const message = String(interaction.payload.message ?? interaction.payload.question ?? interaction.payload.description ?? '')
-  return (
-    <div className="border-l-2 border-warning pl-3">
-      <strong className="text-xs text-ink">{t('studio.devtools.ai.confirmation')}</strong>
-      <p className="mt-1 text-[11px] leading-5 text-muted">{message}</p>
-      <If
-        cond={interaction.kind === 'approval'}
-        else={(
-          <div className="mt-2 flex gap-2">
-            <input className="min-w-0 flex-1 rounded-lg border border-line bg-panel px-2 py-1.5 text-xs text-ink outline-none" value={answer} aria-label={t('studio.devtools.ai.answer')} onChange={event => setAnswer(event.target.value)} />
-            <Button size="sm" className="bg-accent text-white" isDisabled={!answer.trim()} onPress={() => onRespond({ answer })}>{t('studio.devtools.ai.answer_send')}</Button>
-          </div>
-        )}
-      >
-        <div className="mt-2 flex gap-2">
-          <Button size="sm" className="bg-accent text-white" onPress={() => onRespond({ outcome: 'allowed-once' })}>{t('studio.devtools.ai.allow_once')}</Button>
-          <Button size="sm" variant="ghost" className="text-danger" onPress={() => onRespond({ outcome: 'rejected' })}>{t('studio.devtools.ai.reject')}</Button>
-        </div>
-      </If>
-    </div>
-  )
 }

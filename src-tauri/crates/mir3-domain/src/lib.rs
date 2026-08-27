@@ -6,6 +6,7 @@
 mod draft;
 mod fixtures;
 mod governance;
+mod gui_workspace;
 mod knowledge;
 mod map_adapter;
 mod project;
@@ -19,6 +20,7 @@ mod systems;
 pub use draft::*;
 pub use fixtures::*;
 pub use governance::*;
+pub use gui_workspace::*;
 pub use knowledge::*;
 pub use map_adapter::*;
 pub use project::*;

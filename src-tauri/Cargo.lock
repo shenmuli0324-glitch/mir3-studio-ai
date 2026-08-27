@@ -2770,6 +2770,7 @@ dependencies = [
  "fs2",
  "getrandom 0.3.4",
  "mir3-map",
+ "mir3-ui",
  "regex",
  "rusqlite",
  "semver",
@@ -2795,6 +2796,7 @@ version = "0.1.0"
 dependencies = [
  "easyexcel-xls",
  "mir3-domain",
+ "mir3-ui",
  "semver",
  "serde",
  "serde_json",
@@ -2802,7 +2804,7 @@ dependencies = [
 
 [[package]]
 name = "mir3-studio-ai"
-version = "0.9.19"
+version = "0.9.20"
 dependencies = [
  "arboard",
  "async-trait",

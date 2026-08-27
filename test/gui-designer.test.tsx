@@ -76,7 +76,7 @@ describe('gui designer interaction', () => {
     expect(document.querySelector('[data-gui-canvas-container]')).toBeTruthy()
   })
 
-  it('edits a literal property, adds a component, and requires Diff confirmation before apply', async () => {
+  it('edits the working copy and saves one node without a Diff confirmation', async () => {
     installInvokeFixture()
     renderDesigner()
     const user = userEvent.setup()
@@ -84,30 +84,18 @@ describe('gui designer interaction', () => {
     await openDemoFile(user)
     await user.click(screen.getByRole('button', { name: 'Layers' }))
     await user.click(await screen.findByRole('button', { name: /Button_close/i }))
-    expect((screen.getByLabelText('Image path') as HTMLInputElement).value).toBe('icons/close.png')
+    expect(screen.getAllByText('Button_close').length).toBeGreaterThan(0)
 
-    const xInput = screen.getByLabelText('X')
-    fireEvent.change(xInput, { target: { value: '42' } })
-    fireEvent.blur(xInput)
+    await user.click(screen.getByRole('button', { name: 'Code' }))
+    const editor = screen.getByLabelText('Lua source editor') as HTMLTextAreaElement
+    fireEvent.change(editor, { target: { value: editor.value.replace(', 10,', ', 42,') } })
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_reparse', expect.anything()), { timeout: 1500 })
-
-    const widthInput = screen.getByLabelText('W')
-    fireEvent.change(widthInput, { target: { value: '120' } })
-    fireEvent.blur(widthInput)
-    await waitFor(() => {
-      const reparseCalls = mocks.invoke.mock.calls.filter(([command]) => command === 'gui_document_reparse')
-      const latestArgs = reparseCalls.at(-1)?.[1] as { request?: { workingSource?: string } } | undefined
-      expect(latestArgs?.request?.workingSource).toContain('GUI:setContentSize(Button_close, 120, 40)')
-    }, { timeout: 1500 })
-
-    await user.click(screen.getByRole('button', { name: 'Components' }))
-    await user.click(screen.getByRole('button', { name: 'Panel' }))
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Generate Diff' }) as HTMLButtonElement).disabled).toBe(false))
-    await user.click(screen.getByRole('button', { name: 'Generate Diff' }))
-    expect(await screen.findByText('Review source Diff')).toBeTruthy()
-    expect(screen.getAllByText(/Button_close/).length).toBeGreaterThan(0)
-    await user.click(screen.getByRole('button', { name: 'Confirm and apply' }))
-    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_draft_apply', expect.objectContaining({ confirmationToken: 'confirm-once' })))
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_working_save', expect.objectContaining({
+      changeSet: expect.objectContaining({ files: [expect.objectContaining({ source: expect.stringContaining(', 42,') })] }),
+    })))
+    expect(screen.queryByText('Review source Diff')).toBeNull()
   })
 
   it('lazy-loads GUILayout and opens Lua in a read-only preview', async () => {
@@ -145,7 +133,7 @@ describe('gui designer interaction', () => {
     await openDemoFile(user)
     await user.click(screen.getByRole('button', { name: 'Layers' }))
     await user.click(await screen.findByRole('button', { name: /Button_close/i }))
-    expect((screen.getByLabelText('Image path') as HTMLInputElement).value).toBe('icons/close.png')
+    expect(screen.getAllByText('Button_close').length).toBeGreaterThan(0)
     expect(document.querySelector('[data-gui-node-id="close"]')).toBeTruthy()
     expect(document.querySelector('[data-gui-scene-layer]')).toBeNull()
     expect(mocks.invoke.mock.calls.some(([command]) => String(command).startsWith('gui_runtime_'))).toBe(false)
@@ -157,10 +145,9 @@ describe('gui designer interaction', () => {
     const user = userEvent.setup()
 
     await openDemoFile(user)
-    await user.click(screen.getByRole('button', { name: 'Layers' }))
-    await user.click(await screen.findByRole('button', { name: /Button_close/i }))
-    fireEvent.change(screen.getByLabelText('X'), { target: { value: '77' } })
-    fireEvent.blur(screen.getByLabelText('X'))
+    await user.click(screen.getByRole('button', { name: 'Code' }))
+    const editor = screen.getByLabelText('Lua source editor') as HTMLTextAreaElement
+    fireEvent.change(editor, { target: { value: editor.value.replace(', 10,', ', 77,') } })
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_reparse', expect.anything()), { timeout: 1500 })
 
     await user.click(screen.getByRole('button', { name: 'Show another menu' }))
@@ -251,6 +238,19 @@ function installInvokeFixture(): void {
     if (command === 'gui_document_reparse') {
       const request = args.request as { devRelativePath: string, workingSource: string }
       return Promise.resolve({ ...documentEnvelope(request.devRelativePath), source: request.workingSource })
+    }
+    if (command === 'gui_save_node_list')
+      return Promise.resolve([])
+    if (command === 'gui_document_probe')
+      return Promise.resolve({ path: String(args.devRelativePath), exists: true, changed: false, sha256: 'source-sha' })
+    if (command === 'gui_game_process_status')
+      return Promise.resolve({ supported: true, executablePath: String(args.executablePath ?? ''), running: false })
+    if (command === 'gui_working_save') {
+      const changeSet = args.changeSet as { files: Array<{ devRelativePath: string, source: string }> }
+      return Promise.resolve({
+        saveNode: { id: 'save-1', projectId: 'project-1', origin: 'studio', files: changeSet.files.map(file => ({ path: file.devRelativePath })), createdAt: 1 },
+        files: changeSet.files.map(file => ({ ...documentEnvelope(file.devRelativePath), source: file.source, sha256: 'saved-sha' })),
+      })
     }
     if (command === 'gui_asset_read')
       return Promise.reject(new Error('GUI_ASSET_NOT_FOUND'))

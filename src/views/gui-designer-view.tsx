@@ -2,10 +2,10 @@ import { FolderCode, TriangleExclamation } from '@gravity-ui/icons'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { DesignerDialogs } from '@/features/gui-designer/designer-dialogs'
-import { DesignerInspector } from '@/features/gui-designer/designer-inspector'
 import { DesignerSidebar } from '@/features/gui-designer/designer-sidebar'
 import { DesignerToolbar } from '@/features/gui-designer/designer-toolbar'
 import { DesignerWorkspace } from '@/features/gui-designer/designer-workspace'
+import { GuiAiPanel } from '@/features/gui-designer/gui-ai-panel'
 import { GuiDesignerScope } from '@/features/gui-designer/gui-designer-scope'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { useScope } from '@/hooks/use-scope'
@@ -37,7 +37,7 @@ function GuiDesignerContent() {
       <div className="flex min-h-0 min-w-0 flex-1">
         <DesignerSidebar />
         <DesignerWorkspace />
-        <DesignerInspector />
+        <GuiAiPanel />
       </div>
       <DesignerDialogs />
     </div>

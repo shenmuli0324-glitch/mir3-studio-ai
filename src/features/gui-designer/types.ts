@@ -256,6 +256,60 @@ export interface GuiDraftApplyResult {
   appliedPaths?: string[]
 }
 
+export type GuiSaveNodeOrigin = 'studio' | 'external' | 'restore'
+
+export interface GuiSaveNode {
+  id: string
+  previousNodeId?: string | null
+  restoredFromNodeId?: string | null
+  createdAt: number
+  origin: GuiSaveNodeOrigin
+  paths: string[]
+}
+
+export interface GuiWorkingSaveChangeSet {
+  files: Array<{
+    devRelativePath: string
+    source: string
+    expectedSha256?: string | null
+    isNew?: boolean
+  }>
+}
+
+export interface GuiSavedFile extends GuiDocumentOpenResult {
+  path: string
+}
+
+export interface GuiWorkingSaveResult {
+  files: GuiSavedFile[]
+  saveNode: GuiSaveNode
+}
+
+export type GuiDocumentProbeState = 'unchanged' | 'changed' | 'missing'
+
+export interface GuiDocumentProbeResult {
+  state: GuiDocumentProbeState
+  sha256?: string | null
+}
+
+export interface GuiAiWorkspace {
+  workspaceId: string
+  workspaceToken: string
+  path: string
+  source: string
+  baseSha256?: string | null
+  workingRevision: number
+  valid: boolean
+  diagnostics: GuiDiagnostic[]
+}
+
+export interface GuiGameProcessStatus {
+  supported: boolean
+  executablePath: string
+  configured: boolean
+  running: boolean
+}
+
 export const MOBILE_VIEWPORT = { width: 1136, height: 640 } as const
 
 export const PC_VIEWPORTS = [

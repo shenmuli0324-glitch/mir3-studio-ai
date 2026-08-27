@@ -1,5 +1,6 @@
 use crate::{
-    CoreNodeType, InsertCoreNodeRequest, Mir3UiDocument, SourceEdit, SourcePoint, SourceSpan,
+    CoreBehaviorType, CoreNodeType, InsertCoreNodeRequest, Mir3UiDocument, SourceEdit, SourcePoint,
+    SourceSpan,
 };
 use std::collections::HashSet;
 
@@ -195,6 +196,49 @@ pub fn insert_core_node(
     )
 }
 
+/// 在控件创建语句后插入受限 Timeline 或 Action 行为。
+pub fn insert_node_behavior(
+    source: &str,
+    document: &Mir3UiDocument,
+    node_id: &str,
+    behavior: CoreBehaviorType,
+) -> Result<String, String> {
+    let node = document
+        .nodes
+        .iter()
+        .find(|node| node.id == node_id)
+        .ok_or_else(|| format!("GUI_NODE_NOT_FOUND: {node_id}"))?;
+    let offset = node.source_binding.insert_byte;
+    if offset > source.len() || !source.is_char_boundary(offset) {
+        return Err("GUI_INSERT_POINT_INVALID: behavior insertion point is invalid".to_string());
+    }
+    let statement = match behavior {
+        CoreBehaviorType::Timeline => {
+            format!("GUI:Timeline_FadeIn({}, 0.3, nil)", node.lua_variable)
+        }
+        CoreBehaviorType::Action => format!(
+            "GUI:runAction({}, GUI:ActionFadeIn(0.3))",
+            node.lua_variable
+        ),
+    };
+    let nl = normalized_newline(&document.source.newline);
+    let indentation = line_indentation(source, node.source_binding.statement.start_byte);
+    let insertion = format!("{nl}{indentation}{statement}");
+    let point = source_point(source, offset);
+    apply_source_edits(
+        source,
+        &[SourceEdit {
+            span: SourceSpan {
+                start_byte: offset,
+                end_byte: offset,
+                start: point,
+                end: point,
+            },
+            replacement: insertion,
+        }],
+    )
+}
+
 fn normalized_newline(newline: &str) -> &str {
     match newline {
         "\r\n" => "\r\n",
@@ -343,5 +387,15 @@ mod tests {
         )
         .unwrap();
         assert!(output.contains("GUI:Layout_Create(Scene, \"Panel_1\", 10, 20, 100, 100, false)"));
+    }
+
+    #[test]
+    fn inserts_only_predefined_node_behavior() {
+        let source = generate_template("\n");
+        let document = parse_document(&source, "GUIExport/new.lua", "sha", "utf-8", "\n").unwrap();
+        let root = document.roots.first().unwrap();
+        let output =
+            insert_node_behavior(&source, &document, root, CoreBehaviorType::Action).unwrap();
+        assert!(output.contains("GUI:runAction(Scene, GUI:ActionFadeIn(0.3))"));
     }
 }

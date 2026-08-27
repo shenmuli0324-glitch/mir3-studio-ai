@@ -1,6 +1,6 @@
 [package]
 name = "mir3-studio-ai"
-version = "0.9.19"
+version = "0.9.20"
 description = "AI development workspace for MIR3 engine projects"
 authors = [ "MIR3 Studio AI contributors" ]
 edition = "2021"
@@ -85,6 +85,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_System_Environment",
+  "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_Pipes",
   "Win32_System_Registry",
   "Win32_System_Threading",

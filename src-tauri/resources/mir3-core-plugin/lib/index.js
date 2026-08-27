@@ -28,7 +28,7 @@ function installSystemSessionPolicy(ctx) {
     if (!violation)
       return next()
     if (violation === 'MIR3_SYSTEM_SESSION_DRAFT_REQUIRED')
-      throw new Error('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED: direct project writes are disabled; use the scoped MIR3 MCP Draft tools')
+      throw new Error('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED: direct project writes are disabled; use the scoped MIR3 MCP tools')
     throw new Error(`${violation}: development writes must stay inside the active MIR3 project`)
   }
   const disposeWrite = ctx.on('fs/write-intent', denySystemWrite, { global: true })

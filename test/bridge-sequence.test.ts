@@ -2,7 +2,7 @@ import type { RefObject } from 'react'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
-import { developmentWriteViolation, isGlobalSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
+import { developmentWriteViolation, isGlobalSession, isGuiSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
 import { BridgeSequenceRegistry } from '../src/features/projects/bridge-sequence'
 import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, subscribeHarnessBridge } from '../src/features/projects/workspace-bridge'
 
@@ -318,8 +318,9 @@ describe('bridge protocol v2 sequence contract', () => {
 })
 
 describe('mir3 managed-session policy', () => {
-  it('protects Studio system/global sessions and MIR3 map files without affecting ordinary Harness sessions', () => {
+  it('protects Studio system/GUI/global sessions and MIR3 project files without affecting ordinary Harness sessions', () => {
     expect(isSystemSession({ id: 'mir3-system-1' })).toBe(true)
+    expect(isGuiSession({ id: 'mir3-gui-1' })).toBe(true)
     expect(isGlobalSession({ id: 'global-1' })).toBe(true)
     expect(isMir3ManagedSession({ id: 'global-1' })).toBe(true)
     expect(isMir3ManagedSession({ id: 'ordinary-harness-session' })).toBe(false)
@@ -328,6 +329,7 @@ describe('mir3 managed-session policy', () => {
     expect(isProtectedTarget('/project', { path: '/project/Data/unknown.bin' })).toBe(true)
     expect(isProtectedTarget('/project', { path: '/outside/a.map' })).toBe(false)
     expect(managedWriteViolation('/project', { id: 'mir3-system-1', header: { cwd: '/project' } }, { path: '/project/Data/config.json' })).toBe('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED')
+    expect(managedWriteViolation('/project', { id: 'mir3-gui-1', header: { cwd: '/project' } }, { path: '/project/客户端/dev/GUIExport/Test.lua' })).toBe('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED')
     expect(managedWriteViolation('/project', { id: 'global-1', header: { cwd: '/outside' } }, { path: '/tmp/scratch.txt' })).toBe('MIR3_SYSTEM_SESSION_SCOPE_UNAVAILABLE')
     expect(managedWriteViolation('/project', { id: 'mir3-system-1', header: { cwd: '/project' } }, { path: '/tmp/scratch.txt' })).toBeNull()
     expect(managedWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/project/Data/config.json' })).toBeNull()

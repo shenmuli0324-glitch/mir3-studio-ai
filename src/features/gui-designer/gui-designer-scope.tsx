@@ -1,11 +1,13 @@
 import type { GuiComponentKind } from './component-catalog'
 import type {
   BoundValue,
+  GuiAiWorkspace,
   GuiDevice,
-  GuiDraftConfirmation,
+  GuiDocumentOpenResult,
   GuiLeftPanel,
   GuiMode,
   GuiPropertyValue,
+  GuiSaveNode,
   GuiTemplateRequest,
   Mir3UiDocument,
   Mir3UiNode,
@@ -24,6 +26,7 @@ export interface GuiWorkingFile {
   workingSource: string
   document: Mir3UiDocument
   expectedSha256?: string | null
+  workingRevision: number
   history: GuiSourceTransaction[]
   future: GuiSourceTransaction[]
   valid: boolean
@@ -67,16 +70,26 @@ export const GuiDesignerScope = defineScope(() => {
   const [zoomState, setZoomState] = useState(0.72)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(true)
   const [newDialogOpen, setNewDialogOpen] = useState(false)
-  const [draftConfirmation, setDraftConfirmation] = useState<GuiDraftConfirmation | null>(null)
+  const [saveNodes, setSaveNodes] = useState<GuiSaveNode[]>([])
+  const [diskConflict, setDiskConflict] = useState<string | null>(null)
+  const [aiConflict, setAiConflict] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [parsePending, setParsePending] = useState(false)
   const parseSequenceRef = useRef(0)
   const openSequenceRef = useRef(0)
+  const probePendingRef = useRef(false)
+  const filesRef = useRef(files)
+  const currentPathRef = useRef(currentPath)
   const currentFile = currentPath ? files[currentPath] : undefined
   const entries = documentList.data ?? []
   const dirty = Object.values(files).some(file => file.workingSource !== file.originalSource || file.isNew)
   const viewport = deviceState === 'mobile' ? MOBILE_VIEWPORT : PC_VIEWPORTS[pcViewportIndex]
   const previewDocument = currentFile?.document
+  const pathSaveNodes = currentSaveNodes(saveNodes, currentPath)
+  const canRestoreSave = !dirty && Boolean(pathSaveNodes[0]?.id)
+
+  filesRef.current = files
+  currentPathRef.current = currentPath
 
   useEffect(() => {
     dirtyOutsideScope = dirty
@@ -92,6 +105,74 @@ export const GuiDesignerScope = defineScope(() => {
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
   }, [dirty])
+
+  useEffect(() => {
+    if (!projectId)
+      return
+    let cancelled = false
+    void actions.listSaveNodes().then((nodes) => {
+      if (!cancelled)
+        setSaveNodes(nodes)
+    }).catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  // actions 每次 render 都会更新，这里只随项目重载保存历史。
+  // eslint-disable-next-line react/exhaustive-deps
+  }, [projectId])
+
+  useEffect(() => {
+    if (!currentFile || currentFile.isNew)
+      return
+    let cancelled = false
+    async function probe() {
+      if (cancelled || probePendingRef.current)
+        return
+      probePendingRef.current = true
+      try {
+        const result = await actions.probeDocument(currentFile!.path, currentFile!.expectedSha256)
+        if (cancelled || result.state === 'unchanged')
+          return
+        const latest = filesRef.current[currentFile!.path]
+        if (!latest)
+          return
+        if (result.state === 'missing') {
+          setDiskConflict('GUI_FILE_MISSING')
+          return
+        }
+        if (latest.isNew || latest.workingSource !== latest.originalSource) {
+          setDiskConflict('GUI_EXTERNAL_CHANGE_CONFLICT')
+          return
+        }
+        const accepted = await actions.acceptExternalChange({
+          devRelativePath: currentFile!.path,
+          previousSource: latest.originalSource,
+          previousSha256: latest.expectedSha256 ?? '',
+          previousEncoding: latest.document.encoding,
+          previousNewline: latest.document.newline,
+        })
+        if (cancelled)
+          return
+        acceptPersistedFiles(accepted.files)
+        setSaveNodes(value => prependSaveNode(value, accepted.saveNode))
+        setDiskConflict(null)
+      }
+      catch {
+        // 轮询失败不打断编辑；显式保存仍会执行哈希冲突检查。
+      }
+      finally {
+        probePendingRef.current = false
+      }
+    }
+    void probe()
+    const timer = window.setInterval(() => void probe(), 1_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  // 只在文件或基线哈希变化时重建一秒轮询。
+  // eslint-disable-next-line react/exhaustive-deps
+  }, [currentFile?.path, currentFile?.expectedSha256, currentFile?.isNew])
 
   useEffect(() => {
     if (!currentFile || (currentFile.workingSource === currentFile.originalSource && currentFile.history.length === 0))
@@ -154,18 +235,7 @@ export const GuiDesignerScope = defineScope(() => {
     setFiles((value) => {
       const next = {
         ...value,
-        [path]: {
-          path,
-          originalSource: result.source,
-          workingSource: result.source,
-          document: result.document,
-          expectedSha256: result.sha256 ?? result.document.sourceSha256,
-          history: [],
-          future: [],
-          valid: !result.document.diagnostics.some(item => item.severity === 'error'),
-          isNew: false,
-          accessedAt: Date.now(),
-        },
+        [path]: workingFileFromOpen(path, result, Date.now()),
       }
       return pruneWorkingFileCache(next, path)
     })
@@ -174,6 +244,8 @@ export const GuiDesignerScope = defineScope(() => {
     setCurrentPath(path)
     setSelectedNodeId(result.document.roots[0] ?? null)
     setParsePending(false)
+    setDiskConflict(null)
+    setAiConflict(null)
   }
 
   function updateWorkingSource(source: string) {
@@ -190,6 +262,7 @@ export const GuiDesignerScope = defineScope(() => {
         [currentPath]: {
           ...file,
           workingSource: source,
+          workingRevision: file.workingRevision + 1,
           history: trimHistory([...file.history, transaction]),
           future: [],
           accessedAt: Date.now(),
@@ -213,6 +286,7 @@ export const GuiDesignerScope = defineScope(() => {
         [currentPath]: {
           ...file,
           workingSource: previous,
+          workingRevision: file.workingRevision + 1,
           history: file.history.slice(0, -1),
           future: [transaction, ...file.future],
         },
@@ -235,6 +309,7 @@ export const GuiDesignerScope = defineScope(() => {
         [currentPath]: {
           ...file,
           workingSource: next,
+          workingRevision: file.workingRevision + 1,
           history: trimHistory([...file.history, transaction]),
           future: file.future.slice(1),
         },
@@ -346,6 +421,7 @@ export const GuiDesignerScope = defineScope(() => {
           path: item.path,
           originalSource: '',
           workingSource: item.source,
+          workingRevision: 0,
           document: item.document,
           history: [],
           future: [],
@@ -364,32 +440,107 @@ export const GuiDesignerScope = defineScope(() => {
     setNewDialogOpen(false)
   }
 
-  async function prepareDiff() {
+  async function saveWorkingFiles() {
     const changed = Object.values(files).filter(file => file.workingSource !== file.originalSource || file.isNew)
     if (changed.length === 0 || changed.some(file => !file.valid))
       return
-    const prepared = await actions.prepareDraft({
+    const result = await actions.saveWorking({
       files: changed.map(file => ({
         devRelativePath: file.path,
         source: file.workingSource,
         expectedSha256: file.expectedSha256,
         isNew: file.isNew,
       })),
-      expectedRevision: 0,
     })
-    const confirmation = await actions.confirmDraft(prepared.draftId)
-    setDraftConfirmation(confirmation)
+    acceptPersistedFiles(result.files)
+    setSaveNodes(value => prependSaveNode(value, result.saveNode))
+    setDiskConflict(null)
   }
 
-  async function applyDiff() {
-    if (!draftConfirmation)
+  async function restorePreviousSave() {
+    if (dirty)
       return
-    await actions.applyDraft({ draftId: draftConfirmation.draftId, token: draftConfirmation.confirmationToken })
-    setFiles({})
-    setCurrentPath(null)
-    setSelectedNodeId(null)
+    const nodes = currentSaveNodes(saveNodes, currentPath)
+    const targetId = nodes[0]?.id
+    if (!targetId)
+      return
+    const result = await actions.restoreSaveNode(targetId)
+    acceptPersistedFiles(result.files)
+    setSaveNodes(value => prependSaveNode(value, result.saveNode))
+    setDiskConflict(null)
+    setAiConflict(null)
+  }
+
+  function acceptPersistedFiles(savedFiles: Array<GuiDocumentOpenResult & { path: string }>) {
+    setFiles((value) => {
+      const next = { ...value }
+      for (const saved of savedFiles) {
+        const persisted = workingFileFromOpen(saved.path, saved, Date.now())
+        persisted.workingRevision = (value[saved.path]?.workingRevision ?? persisted.workingRevision) + 1
+        next[saved.path] = persisted
+      }
+      return next
+    })
+    const activePath = currentPathRef.current
+    const active = activePath ? savedFiles.find(file => file.path === activePath) : undefined
+    if (active)
+      setSelectedNodeId(value => value && active.document.nodes[value] ? value : active.document.roots[0] ?? null)
     setParsePending(false)
-    setDraftConfirmation(null)
+  }
+
+  async function beginAiTurn(): Promise<{ workspace: GuiAiWorkspace, workingRevision: number }> {
+    const path = currentPathRef.current
+    const file = path ? filesRef.current[path] : undefined
+    if (!path || !file)
+      throw new Error('GUI_FILE_REQUIRED')
+    if (!file.valid)
+      throw new Error('GUI_WORKING_SOURCE_INVALID')
+    setAiConflict(null)
+    const workspace = await actions.syncAiWorkspace({
+      path,
+      workingRevision: file.workingRevision,
+      baseSha256: file.expectedSha256 ?? '',
+      selectedNodeId,
+      dirty: file.isNew || file.workingSource !== file.originalSource,
+      source: file.workingSource,
+    })
+    return { workspace, workingRevision: file.workingRevision }
+  }
+
+  async function completeAiTurn(path: string, expectedWorkingRevision: number): Promise<boolean> {
+    const workspace = await actions.getAiWorkspace(path)
+    if (!workspace.valid)
+      throw new Error('GUI_AI_PROPOSAL_INVALID')
+    let applied = false
+    setFiles((value) => {
+      const file = value[path]
+      if (!file || file.workingRevision !== expectedWorkingRevision) {
+        setAiConflict('GUI_AI_WORKING_REVISION_CONFLICT')
+        return value
+      }
+      if (workspace.source === file.workingSource) {
+        applied = true
+        return value
+      }
+      const transaction = sourceTransaction(file.workingSource, workspace.source)
+      applied = true
+      return {
+        ...value,
+        [path]: {
+          ...file,
+          workingSource: workspace.source,
+          workingRevision: file.workingRevision + 1,
+          history: trimHistory([...file.history, transaction]),
+          future: [],
+          valid: workspace.valid,
+          parseError: null,
+          accessedAt: Date.now(),
+        },
+      }
+    })
+    if (applied)
+      setParsePending(true)
+    return applied
   }
 
   function setDevice(nextDevice: GuiDevice) {
@@ -452,7 +603,10 @@ export const GuiDesignerScope = defineScope(() => {
     dirty,
     diagnosticsOpen,
     newDialogOpen,
-    draftConfirmation,
+    saveNodes,
+    canRestoreSave,
+    diskConflict,
+    aiConflict,
     notice,
     parsePending,
     busy: actions.busy,
@@ -470,8 +624,11 @@ export const GuiDesignerScope = defineScope(() => {
     addNodeBehavior,
     canAddNodeBehavior,
     createPage,
-    prepareDiff,
-    applyDiff,
+    saveWorkingFiles,
+    restorePreviousSave,
+    beginAiTurn,
+    completeAiTurn,
+    gameProcessStatus: actions.gameProcessStatus,
     setCurrentPath,
     setSelectedNodeId,
     setDevice,
@@ -482,13 +639,40 @@ export const GuiDesignerScope = defineScope(() => {
     fitCanvas,
     setDiagnosticsOpen,
     setNewDialogOpen,
-    setDraftConfirmation,
     setNotice,
   }
 })
 
 function selectedNode(file: GuiWorkingFile, nodeId: string | null): Mir3UiNode | undefined {
   return nodeId ? file.document.nodes[nodeId] : undefined
+}
+
+function workingFileFromOpen(path: string, result: GuiDocumentOpenResult, accessedAt: number): GuiWorkingFile {
+  return {
+    path,
+    originalSource: result.source,
+    workingSource: result.source,
+    document: result.document,
+    expectedSha256: result.sha256 ?? result.document.sourceSha256,
+    workingRevision: result.revision ?? 0,
+    history: [],
+    future: [],
+    valid: !result.document.diagnostics.some(item => item.severity === 'error'),
+    isNew: false,
+    accessedAt,
+  }
+}
+
+function currentSaveNodes(nodes: GuiSaveNode[], path: string | null): GuiSaveNode[] {
+  if (!path)
+    return []
+  return nodes.filter(node => node.paths.length === 0 || node.paths.includes(path))
+}
+
+function prependSaveNode(nodes: GuiSaveNode[], node: GuiSaveNode): GuiSaveNode[] {
+  if (!node.id)
+    return nodes
+  return [node, ...nodes.filter(item => item.id !== node.id)].slice(0, 100)
 }
 
 function editableSourceNode(file: GuiWorkingFile | undefined, previewNode: Mir3UiNode | undefined): Mir3UiNode | undefined {

@@ -326,6 +326,13 @@ pub enum CoreNodeType {
     Button,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CoreBehaviorType {
+    Timeline,
+    Action,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCoreNodeRequest {

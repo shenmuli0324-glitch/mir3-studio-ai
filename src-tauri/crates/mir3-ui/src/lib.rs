@@ -12,5 +12,6 @@ pub use adapter::*;
 pub use model::*;
 pub use parser::parse_document;
 pub use source_edit::{
-    apply_source_edits, generate_template, insert_core_node, replace_bound_property,
+    apply_source_edits, generate_template, insert_core_node, insert_node_behavior,
+    replace_bound_property,
 };

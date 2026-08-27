@@ -8,13 +8,15 @@ window.__ModuleLoader__.load({
     const PROTOCOL_VERSION = 2
     const SOURCE = 'mir3-core-plugin'
     const SYSTEM_SESSION_PREFIX = 'mir3-system-'
+    const GUI_SESSION_PREFIX = 'mir3-gui-'
+    const GUI_SYSTEM_ID = '__studio_gui__'
     const GLOBAL_SESSION_PREFIX = 'global-'
     const activeBindings = new Map()
     const bindingActivity = new Map()
     const returnTargets = new Map()
     const sessionOwners = new Map()
     const sessionPreparations = new Set()
-    const recoverableSystemSessions = new Set()
+    const recoverableManagedSessions = new Set()
     const inboundSequences = new Map()
     const outboundSequences = new Map()
     const parentOrigin = resolveParentOrigin()
@@ -198,6 +200,7 @@ window.__ModuleLoader__.load({
             snapshot: true,
             pendingInteraction: true,
             globalSession: typeof ctx.sessions?.open === 'function',
+            guiSession: typeof ctx.sessions?.create === 'function' && typeof ctx.workspaces?.archiveSession === 'function',
             ordinarySessionCanary: typeof ctx.sessions?.create === 'function' && typeof ctx.workspaces?.archiveSession === 'function',
             projectScope: true,
           },
@@ -227,7 +230,7 @@ window.__ModuleLoader__.load({
       async function canaryOrdinarySession(request) {
         const payload = request.payload || {}
         const sessionId = String(payload.sessionId || '')
-        if (!sessionId.startsWith('harness-canary-') || isSystemSessionId(sessionId) || isGlobalSessionId(sessionId) || typeof payload.cwd !== 'string')
+        if (!sessionId.startsWith('harness-canary-') || isSystemSessionId(sessionId) || isGuiSessionId(sessionId) || isGlobalSessionId(sessionId) || typeof payload.cwd !== 'string')
           throw new Error('ORDINARY_SESSION_CANARY_INVALID: an unreserved canary sessionId and cwd are required')
         requireActiveProject(request)
         await createHarnessSession(
@@ -267,13 +270,13 @@ window.__ModuleLoader__.load({
         let session
         try {
           claimSessionOwner(request)
-          if (!recoverableSystemSessions.has(request.sessionId)) {
+          if (!recoverableManagedSessions.has(request.sessionId)) {
             await createHarnessSession(
               ctx,
               { cwd: payload.cwd, sessionId: request.sessionId },
               'SYSTEM_SESSION_CREATE_FAILED',
             )
-            recoverableSystemSessions.add(request.sessionId)
+            recoverableManagedSessions.add(request.sessionId)
           }
           session = requireSession(request.sessionId)
           if (typeof ctx.workspaces?.archiveSession !== 'function')
@@ -281,7 +284,7 @@ window.__ModuleLoader__.load({
           await ctx.workspaces.archiveSession(request.sessionId)
           await session.open()
           bindSession(request, session, 'mir3/systemSession')
-          recoverableSystemSessions.delete(request.sessionId)
+          recoverableManagedSessions.delete(request.sessionId)
         }
         catch (error) {
           releaseSessionOwner(request)
@@ -309,7 +312,7 @@ window.__ModuleLoader__.load({
           await ctx.workspaces.archiveSession(request.sessionId)
           await session.open()
           bindSession(request, session, 'mir3/systemSession')
-          recoverableSystemSessions.delete(request.sessionId)
+          recoverableManagedSessions.delete(request.sessionId)
           post('mir3/systemSession.resumed', request, projectSnapshot(session.getSnapshot(), request))
         }
         catch (error) {
@@ -393,6 +396,155 @@ window.__ModuleLoader__.load({
         returnTargets.delete(key)
         sessionOwners.delete(request.sessionId)
         post('mir3/systemSession.completed', request, snapshot)
+      }
+
+      async function createGuiSession(request) {
+        const payload = request.payload || {}
+        if (!ctx.sessions || typeof ctx.sessions.create !== 'function')
+          throw new Error('GUI_SESSION_UNSUPPORTED: sessions.create is unavailable')
+        requireGuiIdentity(request)
+        if (typeof payload.cwd !== 'string')
+          throw new Error('GUI_SESSION_INVALID: cwd is required')
+        requireProjectPath(payload.cwd, request)
+        if (sessionPreparations.has(request.sessionId))
+          throw new Error('GUI_SESSION_CREATE_IN_PROGRESS: session is already being prepared')
+        const initialPrompt = typeof payload.prompt === 'string' && payload.prompt.trim()
+          ? guiScopedPrompt(payload, payload.prompt)
+          : null
+        sessionPreparations.add(request.sessionId)
+        let session
+        try {
+          claimSessionOwner(request)
+          if (!recoverableManagedSessions.has(request.sessionId)) {
+            await createHarnessSession(
+              ctx,
+              { cwd: payload.cwd, sessionId: request.sessionId },
+              'GUI_SESSION_CREATE_FAILED',
+            )
+            recoverableManagedSessions.add(request.sessionId)
+          }
+          session = requireSession(request.sessionId)
+          if (typeof ctx.workspaces?.archiveSession !== 'function')
+            throw new Error('GUI_SESSION_ARCHIVE_UNSUPPORTED: archiveSession is unavailable')
+          await ctx.workspaces.archiveSession(request.sessionId)
+          await session.open()
+          bindSession(request, session, 'mir3/guiSession')
+          recoverableManagedSessions.delete(request.sessionId)
+        }
+        catch (error) {
+          releaseSessionOwner(request)
+          throw error
+        }
+        finally {
+          sessionPreparations.delete(request.sessionId)
+        }
+        post('mir3/guiSession.created', request, { archived: true, created: true })
+        if (initialPrompt)
+          requireResult(await session.prompt(textContent(initialPrompt), 'queue'), 'GUI_SESSION_PROMPT_FAILED')
+      }
+
+      async function resumeGuiSession(request) {
+        requireGuiIdentity(request)
+        requireActiveProject(request)
+        if (sessionPreparations.has(request.sessionId))
+          throw new Error('GUI_SESSION_PREPARATION_IN_PROGRESS: session is not archived and ready yet')
+        sessionPreparations.add(request.sessionId)
+        try {
+          claimSessionOwner(request)
+          const session = requireGuiSession(request.sessionId)
+          if (typeof ctx.workspaces?.archiveSession !== 'function')
+            throw new Error('GUI_SESSION_ARCHIVE_UNSUPPORTED: archiveSession is unavailable')
+          await ctx.workspaces.archiveSession(request.sessionId)
+          await session.open()
+          bindSession(request, session, 'mir3/guiSession')
+          recoverableManagedSessions.delete(request.sessionId)
+          post('mir3/guiSession.resumed', request, projectSnapshot(session.getSnapshot(), request))
+        }
+        catch (error) {
+          releaseSessionOwner(request)
+          throw error
+        }
+        finally {
+          sessionPreparations.delete(request.sessionId)
+        }
+      }
+
+      async function promptGuiSession(request) {
+        requireGuiIdentity(request)
+        requireSessionOwner(request)
+        const session = requireGuiSession(request.sessionId)
+        const content = String(request.payload?.content || '').trim()
+        if (!content)
+          throw new Error('GUI_SESSION_PROMPT_INVALID: content is required')
+        const scoped = guiScopedPrompt(request.payload || {}, content)
+        requireResult(await session.prompt(textContent(scoped), request.payload?.mode === 'steer' ? 'steer' : 'queue'), 'GUI_SESSION_PROMPT_FAILED')
+        post('mir3/guiSession.prompted', request, {})
+      }
+
+      async function cancelGuiSession(request) {
+        requireGuiIdentity(request)
+        requireSessionOwner(request)
+        const session = requireGuiSession(request.sessionId)
+        requireResult(await session.cancel(), 'GUI_SESSION_CANCEL_FAILED')
+        post('mir3/guiSession.cancelled', request, projectSnapshot(session.getSnapshot(), request))
+      }
+
+      async function respondGuiSession(request) {
+        requireGuiIdentity(request)
+        requireSessionOwner(request)
+        const session = requireGuiSession(request.sessionId)
+        const snapshot = session.getSnapshot()
+        const pending = Array.isArray(snapshot?.pending) ? snapshot.pending : []
+        const pendingKey = request.payload?.pendingKey
+        const wait = pendingKey ? pending.find(item => item.key === pendingKey) : pending[0]
+        if (!wait || typeof wait.respond !== 'function')
+          throw new Error('GUI_SESSION_NO_PENDING_INTERACTION: no pending interaction')
+        const receipt = await wait.respond(encodePendingResponse(wait, request.payload?.response))
+        if (!receipt?.accepted)
+          throw new Error(`GUI_SESSION_RESPONSE_REJECTED: ${receipt?.reason || 'unknown reason'}`)
+        post('mir3/guiSession.responded', request, { pendingKey: wait.key })
+      }
+
+      async function snapshotGuiSession(request) {
+        requireGuiIdentity(request)
+        requireSessionOwner(request)
+        const session = requireGuiSession(request.sessionId)
+        post('mir3/guiSession.snapshot', request, projectSnapshot(session.getSnapshot(), request))
+      }
+
+      async function completeGuiSession(request) {
+        requireGuiIdentity(request)
+        requireSessionOwner(request)
+        const session = requireGuiSession(request.sessionId)
+        const snapshot = projectSnapshot(session.getSnapshot(), request)
+        const key = bindingKey(request)
+        const dispose = activeBindings.get(key)
+        if (typeof dispose === 'function')
+          dispose()
+        activeBindings.delete(key)
+        bindingActivity.delete(key)
+        returnTargets.delete(key)
+        sessionOwners.delete(request.sessionId)
+        post('mir3/guiSession.completed', request, snapshot)
+      }
+
+      function guiScopedPrompt(payload, content) {
+        const workspaceId = String(payload.workspaceId || '').trim()
+        const workspaceToken = String(payload.workspaceToken || '').trim()
+        if (!workspaceId || workspaceToken.length < 32)
+          throw new Error('GUI_SESSION_WORKSPACE_SCOPE_REQUIRED: workspaceId and workspaceToken are required')
+        return [
+          '[MIR3 GUI AI private working workspace]',
+          `workspaceId=${workspaceId}`,
+          `workspaceToken=${workspaceToken}`,
+          '- Use only mir3_gui_context, mir3_gui_operate, mir3_gui_asset_query, and mir3_gui_validate for GUI changes.',
+          '- Pass this workspaceToken to every GUI tool call. mir3_gui_operate also requires the exact expectedRevision.',
+          '- GUIExport is the only writable GUI tree. GUILayout and encrypted game resources are read-only.',
+          '- Tools change only Studio private working data. Never write project files with shell or generic file tools.',
+          '- Studio Save creates the project save node. Do not claim the game or project changed before that save.',
+          '[/MIR3 GUI AI private working workspace]',
+          content,
+        ].join('\n')
       }
 
       async function createGlobalSession(request) {
@@ -491,6 +643,10 @@ window.__ModuleLoader__.load({
         return typeof sessionId === 'string' && sessionId.startsWith(SYSTEM_SESSION_PREFIX) && sessionId.length > SYSTEM_SESSION_PREFIX.length
       }
 
+      function isGuiSessionId(sessionId) {
+        return typeof sessionId === 'string' && sessionId.startsWith(GUI_SESSION_PREFIX) && sessionId.length > GUI_SESSION_PREFIX.length
+      }
+
       function isGlobalSessionId(sessionId) {
         return typeof sessionId === 'string' && sessionId.startsWith(GLOBAL_SESSION_PREFIX) && sessionId.length > GLOBAL_SESSION_PREFIX.length
       }
@@ -498,6 +654,12 @@ window.__ModuleLoader__.load({
       function requireScopedIdentity(request) {
         if (!request.projectId || !request.systemId || !request.taskId || !request.sessionId)
           throw new Error('SESSION_IDENTITY_INVALID: projectId, systemId, taskId, and sessionId are required')
+      }
+
+      function requireGuiIdentity(request) {
+        requireScopedIdentity(request)
+        if (request.systemId !== GUI_SYSTEM_ID || !isGuiSessionId(request.sessionId))
+          throw new Error('GUI_SESSION_SCOPE_UNVERIFIED: GUI system identity and reserved session id are required')
       }
 
       function claimSessionOwner(request) {
@@ -532,6 +694,12 @@ window.__ModuleLoader__.load({
         return requireSession(sessionId)
       }
 
+      function requireGuiSession(sessionId) {
+        if (!isGuiSessionId(sessionId))
+          throw new Error('GUI_SESSION_SCOPE_UNVERIFIED: reserved Studio GUI session id is required')
+        return requireSession(sessionId)
+      }
+
       async function dispatch(message) {
         switch (message.type) {
           case 'mir3/bridge.describe': return describe(message)
@@ -544,6 +712,13 @@ window.__ModuleLoader__.load({
           case 'mir3/systemSession.respond': return respondSystemSession(message)
           case 'mir3/systemSession.snapshot': return snapshotSystemSession(message)
           case 'mir3/systemSession.complete': return completeSystemSession(message)
+          case 'mir3/guiSession.create': return createGuiSession(message)
+          case 'mir3/guiSession.resume': return resumeGuiSession(message)
+          case 'mir3/guiSession.prompt': return promptGuiSession(message)
+          case 'mir3/guiSession.cancel': return cancelGuiSession(message)
+          case 'mir3/guiSession.respond': return respondGuiSession(message)
+          case 'mir3/guiSession.snapshot': return snapshotGuiSession(message)
+          case 'mir3/guiSession.complete': return completeGuiSession(message)
           case 'mir3/globalSession.create': return createGlobalSession(message)
           case 'mir3/globalSession.resume': return resumeGlobalSession(message)
           case 'mir3/globalSession.prompt': return promptGlobalSession(message)
@@ -614,7 +789,7 @@ window.__ModuleLoader__.load({
         returnTargets.clear()
         sessionOwners.clear()
         sessionPreparations.clear()
-        recoverableSystemSessions.clear()
+        recoverableManagedSessions.clear()
         inboundSequences.clear()
         outboundSequences.clear()
         ctx.sessions.create = originalSessionCreate
@@ -658,8 +833,9 @@ window.__ModuleLoader__.load({
 
     function projectSnapshot(snapshot, request) {
       if (!snapshot || typeof snapshot !== 'object')
-        return { nodes: [], runningCalls: [], running: false, domainResults: [], returnTo: cloneable(returnTargets.get(request ? bindingKey(request) : '') || null) }
-      const nodes = cloneable(Array.isArray(snapshot.nodes) ? snapshot.nodes : [])
+        return { nodes: [], runningCalls: [], running: false, domainResults: [], guiResults: [], returnTo: cloneable(returnTargets.get(request ? bindingKey(request) : '') || null) }
+      const projectedNodes = cloneable(Array.isArray(snapshot.nodes) ? snapshot.nodes : [])
+      const nodes = request?.systemId === GUI_SYSTEM_ID ? redactGuiWorkspaceTokens(projectedNodes) : projectedNodes
       return {
         sessionId: snapshot.sessionId || null,
         nodes,
@@ -675,8 +851,56 @@ window.__ModuleLoader__.load({
         promptError: projectError(snapshot.promptError),
         lastAgentError: projectError(snapshot.lastAgentError),
         domainResults: projectDomainResults(nodes, request?.systemId),
+        guiResults: projectGuiResults(nodes),
         returnTo: projectReturnTarget(nodes) || cloneable(returnTargets.get(request ? bindingKey(request) : '') || null),
       }
+    }
+
+    function redactGuiWorkspaceTokens(value) {
+      if (typeof value === 'string')
+        return value.replace(/workspaceToken=\S+/g, 'workspaceToken=[redacted]')
+      if (Array.isArray(value))
+        return value.map(redactGuiWorkspaceTokens)
+      if (!value || typeof value !== 'object')
+        return value
+      const output = {}
+      for (const [key, item] of Object.entries(value))
+        output[key] = key === 'workspaceToken' ? '[redacted]' : redactGuiWorkspaceTokens(item)
+      return output
+    }
+
+    function projectGuiResults(nodes) {
+      if (!Array.isArray(nodes))
+        return []
+      const results = new Map()
+      for (const node of nodes) {
+        if (!isToolNode(node))
+          continue
+        const candidates = []
+        collectStructuredValues(node, candidates, new Set(), 0)
+        for (const candidate of candidates) {
+          const value = candidate?.guiResult
+          if (!value || typeof value !== 'object' || Array.isArray(value))
+            continue
+          const kind = typeof value.kind === 'string' ? value.kind : null
+          const path = typeof value.path === 'string' ? value.path : null
+          const workingRevision = Number.isSafeInteger(value.workingRevision) ? value.workingRevision : null
+          if (!kind || !path || workingRevision === null || workingRevision < 0)
+            continue
+          results.set(`${kind}\u241F${path}`, {
+            kind,
+            path,
+            workspaceId: typeof value.workspaceId === 'string' ? value.workspaceId : null,
+            baseSha256: typeof value.baseSha256 === 'string' ? value.baseSha256 : null,
+            workingRevision,
+            dirty: typeof value.dirty === 'boolean' ? value.dirty : null,
+            selectedNodeId: typeof value.selectedNodeId === 'string' ? value.selectedNodeId : null,
+            valid: typeof value.valid === 'boolean' ? value.valid : null,
+            diagnostics: cloneable(Array.isArray(value.diagnostics) ? value.diagnostics.slice(0, 500) : []),
+          })
+        }
+      }
+      return [...results.values()]
     }
 
     function projectReturnTarget(nodes) {

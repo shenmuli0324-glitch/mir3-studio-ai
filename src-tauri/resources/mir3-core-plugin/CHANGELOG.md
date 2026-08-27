@@ -1,5 +1,12 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.3.0 - 2026-08-27
+
+- 新增独立 `mir3/guiSession.*` 协议和 `mir3-gui-` 归档会话，不把 GUI Designer 伪装为 33 个领域系统。
+- GUI 会话每轮强制注入私有工作区令牌、精确版本和保存节点边界，只允许调用四个 GUI MCP 工具，禁止直接写项目文件。
+- GUI 语义操作覆盖属性、位置、Panel/Image/Text/Button 核心组件以及预设 Timeline/Action 行为，并在每次操作后推进工作版本。
+- 快照新增紧凑 `guiResults` 投影；`mir3-gui-` 会话纳入服务端直接写保护，普通 Harness 会话保持原权限。
+
 ## 1.2.1 - 2026-08-27
 
 - 兼容 Harness 公共 `SessionRuntime.create()` 成功返回 Session ID、失败抛出结构化异常的新契约，同时保留对旧 Result 返回的兼容。

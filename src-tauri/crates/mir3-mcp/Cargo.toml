@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 mir3-domain = { path = "../mir3-domain" }
+mir3-ui = { path = "../mir3-ui" }
 serde = { version = "1", features = [ "derive" ] }
 serde_json = "1"
 semver = "1"

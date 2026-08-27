@@ -4,7 +4,9 @@
 //! 执行 Lua。所有正式写入都必须经过现有 Draft、人工确认与 Snapshot 链路。
 
 use crate::service::project::{DraftConfirmation, ProjectService};
-use mir3_domain::{patch_supported_text_bytes, DraftBinaryChangeInput, DraftPreview, Snapshot};
+use mir3_domain::{
+    patch_supported_text_bytes, DraftBinaryChangeInput, DraftChangeInput, DraftPreview, Snapshot,
+};
 use mir3_ui::{
     generate_template, parse_document, DiagnosticSeverity, Mir3UiDocument, Mir3UiViewport,
 };
@@ -12,8 +14,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_ASSET_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_GUI_SOURCE_BYTES: usize = 8 * 1024 * 1024;
@@ -23,6 +27,10 @@ const DEFAULT_PC_WIDTH: u32 = 1024;
 const DEFAULT_PC_HEIGHT: u32 = 768;
 const DEV_TREE_PAGE_SIZE: usize = 500;
 const DEV_METADATA_DOCUMENT_VERSION: &str = "2026-08-24";
+const GUI_SAVE_NODE_SCHEMA_VERSION: u32 = 1;
+const GUI_SAVE_NODE_LIMIT: usize = 100;
+const GUI_SAVE_NODE_RETENTION_MILLIS: i64 = 30 * 24 * 60 * 60 * 1_000;
+static GUI_SAVE_NODE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -205,6 +213,100 @@ pub struct GuiDraftPrepareResult {
     pub draft_id: String,
     pub revision: i64,
     pub preview: DraftPreview,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GuiSaveNodeOrigin {
+    Studio,
+    External,
+    Restore,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiSaveNodeState {
+    pub existed: bool,
+    pub sha256: Option<String>,
+    pub content_ref: Option<String>,
+    pub encoding: Option<String>,
+    pub newline: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiSaveNodeFile {
+    pub path: String,
+    pub before: GuiSaveNodeState,
+    pub after: GuiSaveNodeState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiSaveNode {
+    pub schema_version: u32,
+    pub id: String,
+    pub project_id: String,
+    pub origin: GuiSaveNodeOrigin,
+    pub previous_node_id: Option<String>,
+    pub restored_from_node_id: Option<String>,
+    pub files: Vec<GuiSaveNodeFile>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiSavedDocument {
+    pub path: String,
+    pub source: String,
+    pub document: Mir3UiDocument,
+    pub sha256: String,
+    pub encoding: String,
+    pub newline: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiWorkingSaveResult {
+    pub save_node: GuiSaveNode,
+    pub files: Vec<GuiSavedDocument>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiDocumentProbe {
+    pub path: String,
+    pub exists: bool,
+    pub changed: bool,
+    pub sha256: Option<String>,
+    pub byte_length: u64,
+    pub modified_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiExternalChangeRequest {
+    pub dev_relative_path: String,
+    pub previous_source: String,
+    pub previous_sha256: String,
+    pub previous_encoding: Option<String>,
+    pub previous_newline: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiExternalChangeResult {
+    pub changed: bool,
+    pub save_node: Option<GuiSaveNode>,
+    pub file: GuiSavedDocument,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiGameProcessStatus {
+    pub supported: bool,
+    pub executable_path: String,
+    pub running: bool,
 }
 
 struct GuiProjectContext {
@@ -755,6 +857,761 @@ pub fn apply_draft(
         confirmation.revision,
         &confirmation.diff_hash,
     )
+}
+
+/// 用户点击保存后沿用 Draft/Snapshot 安全链路，并把本次正式写入记录成可恢复节点。
+pub fn working_save(
+    project_service: &ProjectService,
+    project_id: &str,
+    change_set: GuiDraftChangeSet,
+) -> Result<GuiWorkingSaveResult, String> {
+    let context = active_context(project_service, project_id)?;
+    let prepared = prepare_draft(project_service, project_id, change_set.clone())?;
+    validate_working_save_preview(&context, &prepared.preview, &change_set)?;
+    let mut before = HashMap::new();
+    for file in &change_set.files {
+        let path = validate_gui_export_path(&file.dev_relative_path)?;
+        before.insert(
+            path.clone(),
+            capture_gui_state(project_service, &context, &path)?,
+        );
+    }
+    let confirmation = confirm_draft(project_service, project_id, &prepared.draft_id)?;
+    apply_draft(
+        project_service,
+        project_id,
+        &prepared.draft_id,
+        &confirmation.confirmation_token,
+    )?;
+
+    let mut saved_files = Vec::with_capacity(change_set.files.len());
+    let mut node_files = Vec::with_capacity(change_set.files.len());
+    for file in &change_set.files {
+        let path = validate_gui_export_path(&file.dev_relative_path)?;
+        let envelope = open_document(project_service, project_id, &path, None)?;
+        let after = captured_state_from_envelope(&envelope)?;
+        let previous = before
+            .remove(&path)
+            .ok_or_else(|| format!("GUI_SAVE_STATE_MISSING: {path}"))?;
+        node_files.push((path.clone(), previous, after));
+        saved_files.push(saved_document(envelope)?);
+    }
+    let save_node = persist_save_node(
+        project_service,
+        project_id,
+        GuiSaveNodeOrigin::Studio,
+        None,
+        node_files,
+    )?;
+    Ok(GuiWorkingSaveResult {
+        save_node,
+        files: saved_files,
+    })
+}
+
+/// 返回最近的保存节点；limit 只限制返回数量，不改变磁盘保留策略。
+pub fn list_save_nodes(
+    project_service: &ProjectService,
+    project_id: &str,
+    limit: usize,
+) -> Result<Vec<GuiSaveNode>, String> {
+    ensure_active_project(project_service, project_id)?;
+    let limit = limit.clamp(1, GUI_SAVE_NODE_LIMIT);
+    let mut nodes = read_save_nodes(project_service, project_id)?;
+    nodes.truncate(limit);
+    Ok(nodes)
+}
+
+/// 恢复指定节点之前的内容，并追加一个新的 restore 节点，历史永不原地改写。
+pub fn restore_save_node(
+    project_service: &ProjectService,
+    project_id: &str,
+    node_id: &str,
+) -> Result<GuiWorkingSaveResult, String> {
+    validate_save_node_id(node_id)?;
+    let context = active_context(project_service, project_id)?;
+    let node = read_save_nodes(project_service, project_id)?
+        .into_iter()
+        .find(|item| item.id == node_id)
+        .ok_or_else(|| format!("GUI_SAVE_NODE_NOT_FOUND: {node_id}"))?;
+    if node.project_id != project_id {
+        return Err("GUI_SAVE_NODE_PROJECT_MISMATCH: 保存节点不属于当前项目".to_string());
+    }
+
+    let mut current_states = HashMap::new();
+    let mut changes = Vec::with_capacity(node.files.len());
+    for file in &node.files {
+        let path = validate_gui_export_path(&file.path)?;
+        let current = capture_gui_state(project_service, &context, &path)?;
+        if !same_disk_state(&current, &file.after) {
+            return Err(format!(
+                "GUI_SOURCE_CONFLICT: {path} 已在保存节点之后被修改"
+            ));
+        }
+        let project_relative = project_relative_path(&context, &path)?;
+        let source = if file.before.existed {
+            let content_ref = file
+                .before
+                .content_ref
+                .as_deref()
+                .ok_or_else(|| format!("GUI_SAVE_NODE_CONTENT_MISSING: {path} 缺少恢复内容"))?;
+            let source = read_save_content(project_service, project_id, content_ref)?;
+            validate_restored_source(&path, &source, &file.before)?;
+            Some(source)
+        } else {
+            None
+        };
+        changes.push(DraftChangeInput {
+            path: project_relative,
+            content: source,
+            deleted: !file.before.existed,
+            expected_sha256: current.sha256.clone(),
+        });
+        current_states.insert(path, current);
+    }
+
+    let draft = project_service
+        .store()
+        .open_draft(project_id, &format!("GUI 恢复保存节点 {node_id}"))?;
+    project_service.store().bind_draft_domain(
+        project_id,
+        &draft.id,
+        "__studio_gui__",
+        env!("CARGO_PKG_VERSION"),
+        None,
+    )?;
+    let preview =
+        project_service
+            .store()
+            .patch_draft(project_id, &draft.id, draft.revision, &changes)?;
+    validate_gui_restore_preview(&context, &preview, &node)?;
+    let confirmation = project_service.create_confirmation(project_id, &draft.id)?;
+    let confirmation_values = project_service.consume_confirmation(
+        project_id,
+        &draft.id,
+        &confirmation.confirmation_token,
+    )?;
+    project_service.store().apply_draft(
+        project_id,
+        &draft.id,
+        confirmation_values.revision,
+        &confirmation_values.diff_hash,
+    )?;
+
+    let mut restored_files = Vec::new();
+    let mut restore_node_files = Vec::with_capacity(node.files.len());
+    for file in &node.files {
+        let path = validate_gui_export_path(&file.path)?;
+        let after = capture_gui_state(project_service, &context, &path)?;
+        let before = current_states
+            .remove(&path)
+            .ok_or_else(|| format!("GUI_SAVE_STATE_MISSING: {path}"))?;
+        restore_node_files.push((path.clone(), before, after.clone()));
+        if after.existed {
+            restored_files.push(saved_document(open_document(
+                project_service,
+                project_id,
+                &path,
+                None,
+            )?)?);
+        }
+    }
+    let save_node = persist_save_node(
+        project_service,
+        project_id,
+        GuiSaveNodeOrigin::Restore,
+        Some(node.id),
+        restore_node_files,
+    )?;
+    Ok(GuiWorkingSaveResult {
+        save_node,
+        files: restored_files,
+    })
+}
+
+/// 每秒轮询只读取当前文件的元数据与哈希，不触发 Lua 解析。
+pub fn probe_document(
+    project_service: &ProjectService,
+    project_id: &str,
+    dev_relative_path: &str,
+    known_sha256: Option<&str>,
+) -> Result<GuiDocumentProbe, String> {
+    let context = active_context(project_service, project_id)?;
+    let path = validate_gui_export_path(dev_relative_path)?;
+    let Some(target) = optional_existing_file(&context.dev_root, &path)? else {
+        return Ok(GuiDocumentProbe {
+            path,
+            exists: false,
+            changed: known_sha256.is_some(),
+            sha256: None,
+            byte_length: 0,
+            modified_at: None,
+        });
+    };
+    let metadata = fs::metadata(&target)
+        .map_err(|e| format!("GUI_DOCUMENT_METADATA_FAILED: {}: {e}", target.display()))?;
+    if metadata.len() > MAX_GUI_SOURCE_BYTES as u64 {
+        return Err("GUI_SOURCE_TOO_LARGE: GUI Lua 源码不能超过 8 MiB".to_string());
+    }
+    let bytes = fs::read(&target)
+        .map_err(|e| format!("GUI_DOCUMENT_READ_FAILED: {}: {e}", target.display()))?;
+    let sha256 = hash_bytes(&bytes);
+    let modified_at = metadata.modified().ok().and_then(system_time_millis);
+    Ok(GuiDocumentProbe {
+        path,
+        exists: true,
+        changed: known_sha256 != Some(sha256.as_str()),
+        sha256: Some(sha256),
+        byte_length: metadata.len(),
+        modified_at,
+    })
+}
+
+/// 前端确认接受外部版本时才记录节点，避免轮询本身制造历史噪音。
+pub fn record_external_change(
+    project_service: &ProjectService,
+    project_id: &str,
+    request: GuiExternalChangeRequest,
+) -> Result<GuiExternalChangeResult, String> {
+    let path = validate_gui_export_path(&request.dev_relative_path)?;
+    let envelope = open_document(project_service, project_id, &path, None)?;
+    let file = saved_document(envelope.clone())?;
+    if file.sha256 == request.previous_sha256 {
+        return Ok(GuiExternalChangeResult {
+            changed: false,
+            save_node: None,
+            file,
+        });
+    }
+    let previous = CapturedGuiState {
+        existed: true,
+        sha256: Some(request.previous_sha256),
+        source: Some(request.previous_source),
+        encoding: request.previous_encoding,
+        newline: request.previous_newline,
+    };
+    let current = captured_state_from_envelope(&envelope)?;
+    let save_node = persist_save_node(
+        project_service,
+        project_id,
+        GuiSaveNodeOrigin::External,
+        None,
+        vec![(path, previous, current)],
+    )?;
+    Ok(GuiExternalChangeResult {
+        changed: true,
+        save_node: Some(save_node),
+        file,
+    })
+}
+
+/// Windows MVP 只按用户配置的完整 exe 路径判断是否在运行，不控制或注入游戏进程。
+pub fn game_process_status(executable_path: &str) -> Result<GuiGameProcessStatus, String> {
+    let executable_path = validate_executable_path(executable_path)?;
+    game_process_status_platform(executable_path)
+}
+
+#[derive(Debug, Clone)]
+struct CapturedGuiState {
+    existed: bool,
+    sha256: Option<String>,
+    source: Option<String>,
+    encoding: Option<String>,
+    newline: Option<String>,
+}
+
+fn capture_gui_state(
+    project_service: &ProjectService,
+    context: &GuiProjectContext,
+    path: &str,
+) -> Result<CapturedGuiState, String> {
+    let Some(_) = optional_existing_file(&context.dev_root, path)? else {
+        return Ok(CapturedGuiState {
+            existed: false,
+            sha256: None,
+            source: None,
+            encoding: None,
+            newline: None,
+        });
+    };
+    let project_relative = project_relative_path(context, path)?;
+    let opened =
+        project_service
+            .store()
+            .safe_text_open(&context.project_id, &project_relative, None)?;
+    ensure_source_size(&opened.content)?;
+    Ok(CapturedGuiState {
+        existed: true,
+        sha256: Some(opened.sha256),
+        source: Some(opened.content),
+        encoding: Some(opened.encoding),
+        newline: Some(opened.newline.unwrap_or_else(|| "\n".to_string())),
+    })
+}
+
+fn captured_state_from_envelope(
+    envelope: &GuiDocumentEnvelope,
+) -> Result<CapturedGuiState, String> {
+    let sha256 = envelope
+        .sha256
+        .clone()
+        .ok_or_else(|| "GUI_SAVE_RESULT_HASH_MISSING: 保存后的文件缺少 SHA-256".to_string())?;
+    Ok(CapturedGuiState {
+        existed: true,
+        sha256: Some(sha256),
+        source: Some(envelope.source.clone()),
+        encoding: Some(envelope.encoding.clone()),
+        newline: Some(envelope.newline.clone()),
+    })
+}
+
+fn saved_document(envelope: GuiDocumentEnvelope) -> Result<GuiSavedDocument, String> {
+    let sha256 = envelope
+        .sha256
+        .ok_or_else(|| "GUI_SAVE_RESULT_HASH_MISSING: 保存后的文件缺少 SHA-256".to_string())?;
+    Ok(GuiSavedDocument {
+        path: envelope.dev_relative_path,
+        source: envelope.source,
+        document: envelope.document,
+        sha256,
+        encoding: envelope.encoding,
+        newline: envelope.newline,
+    })
+}
+
+fn persist_save_node(
+    project_service: &ProjectService,
+    project_id: &str,
+    origin: GuiSaveNodeOrigin,
+    restored_from_node_id: Option<String>,
+    files: Vec<(String, CapturedGuiState, CapturedGuiState)>,
+) -> Result<GuiSaveNode, String> {
+    let root = gui_save_node_root(project_service, project_id)?;
+    fs::create_dir_all(root.join("nodes"))
+        .map_err(|e| format!("GUI_SAVE_NODE_CREATE_FAILED: {e}"))?;
+    fs::create_dir_all(root.join("contents"))
+        .map_err(|e| format!("GUI_SAVE_NODE_CREATE_FAILED: {e}"))?;
+    let mut node_files = Vec::with_capacity(files.len());
+    for (path, before, after) in files {
+        node_files.push(GuiSaveNodeFile {
+            path,
+            before: persist_captured_state(&root, before)?,
+            after: persist_captured_state(&root, after)?,
+        });
+    }
+    let created_at = now_millis();
+    let sequence = GUI_SAVE_NODE_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+    let previous_node_id = read_save_nodes(project_service, project_id)?
+        .first()
+        .map(|node| node.id.clone());
+    let node = GuiSaveNode {
+        schema_version: GUI_SAVE_NODE_SCHEMA_VERSION,
+        id: format!("gui-save-{created_at}-{sequence:020}"),
+        project_id: project_id.to_string(),
+        origin,
+        previous_node_id,
+        restored_from_node_id,
+        files: node_files,
+        created_at,
+    };
+    let bytes = serde_json::to_vec_pretty(&node)
+        .map_err(|e| format!("GUI_SAVE_NODE_SERIALIZE_FAILED: {e}"))?;
+    write_private_file_atomic(
+        &root.join("nodes").join(format!("{}.json", node.id)),
+        &bytes,
+        "GUI_SAVE_NODE_WRITE_FAILED",
+    )?;
+    prune_save_nodes(project_service, project_id)?;
+    Ok(node)
+}
+
+fn persist_captured_state(
+    root: &Path,
+    state: CapturedGuiState,
+) -> Result<GuiSaveNodeState, String> {
+    let content_ref = match state.source {
+        Some(source) => Some(persist_save_content(root, &source)?),
+        None => None,
+    };
+    Ok(GuiSaveNodeState {
+        existed: state.existed,
+        sha256: state.sha256,
+        content_ref,
+        encoding: state.encoding,
+        newline: state.newline,
+    })
+}
+
+fn persist_save_content(root: &Path, source: &str) -> Result<String, String> {
+    let content_ref = hash_bytes(source.as_bytes());
+    let path = root.join("contents").join(&content_ref);
+    if path.is_file() {
+        let current = fs::read(&path)
+            .map_err(|e| format!("GUI_SAVE_CONTENT_READ_FAILED: {}: {e}", path.display()))?;
+        if hash_bytes(&current) != content_ref {
+            return Err(format!(
+                "GUI_SAVE_CONTENT_HASH_MISMATCH: {}",
+                path.display()
+            ));
+        }
+        return Ok(content_ref);
+    }
+    write_private_file_atomic(&path, source.as_bytes(), "GUI_SAVE_CONTENT_WRITE_FAILED")?;
+    Ok(content_ref)
+}
+
+fn read_save_content(
+    project_service: &ProjectService,
+    project_id: &str,
+    content_ref: &str,
+) -> Result<String, String> {
+    validate_content_ref(content_ref)?;
+    let path = gui_save_node_root(project_service, project_id)?
+        .join("contents")
+        .join(content_ref);
+    let bytes = fs::read(&path)
+        .map_err(|e| format!("GUI_SAVE_CONTENT_READ_FAILED: {}: {e}", path.display()))?;
+    if hash_bytes(&bytes) != content_ref {
+        return Err(format!(
+            "GUI_SAVE_CONTENT_HASH_MISMATCH: {}",
+            path.display()
+        ));
+    }
+    String::from_utf8(bytes).map_err(|e| format!("GUI_SAVE_CONTENT_UTF8_INVALID: {e}"))
+}
+
+fn read_save_nodes(
+    project_service: &ProjectService,
+    project_id: &str,
+) -> Result<Vec<GuiSaveNode>, String> {
+    let directory = gui_save_node_root(project_service, project_id)?.join("nodes");
+    if !directory.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut nodes = Vec::new();
+    for entry in fs::read_dir(&directory)
+        .map_err(|e| format!("GUI_SAVE_NODE_LIST_FAILED: {}: {e}", directory.display()))?
+    {
+        let entry = entry.map_err(|e| format!("GUI_SAVE_NODE_LIST_FAILED: {e}"))?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let bytes = fs::read(&path)
+            .map_err(|e| format!("GUI_SAVE_NODE_READ_FAILED: {}: {e}", path.display()))?;
+        let node: GuiSaveNode = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("GUI_SAVE_NODE_INVALID: {}: {e}", path.display()))?;
+        if node.schema_version != GUI_SAVE_NODE_SCHEMA_VERSION || node.project_id != project_id {
+            return Err(format!("GUI_SAVE_NODE_INVALID: {}", path.display()));
+        }
+        nodes.push(node);
+    }
+    nodes.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    Ok(nodes)
+}
+
+fn prune_save_nodes(project_service: &ProjectService, project_id: &str) -> Result<(), String> {
+    let root = gui_save_node_root(project_service, project_id)?;
+    let nodes = read_save_nodes(project_service, project_id)?;
+    let cutoff = now_millis().saturating_sub(GUI_SAVE_NODE_RETENTION_MILLIS);
+    let mut kept = Vec::new();
+    for (index, node) in nodes.into_iter().enumerate() {
+        if index == 0 || (index < GUI_SAVE_NODE_LIMIT && node.created_at >= cutoff) {
+            kept.push(node);
+            continue;
+        }
+        let path = root.join("nodes").join(format!("{}.json", node.id));
+        fs::remove_file(&path)
+            .map_err(|e| format!("GUI_SAVE_NODE_PRUNE_FAILED: {}: {e}", path.display()))?;
+    }
+    let referenced: HashSet<String> = kept
+        .iter()
+        .flat_map(|node| node.files.iter())
+        .flat_map(|file| {
+            [
+                file.before.content_ref.as_ref(),
+                file.after.content_ref.as_ref(),
+            ]
+        })
+        .flatten()
+        .cloned()
+        .collect();
+    let contents = root.join("contents");
+    if contents.is_dir() {
+        for entry in
+            fs::read_dir(&contents).map_err(|e| format!("GUI_SAVE_CONTENT_PRUNE_FAILED: {e}"))?
+        {
+            let entry = entry.map_err(|e| format!("GUI_SAVE_CONTENT_PRUNE_FAILED: {e}"))?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry.path().is_file() && !referenced.contains(&name) {
+                fs::remove_file(entry.path())
+                    .map_err(|e| format!("GUI_SAVE_CONTENT_PRUNE_FAILED: {e}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn gui_save_node_root(
+    project_service: &ProjectService,
+    project_id: &str,
+) -> Result<PathBuf, String> {
+    Ok(project_service
+        .store()
+        .project_dir(project_id)?
+        .join("gui-save-nodes"))
+}
+
+fn write_private_file_atomic(path: &Path, bytes: &[u8], prefix: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("{prefix}: 目标缺少父目录"))?;
+    fs::create_dir_all(parent).map_err(|e| format!("{prefix}: {e}"))?;
+    let sequence = GUI_SAVE_NODE_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+    let temporary = parent.join(format!(".gui-save-{}-{sequence}.tmp", now_millis()));
+    let result = (|| -> Result<(), String> {
+        let mut file = File::create(&temporary).map_err(|e| format!("{prefix}: {e}"))?;
+        file.write_all(bytes)
+            .map_err(|e| format!("{prefix}: {e}"))?;
+        file.sync_all().map_err(|e| format!("{prefix}: {e}"))?;
+        fs::rename(&temporary, path).map_err(|e| format!("{prefix}: {e}"))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn same_disk_state(current: &CapturedGuiState, expected: &GuiSaveNodeState) -> bool {
+    current.existed == expected.existed && current.sha256 == expected.sha256
+}
+
+fn validate_restored_source(
+    path: &str,
+    source: &str,
+    state: &GuiSaveNodeState,
+) -> Result<(), String> {
+    ensure_source_size(source)?;
+    let sha256 = hash_bytes(source.as_bytes());
+    let document = parse_document(
+        source,
+        path,
+        &sha256,
+        state.encoding.as_deref().unwrap_or("UTF-8"),
+        state.newline.as_deref().unwrap_or("\n"),
+    )?;
+    if document
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+    {
+        return Err(format!(
+            "GUI_SAVE_NODE_SOURCE_INVALID: {path} 的恢复内容包含 Lua 语法错误"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_gui_restore_preview(
+    context: &GuiProjectContext,
+    preview: &DraftPreview,
+    node: &GuiSaveNode,
+) -> Result<(), String> {
+    if preview.changes.len() != node.files.len() {
+        return Err("GUI_SAVE_NODE_PREVIEW_MISMATCH: 恢复文件数量发生变化".to_string());
+    }
+    let allowed: HashMap<String, bool> = node
+        .files
+        .iter()
+        .map(|file| {
+            project_relative_path(context, &file.path)
+                .map(|path| (path.replace('\\', "/"), !file.before.existed))
+        })
+        .collect::<Result<_, _>>()?;
+    for change in &preview.changes {
+        let expected_deleted = allowed.get(&change.path).ok_or_else(|| {
+            format!(
+                "GUI_SAVE_NODE_PREVIEW_MISMATCH: Draft 包含未授权路径 {}",
+                change.path
+            )
+        })?;
+        if change.deleted != *expected_deleted {
+            return Err(format!(
+                "GUI_SAVE_NODE_PREVIEW_MISMATCH: {} 的删除状态不一致",
+                change.path
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_working_save_preview(
+    context: &GuiProjectContext,
+    preview: &DraftPreview,
+    change_set: &GuiDraftChangeSet,
+) -> Result<(), String> {
+    let expected: HashSet<String> = change_set
+        .files
+        .iter()
+        .map(|file| {
+            validate_gui_export_path(&file.dev_relative_path)
+                .and_then(|path| project_relative_path(context, &path))
+                .map(|path| path.replace('\\', "/"))
+        })
+        .collect::<Result<_, _>>()?;
+    let actual: HashSet<String> = preview
+        .changes
+        .iter()
+        .map(|change| change.path.replace('\\', "/"))
+        .collect();
+    if actual != expected {
+        return Err(
+            "GUI_WORKING_SAVE_SCOPE_MISMATCH: Draft 包含本次保存范围之外的文件".to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_save_node_id(value: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err("GUI_SAVE_NODE_ID_INVALID: 保存节点 ID 无效".to_string());
+    }
+    Ok(())
+}
+
+fn validate_content_ref(value: &str) -> Result<(), String> {
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("GUI_SAVE_CONTENT_REF_INVALID: 内容引用无效".to_string());
+    }
+    Ok(())
+}
+
+fn validate_executable_path(value: &str) -> Result<String, String> {
+    let value = value.trim();
+    let bytes = value.as_bytes();
+    let drive_absolute = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    let unc_absolute = value.starts_with("\\\\") || value.starts_with("//");
+    if value.is_empty()
+        || value.len() > 32_767
+        || (!drive_absolute && !unc_absolute)
+        || !value.to_ascii_lowercase().ends_with(".exe")
+        || value.chars().any(|character| {
+            character.is_control() || matches!(character, '"' | '*' | '?' | '<' | '>' | '|')
+        })
+    {
+        return Err("GUI_GAME_PROCESS_PATH_INVALID: 请输入完整、安全的 exe 路径".to_string());
+    }
+    Ok(value.to_string())
+}
+
+#[cfg(windows)]
+fn game_process_status_platform(executable_path: String) -> Result<GuiGameProcessStatus, String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    let canonical =
+        fs::canonicalize(&executable_path).unwrap_or_else(|_| PathBuf::from(&executable_path));
+    let expected = normalize_windows_executable_path(&canonical.to_string_lossy());
+    let expected_name = canonical
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_string();
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(format!(
+            "GUI_GAME_PROCESS_QUERY_FAILED: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..PROCESSENTRY32W::default()
+    };
+    let mut running = false;
+    let mut has_entry = unsafe { Process32FirstW(snapshot, &mut entry) } != 0;
+    while has_entry {
+        let name_length = entry
+            .szExeFile
+            .iter()
+            .position(|value| *value == 0)
+            .unwrap_or(entry.szExeFile.len());
+        let name = String::from_utf16_lossy(&entry.szExeFile[..name_length]);
+        if name.eq_ignore_ascii_case(&expected_name) {
+            let process =
+                unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.th32ProcessID) };
+            if !process.is_null() {
+                let mut buffer = vec![0_u16; 32_768];
+                let mut length = buffer.len() as u32;
+                if unsafe {
+                    QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length)
+                } != 0
+                {
+                    let path = String::from_utf16_lossy(&buffer[..length as usize]);
+                    running = normalize_windows_executable_path(&path) == expected;
+                }
+                unsafe { CloseHandle(process) };
+            }
+        }
+        if running {
+            break;
+        }
+        has_entry = unsafe { Process32NextW(snapshot, &mut entry) } != 0;
+    }
+    unsafe { CloseHandle(snapshot) };
+    Ok(GuiGameProcessStatus {
+        supported: true,
+        executable_path,
+        running,
+    })
+}
+
+#[cfg(windows)]
+fn normalize_windows_executable_path(path: &str) -> String {
+    path.strip_prefix("\\\\?\\")
+        .unwrap_or(path)
+        .replace('/', "\\")
+        .to_lowercase()
+}
+
+#[cfg(not(windows))]
+fn game_process_status_platform(executable_path: String) -> Result<GuiGameProcessStatus, String> {
+    Ok(GuiGameProcessStatus {
+        supported: false,
+        executable_path,
+        running: false,
+    })
+}
+
+fn now_millis() -> i64 {
+    system_time_millis(SystemTime::now()).unwrap_or(0)
+}
+
+fn system_time_millis(value: SystemTime) -> Option<i64> {
+    value
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
 }
 
 fn ensure_active_project(
@@ -1580,6 +2437,183 @@ mod tests {
             .restore_snapshot(&project_id, &snapshot.id)
             .unwrap();
         assert!(targets.iter().all(|target| !target.exists()));
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn working_save_creates_a_node_and_restore_appends_history() {
+        let (base, service, project_id) = fixture_service();
+        let path = "GUIExport/demo/main.lua";
+        let opened = open_document(&service, &project_id, path, None).unwrap();
+        let original = opened.source.clone();
+        let working = opened
+            .source
+            .replace("return ui", "-- studio save\r\nreturn ui");
+        let saved = working_save(
+            &service,
+            &project_id,
+            GuiDraftChangeSet {
+                files: vec![GuiDraftFileChange {
+                    dev_relative_path: path.to_string(),
+                    source: working,
+                    expected_sha256: opened.sha256,
+                    is_new: Some(false),
+                }],
+                draft_id: None,
+                expected_revision: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.save_node.origin, GuiSaveNodeOrigin::Studio);
+        assert!(saved.files[0].source.contains("studio save"));
+        assert!(!base.join("project/gui-save-nodes").exists());
+        assert!(base
+            .join("studio-data")
+            .join(&project_id)
+            .join("gui-save-nodes")
+            .is_dir());
+
+        let nodes = list_save_nodes(&service, &project_id, 20).unwrap();
+        assert_eq!(nodes.len(), 1);
+        let restored = restore_save_node(&service, &project_id, &nodes[0].id).unwrap();
+        assert_eq!(restored.save_node.origin, GuiSaveNodeOrigin::Restore);
+        assert_eq!(
+            restored.save_node.previous_node_id,
+            Some(nodes[0].id.clone())
+        );
+        assert_eq!(
+            restored.save_node.restored_from_node_id,
+            Some(nodes[0].id.clone())
+        );
+        assert_eq!(
+            fs::read_to_string(base.join("project/客户端/dev").join(path)).unwrap(),
+            original
+        );
+        assert_eq!(list_save_nodes(&service, &project_id, 20).unwrap().len(), 2);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn restore_blocks_when_disk_changed_after_the_save_node() {
+        let (base, service, project_id) = fixture_service();
+        let path = "GUIExport/demo/main.lua";
+        let opened = open_document(&service, &project_id, path, None).unwrap();
+        let working = opened
+            .source
+            .replace("return ui", "-- studio save\r\nreturn ui");
+        let saved = working_save(
+            &service,
+            &project_id,
+            GuiDraftChangeSet {
+                files: vec![GuiDraftFileChange {
+                    dev_relative_path: path.to_string(),
+                    source: working,
+                    expected_sha256: opened.sha256,
+                    is_new: Some(false),
+                }],
+                draft_id: None,
+                expected_revision: 0,
+            },
+        )
+        .unwrap();
+        let target = base.join("project/客户端/dev").join(path);
+        let external = fs::read_to_string(&target)
+            .unwrap()
+            .replace("return ui", "-- external\r\nreturn ui");
+        fs::write(&target, external).unwrap();
+        assert!(
+            restore_save_node(&service, &project_id, &saved.save_node.id)
+                .unwrap_err()
+                .starts_with("GUI_SOURCE_CONFLICT")
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn probe_and_external_record_detect_only_real_sha_changes() {
+        let (base, service, project_id) = fixture_service();
+        let path = "GUIExport/demo/main.lua";
+        let opened = open_document(&service, &project_id, path, None).unwrap();
+        let original_sha = opened.sha256.clone().unwrap();
+        let unchanged = probe_document(&service, &project_id, path, Some(&original_sha)).unwrap();
+        assert!(!unchanged.changed);
+
+        let target = base.join("project/客户端/dev").join(path);
+        let external = opened
+            .source
+            .replace("return ui", "-- game editor\r\nreturn ui");
+        fs::write(&target, external).unwrap();
+        let changed = probe_document(&service, &project_id, path, Some(&original_sha)).unwrap();
+        assert!(changed.changed);
+        let recorded = record_external_change(
+            &service,
+            &project_id,
+            GuiExternalChangeRequest {
+                dev_relative_path: path.to_string(),
+                previous_source: opened.source,
+                previous_sha256: original_sha,
+                previous_encoding: Some(opened.encoding),
+                previous_newline: Some(opened.newline),
+            },
+        )
+        .unwrap();
+        assert!(recorded.changed);
+        assert_eq!(
+            recorded.save_node.unwrap().origin,
+            GuiSaveNodeOrigin::External
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn game_process_configuration_requires_a_full_windows_executable_path() {
+        assert_eq!(
+            validate_executable_path(r"C:\Games\MIR3\Mir3.exe").unwrap(),
+            r"C:\Games\MIR3\Mir3.exe"
+        );
+        assert!(validate_executable_path("Mir3.exe")
+            .unwrap_err()
+            .starts_with("GUI_GAME_PROCESS_PATH_INVALID"));
+        assert!(validate_executable_path(r"C:\Games\MIR3\Mir3.bat")
+            .unwrap_err()
+            .starts_with("GUI_GAME_PROCESS_PATH_INVALID"));
+    }
+
+    #[test]
+    fn restoring_the_first_save_of_a_new_file_removes_that_file() {
+        let (base, service, project_id) = fixture_service();
+        let generated = create_template(
+            &service,
+            &project_id,
+            GuiTemplateRequest {
+                path: "history/new_page".to_string(),
+                platform: GuiTemplateTarget::Mobile,
+                pc_resolution: None,
+            },
+        )
+        .unwrap();
+        let generated = generated.documents.into_iter().next().unwrap();
+        let path = generated.dev_relative_path.clone();
+        let saved = working_save(
+            &service,
+            &project_id,
+            GuiDraftChangeSet {
+                files: vec![GuiDraftFileChange {
+                    dev_relative_path: path.clone(),
+                    source: generated.source,
+                    expected_sha256: None,
+                    is_new: Some(true),
+                }],
+                draft_id: None,
+                expected_revision: 0,
+            },
+        )
+        .unwrap();
+        let target = base.join("project/客户端/dev").join(&path);
+        assert!(target.is_file());
+        let restored = restore_save_node(&service, &project_id, &saved.save_node.id).unwrap();
+        assert!(restored.files.is_empty());
+        assert!(!target.exists());
         fs::remove_dir_all(base).ok();
     }
 

@@ -4,11 +4,14 @@
 
 use crate::service::gui_designer::{
     self, GuiAssetMeta, GuiDesignerStatus, GuiDevTreePage, GuiDocumentEntry, GuiDocumentEnvelope,
-    GuiDraftChangeSet, GuiDraftPrepareResult, GuiReadonlyDocument, GuiReparseRequest,
-    GuiTemplateRequest, GuiTemplateResponse,
+    GuiDocumentProbe, GuiDraftChangeSet, GuiDraftPrepareResult, GuiExternalChangeRequest,
+    GuiExternalChangeResult, GuiGameProcessStatus, GuiReadonlyDocument, GuiReparseRequest,
+    GuiSaveNode, GuiTemplateRequest, GuiTemplateResponse, GuiWorkingSaveResult,
 };
 use crate::service::project::{DraftConfirmation, ProjectService};
-use mir3_domain::Snapshot;
+use mir3_domain::{
+    GuiWorkspaceSnapshot, GuiWorkspaceSyncRequest, GuiWorkspaceSyncResult, Snapshot,
+};
 use tauri::{ipc::Response, State};
 
 #[tauri::command]
@@ -159,6 +162,121 @@ pub fn gui_draft_apply(
     confirmation_token: String,
 ) -> Result<Snapshot, String> {
     gui_designer::apply_draft(&service, &project_id, &draft_id, &confirmation_token)
+}
+
+#[tauri::command]
+pub async fn gui_working_save(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    change_set: GuiDraftChangeSet,
+) -> Result<GuiWorkingSaveResult, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::working_save(&service, &project_id, change_set)
+    })
+    .await
+    .map_err(|e| format!("GUI_WORKING_SAVE_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_save_node_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    limit: usize,
+) -> Result<Vec<GuiSaveNode>, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::list_save_nodes(&service, &project_id, limit)
+    })
+    .await
+    .map_err(|e| format!("GUI_SAVE_NODE_LIST_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_save_node_restore(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    node_id: String,
+) -> Result<GuiWorkingSaveResult, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::restore_save_node(&service, &project_id, &node_id)
+    })
+    .await
+    .map_err(|e| format!("GUI_SAVE_NODE_RESTORE_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_document_probe(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    dev_relative_path: String,
+    known_sha256: Option<String>,
+) -> Result<GuiDocumentProbe, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::probe_document(
+            &service,
+            &project_id,
+            &dev_relative_path,
+            known_sha256.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("GUI_DOCUMENT_PROBE_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_external_change_record(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    request: GuiExternalChangeRequest,
+) -> Result<GuiExternalChangeResult, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::record_external_change(&service, &project_id, request)
+    })
+    .await
+    .map_err(|e| format!("GUI_EXTERNAL_CHANGE_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_game_process_status(
+    executable_path: String,
+) -> Result<GuiGameProcessStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        gui_designer::game_process_status(&executable_path)
+    })
+    .await
+    .map_err(|e| format!("GUI_GAME_PROCESS_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_ai_workspace_sync(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    context: GuiWorkspaceSyncRequest,
+) -> Result<GuiWorkspaceSyncResult, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.store().sync_gui_workspace(&project_id, &context)
+    })
+    .await
+    .map_err(|e| format!("GUI_AI_WORKSPACE_SYNC_TASK_FAILED: {e}"))?
+}
+
+#[tauri::command]
+pub async fn gui_ai_workspace_get(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    path: String,
+) -> Result<GuiWorkspaceSnapshot, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.store().get_gui_workspace(&project_id, &path)
+    })
+    .await
+    .map_err(|e| format!("GUI_AI_WORKSPACE_GET_TASK_FAILED: {e}"))?
 }
 
 #[cfg(test)]

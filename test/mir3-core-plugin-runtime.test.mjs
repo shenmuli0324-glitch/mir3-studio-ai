@@ -61,6 +61,7 @@ describe('mir3 Core Plugin public runtime contract', () => {
         protocolVersion: 2,
         capabilities: {
           archive: true,
+          guiSession: true,
           globalSession: true,
           ordinarySessionCanary: true,
           pendingInteraction: true,
@@ -143,6 +144,89 @@ describe('mir3 Core Plugin public runtime contract', () => {
 
     dispose()
     expect(runtime.listenerRemoved()).toBe(true)
+  })
+
+  it('runs an independent token-scoped GUI Session without a domain identity', async () => {
+    const runtime = loadAdapter()
+    const calls = []
+    const sessions = new Map()
+    runtime.plugin.apply(createHarnessContext({ calls, sessions }))
+    const sessionId = 'mir3-gui-runtime'
+    const token = 'a'.repeat(64)
+    await runtime.send(request('mir3/guiSession.create', 1, {
+      payload: {
+        cwd: '/tmp/mir3-runtime',
+        prompt: 'move the selected panel',
+        workspaceId: 'gui-workspace-runtime',
+        workspaceToken: token,
+      },
+      sessionId,
+      systemId: '__studio_gui__',
+      taskId: 'gui-task-runtime',
+    }))
+    expect(calls).toContainEqual(['archive', sessionId])
+    const initialPrompt = calls.find(call => call[0] === 'prompt' && call[1] === sessionId)?.[2]
+    expect(initialPrompt).toContain('mir3_gui_asset_query')
+    expect(initialPrompt).toContain(`workspaceToken=${token}`)
+    expect(initialPrompt).toContain('move the selected panel')
+
+    const nextToken = 'b'.repeat(64)
+    await runtime.send(request('mir3/guiSession.prompt', 2, {
+      payload: {
+        content: 'set x to 12',
+        mode: 'queue',
+        workspaceId: 'gui-workspace-runtime',
+        workspaceToken: nextToken,
+      },
+      sessionId,
+      systemId: '__studio_gui__',
+      taskId: 'gui-task-runtime',
+    }))
+    const nextPrompt = calls.findLast(call => call[0] === 'prompt' && call[1] === sessionId)?.[2]
+    expect(nextPrompt).toContain(`workspaceToken=${nextToken}`)
+    expect(nextPrompt).toContain('set x to 12')
+
+    sessions.get(sessionId).snapshot.nodes = [{
+      type: 'tool-result',
+      input: { workspaceToken: nextToken },
+      result: {
+        guiResult: {
+          kind: 'operation',
+          path: 'GUIExport/Test.lua',
+          workspaceId: 'gui-workspace-runtime',
+          workingRevision: 3,
+          valid: true,
+          diagnostics: [],
+          source: 'must-not-be-projected',
+        },
+      },
+    }]
+    await runtime.send(request('mir3/guiSession.snapshot', 3, {
+      sessionId,
+      systemId: '__studio_gui__',
+      taskId: 'gui-task-runtime',
+    }))
+    expect(lastMessage(runtime.messages)).toMatchObject({
+      type: 'mir3/guiSession.snapshot',
+      payload: {
+        guiResults: [{
+          kind: 'operation',
+          path: 'GUIExport/Test.lua',
+          workspaceId: 'gui-workspace-runtime',
+          workingRevision: 3,
+          valid: true,
+        }],
+      },
+    })
+    expect(lastMessage(runtime.messages).payload.guiResults[0]).not.toHaveProperty('source')
+    expect(lastMessage(runtime.messages).payload.nodes[0].input.workspaceToken).toBe('[redacted]')
+
+    await runtime.send(request('mir3/guiSession.complete', 4, {
+      sessionId,
+      systemId: '__studio_gui__',
+      taskId: 'gui-task-runtime',
+    }))
+    expect(lastMessage(runtime.messages).type).toBe('mir3/guiSession.completed')
   })
 
   it('releases the owner after Session creation fails so another task can retry safely', async () => {

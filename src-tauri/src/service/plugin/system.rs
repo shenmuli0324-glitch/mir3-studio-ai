@@ -139,11 +139,14 @@ pub fn ensure(app: &AppHandle) -> Result<(), String> {
         log::warn!("MIR3 retired Safe Files plugin cleanup incomplete: {error}");
     }
 
-    let skill_source = resource_path(app, "mir3-skill")?.join("mir3-996-development");
-    let skill_destination = config::get_dsh_data_path(app)
-        .join("skills")
-        .join("mir3-996-development");
-    replace_directory(&skill_source, &skill_destination)?;
+    let skill_root = resource_path(app, "mir3-skill")?;
+    let skill_destination_root = config::get_dsh_data_path(app).join("skills");
+    for skill_name in ["mir3-996-development", "mir3-996-ui-development"] {
+        replace_directory(
+            &skill_root.join(skill_name),
+            &skill_destination_root.join(skill_name),
+        )?;
+    }
 
     let project_service = app.state::<service::project::ProjectService>();
     let domain_pack_root = config::get_dsh_data_path(app).join("domain-packs");

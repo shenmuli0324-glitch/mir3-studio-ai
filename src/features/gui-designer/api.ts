@@ -1,16 +1,22 @@
 import type {
+  GuiAiWorkspace,
   GuiAssetMeta,
   GuiDesignerStatus,
   GuiDevTreePage,
   GuiDocumentEntry,
   GuiDocumentOpenResult,
+  GuiDocumentProbeResult,
   GuiDraftApplyResult,
   GuiDraftChangeSet,
   GuiDraftConfirmation,
   GuiDraftPrepareResult,
+  GuiGameProcessStatus,
   GuiReadonlyDocument,
+  GuiSaveNode,
   GuiTemplateRequest,
   GuiTemplateResult,
+  GuiWorkingSaveChangeSet,
+  GuiWorkingSaveResult,
   Mir3UiDocument,
   Mir3UiNode,
   SourceSpan,
@@ -151,6 +157,74 @@ export function useGuiDocumentActions(projectId?: string) {
       void queryClient.invalidateQueries({ queryKey: ['gui-document-list', projectId] })
     },
   })
+  const save = useMutation({
+    mutationFn: (changeSet: GuiWorkingSaveChangeSet) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_working_save', { projectId, changeSet }).then(normalizeWorkingSaveResult)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['gui-document-list', projectId] })
+    },
+  })
+  const restore = useMutation({
+    mutationFn: (nodeId: string) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_save_node_restore', { projectId, nodeId }).then(normalizeWorkingSaveResult)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['gui-document-list', projectId] })
+    },
+  })
+  const acceptExternal = useMutation({
+    mutationFn: (request: {
+      devRelativePath: string
+      previousSource: string
+      previousSha256: string
+      previousEncoding?: string | null
+      previousNewline?: string | null
+    }) => {
+      if (!projectId)
+        throw new Error('GUI_PROJECT_REQUIRED')
+      return invoke<unknown>('gui_external_change_record', { projectId, request }).then(normalizeWorkingSaveResult)
+    },
+  })
+
+  function listSaveNodes(limit = 100): Promise<GuiSaveNode[]> {
+    if (!projectId)
+      return Promise.reject(new Error('GUI_PROJECT_REQUIRED'))
+    return invoke<unknown>('gui_save_node_list', { projectId, limit }).then(normalizeSaveNodes)
+  }
+
+  function probeDocument(devRelativePath: string, knownSha256?: string | null): Promise<GuiDocumentProbeResult> {
+    if (!projectId)
+      return Promise.reject(new Error('GUI_PROJECT_REQUIRED'))
+    return invoke<unknown>('gui_document_probe', { projectId, devRelativePath, knownSha256 }).then(normalizeDocumentProbe)
+  }
+
+  function syncAiWorkspace(context: {
+    path: string
+    workingRevision: number
+    baseSha256: string
+    selectedNodeId?: string | null
+    dirty: boolean
+    source: string
+  }): Promise<GuiAiWorkspace> {
+    if (!projectId)
+      return Promise.reject(new Error('GUI_PROJECT_REQUIRED'))
+    return invoke<unknown>('gui_ai_workspace_sync', { projectId, context }).then(normalizeAiWorkspace)
+  }
+
+  function getAiWorkspace(path: string): Promise<GuiAiWorkspace> {
+    if (!projectId)
+      return Promise.reject(new Error('GUI_PROJECT_REQUIRED'))
+    return invoke<unknown>('gui_ai_workspace_get', { projectId, path }).then(normalizeAiWorkspace)
+  }
+
+  function gameProcessStatus(executablePath: string): Promise<GuiGameProcessStatus> {
+    return invoke<unknown>('gui_game_process_status', { executablePath }).then(normalizeGameProcessStatus)
+  }
 
   return {
     open: open.mutateAsync,
@@ -159,8 +233,105 @@ export function useGuiDocumentActions(projectId?: string) {
     prepareDraft: prepare.mutateAsync,
     confirmDraft: confirm.mutateAsync,
     applyDraft: apply.mutateAsync,
-    busy: open.isPending || reparse.isPending || template.isPending || prepare.isPending || confirm.isPending || apply.isPending,
-    error: open.error || reparse.error || template.error || prepare.error || confirm.error || apply.error,
+    saveWorking: save.mutateAsync,
+    restoreSaveNode: restore.mutateAsync,
+    acceptExternalChange: acceptExternal.mutateAsync,
+    listSaveNodes,
+    probeDocument,
+    syncAiWorkspace,
+    getAiWorkspace,
+    gameProcessStatus,
+    busy: open.isPending || reparse.isPending || template.isPending || prepare.isPending || confirm.isPending || apply.isPending || save.isPending || restore.isPending || acceptExternal.isPending,
+    error: open.error || reparse.error || template.error || prepare.error || confirm.error || apply.error || save.error || restore.error || acceptExternal.error,
+  }
+}
+
+function normalizeWorkingSaveResult(input: unknown): GuiWorkingSaveResult {
+  const wire = isRecord(input) ? input : {}
+  const files = Array.isArray(wire.files) ? wire.files : wire.file ? [wire.file] : []
+  return {
+    files: files.map((item) => {
+      const value = isRecord(item) ? item : {}
+      const result = normalizeOpenResult(value)
+      return {
+        ...result,
+        path: stringValue(value.path ?? value.devRelativePath) ?? result.document.devRelativePath,
+      }
+    }),
+    saveNode: normalizeSaveNode(wire.saveNode ?? wire.save_node),
+  }
+}
+
+function normalizeSaveNodes(input: unknown): GuiSaveNode[] {
+  const wire = isRecord(input) ? input : {}
+  const nodes = Array.isArray(input) ? input : Array.isArray(wire.nodes) ? wire.nodes : []
+  return nodes.map(normalizeSaveNode)
+}
+
+function normalizeSaveNode(input: unknown): GuiSaveNode {
+  const wire = isRecord(input) ? input : {}
+  const rawOrigin = wire.origin ?? wire.source
+  const origin = rawOrigin === 'external' || rawOrigin === 'restore' ? rawOrigin : 'studio'
+  const nodeFiles = Array.isArray(wire.files) ? wire.files : []
+  const paths = Array.isArray(wire.paths)
+    ? wire.paths.map(String)
+    : nodeFiles.map(file => String(isRecord(file) ? file.path ?? '' : '')).filter(Boolean)
+  return {
+    id: String(wire.id ?? wire.nodeId ?? wire.node_id ?? ''),
+    previousNodeId: stringValue(wire.previousNodeId ?? wire.previous_node_id),
+    restoredFromNodeId: stringValue(wire.restoredFromNodeId ?? wire.restored_from_node_id),
+    createdAt: numberValue(wire.createdAt ?? wire.created_at) ?? Date.now(),
+    origin,
+    paths,
+  }
+}
+
+function normalizeDocumentProbe(input: unknown): GuiDocumentProbeResult {
+  const wire = isRecord(input) ? input : {}
+  const fallbackState = wire.exists === false ? 'missing' : wire.changed === true ? 'changed' : 'unchanged'
+  const rawState = String(wire.state ?? wire.status ?? fallbackState)
+  const state = rawState === 'changed' || rawState === 'missing' ? rawState : 'unchanged'
+  return { state, sha256: stringValue(wire.sha256) }
+}
+
+function normalizeAiWorkspace(input: unknown): GuiAiWorkspace {
+  const wire = isRecord(input) ? input : {}
+  const document = isRecord(wire.document) ? wire.document : {}
+  const diagnostics = Array.isArray(wire.diagnostics)
+    ? wire.diagnostics
+    : Array.isArray(document.diagnostics)
+      ? document.diagnostics
+      : []
+  const normalizedDiagnostics = diagnostics.map((diagnostic) => {
+    const value = isRecord(diagnostic) ? diagnostic : {}
+    return {
+      code: String(value.code ?? 'GUI_DIAGNOSTIC'),
+      severity: severityValue(value.severity),
+      message: String(value.message ?? ''),
+      span: spanValue(value.span),
+      nodeId: stringValue(value.nodeId ?? value.node_id),
+    }
+  })
+  return {
+    workspaceId: String(wire.workspaceId ?? wire.workspace_id ?? ''),
+    workspaceToken: String(wire.workspaceToken ?? wire.workspace_token ?? ''),
+    path: String(wire.path ?? wire.devRelativePath ?? ''),
+    source: String(wire.source ?? ''),
+    baseSha256: stringValue(wire.baseSha256 ?? wire.base_sha256),
+    workingRevision: numberValue(wire.workingRevision ?? wire.working_revision ?? wire.revision) ?? 0,
+    valid: wire.valid !== false && !normalizedDiagnostics.some(diagnostic => diagnostic.severity === 'error'),
+    diagnostics: normalizedDiagnostics,
+  }
+}
+
+function normalizeGameProcessStatus(input: unknown): GuiGameProcessStatus {
+  const wire = isRecord(input) ? input : {}
+  const executablePath = String(wire.executablePath ?? wire.executable_path ?? '')
+  return {
+    supported: wire.supported !== false,
+    executablePath,
+    configured: wire.configured === true || executablePath.length > 0,
+    running: wire.running === true,
   }
 }
 

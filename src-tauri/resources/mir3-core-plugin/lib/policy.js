@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 
 const SYSTEM_SESSION_PREFIX = 'mir3-system-'
+const GUI_SESSION_PREFIX = 'mir3-gui-'
 const GLOBAL_SESSION_PREFIX = 'global-'
 
 function normalizeForCompare(value) {
@@ -22,8 +23,12 @@ function isGlobalSession(session) {
   return typeof session?.id === 'string' && session.id.startsWith(GLOBAL_SESSION_PREFIX)
 }
 
+function isGuiSession(session) {
+  return typeof session?.id === 'string' && session.id.startsWith(GUI_SESSION_PREFIX)
+}
+
 function isMir3ManagedSession(session) {
-  return isSystemSession(session) || isGlobalSession(session)
+  return isSystemSession(session) || isGuiSession(session) || isGlobalSession(session)
 }
 
 function targetPath(target) {
@@ -68,7 +73,9 @@ function developmentWriteViolation(projectRoot, session, target) {
 export {
   developmentWriteViolation,
   GLOBAL_SESSION_PREFIX,
+  GUI_SESSION_PREFIX,
   isGlobalSession,
+  isGuiSession,
   isMir3ManagedSession,
   isProtectedTarget,
   isSystemSession,

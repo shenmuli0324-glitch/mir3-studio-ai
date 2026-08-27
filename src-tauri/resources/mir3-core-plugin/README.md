@@ -9,13 +9,15 @@
 - Harness 的工作区、Session、搜索结果与 Agent 运行记录使用当前 `projectId` 的独立数据槽；切换回来时恢复该项目自己的历史，不删除其他项目数据。
 - 目录选择、工作区创建、普通/系统/全局 Session cwd 和路径操作都必须位于当前项目根；插件、Profile、模型、凭证与明确的全局设置仍共享。
 - 为系统开发区创建绑定 `cwd` 的 Session，创建后立即通过公共 `archiveSession` 接口归档，避免出现在普通工作区列表中。
-- 通过协议 v2 提供系统会话创建、恢复、Prompt、取消、交互回复、快照订阅和完成通知。
+- 通过协议 v2 提供系统会话和独立 GUI 会话的创建、恢复、Prompt、取消、交互回复、快照订阅和完成通知。
+- GUI Designer 使用固定 `__studio_gui__` 身份和 `mir3-gui-` Session；每轮由 Studio 签发私有工作区令牌，只能调用 `mir3_gui_context`、`mir3_gui_operate`、`mir3_gui_asset_query`、`mir3_gui_validate`。
+- GUI MCP 只修改 `$MIR3_STUDIO_HOME/projects/<projectId>` 下的私有工作副本，`GUIExport` 是唯一可编辑树；Studio 保存节点是写入项目的唯一入口，`GUILayout` 和加密资源保持只读。
 - 快照和完成通知只从工具结果投影结构化 Draft/校验/资源变更，Studio 会再次核验项目、系统、任务、会话、序列和真实 Draft 绑定后才刷新 Diff 或消费 `returnTo` 深链。
 - 系统任务升级为全局任务时创建正常可见的新 Session，并接收 Studio 签发的短期多系统作用域、固定插件版本、组合 Draft 和结构化摘要上下文。
 - 通过 Harness 已有 MCP Client 连接 MIR3 MCP，不实现第二套文件、编辑器、终端或会话系统。
 - 普通 Harness 工作台可在当前活动项目内调用系统、资源和依赖只读工具；GBK/CP936 脚本由 MIR3 内核安全解码。任何 Draft 创建或写入仍要求 Studio 签发的短期任务作用域。
 - 不向 iframe 暴露无任务作用域的文件写入命令；AI 写入统一使用作用域凭证和外置 Draft，Studio 人工编辑由 Tauri 领域工作区承担。
-- 服务端为所有 Session 校验当前项目 cwd，并拒绝普通 Harness 会话写入项目根之外；`mir3-system-` 和 `global-` 会话额外切换为只读，项目真实文件只能通过受作用域约束的 MIR3 MCP Draft 修改。
+- 服务端为所有 Session 校验当前项目 cwd，并拒绝普通 Harness 会话写入项目根之外；`mir3-system-`、`mir3-gui-` 和 `global-` 会话额外切换为只读，项目真实文件只能通过受作用域约束的 MIR3 MCP 或 Studio 保存流程修改。
 - 无法确认系统会话的项目根目录时，系统 AI 写入失败关闭；MCP 只写项目外 Draft，用户确认后的项目应用仍由 Studio/Tauri 完成。
 - 插件完成 `apply` 后向 Studio 发送 ready 加载信号；该信号本身不推进 Core LKG。Studio 还会通过公共 Runtime 创建、打开并归档一个非 managed 普通 Session，并在一次性项目和数据库中启动真实 MCP sidecar、调用只读系统工具及官方只读领域能力；全部通过后才能推进 LKG。
 

@@ -8,10 +8,7 @@ import { GuiDesignerScope } from './gui-designer-scope'
 export function DesignerDialogs() {
   const scope = useScope(GuiDesignerScope)
   return (
-    <>
-      <If cond={scope.newDialogOpen}><NewPageDialog /></If>
-      <If cond={scope.draftConfirmation != null}><DiffDialog /></If>
-    </>
+    <If cond={scope.newDialogOpen}><NewPageDialog /></If>
   )
 }
 
@@ -48,28 +45,10 @@ function NewPageDialog() {
   )
 }
 
-function DiffDialog() {
-  const { t } = useTranslation()
-  const scope = useScope(GuiDesignerScope)
-  return (
-    <DialogFrame title={t('studio.gui.diff_dialog.title')} wide onClose={() => scope.setDraftConfirmation(null)}>
-      <p className="mb-3 text-xs leading-5 text-muted">{t('studio.gui.diff_dialog.description')}</p>
-      <pre className="max-h-[52vh] overflow-auto rounded-xl bg-[#111216] p-4 font-mono text-[11px] leading-5 text-[#cfd3d6] ring-1 ring-line">{scope.draftConfirmation?.diff || t('studio.gui.diff_dialog.empty')}</pre>
-      <div className="mt-5 flex items-center justify-between gap-3">
-        <span className="text-[10px] text-muted">{t('studio.gui.diff_dialog.confirm_hint')}</span>
-        <div className="flex gap-2">
-          <button className="h-8 rounded-lg px-3 text-[11px] text-muted hover:bg-panel-hover" type="button" onClick={() => scope.setDraftConfirmation(null)}>{t('studio.gui.cancel')}</button>
-          <button className="h-8 rounded-lg bg-accent px-4 text-[11px] font-medium text-white disabled:opacity-40" type="button" disabled={scope.busy} onClick={() => void scope.applyDiff().catch(() => {})}>{t('studio.gui.diff_dialog.apply')}</button>
-        </div>
-      </div>
-    </DialogFrame>
-  )
-}
-
-function DialogFrame({ title, children, wide = false, onClose }: { title: string, children: React.ReactNode, wide?: boolean, onClose: () => void }) {
+function DialogFrame({ title, children, onClose }: { title: string, children: React.ReactNode, onClose: () => void }) {
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-black/55 p-6" role="dialog" aria-modal="true" aria-label={title} onMouseDown={onClose}>
-      <div className={dialogClass(wide)} onMouseDown={event => event.stopPropagation()}>
+      <div className={dialogClass()} onMouseDown={event => event.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
           <strong className="text-sm font-semibold text-ink">{title}</strong>
           <button className="grid size-7 place-items-center rounded-lg text-muted hover:bg-panel-hover hover:text-ink" type="button" onClick={onClose}>×</button>
@@ -95,9 +74,6 @@ function targetClass(active: boolean): string {
   return `${base} bg-panel-2 text-muted ring-line hover:text-ink`
 }
 
-function dialogClass(wide: boolean): string {
-  const base = 'max-h-[calc(100vh-64px)] overflow-auto rounded-2xl bg-panel p-5 shadow-[0_32px_100px_rgba(0,0,0,0.35)] ring-1 ring-line-strong'
-  if (wide)
-    return `${base} w-[min(860px,calc(100vw-64px))]`
-  return `${base} w-[min(440px,calc(100vw-64px))]`
+function dialogClass(): string {
+  return 'max-h-[calc(100vh-64px)] w-[min(440px,calc(100vw-64px))] overflow-auto rounded-2xl bg-panel p-5 shadow-[0_32px_100px_rgba(0,0,0,0.35)] ring-1 ring-line-strong'
 }

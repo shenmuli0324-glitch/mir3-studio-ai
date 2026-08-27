@@ -7,7 +7,8 @@
 
 use mir3_domain::{
     DomainFileQuery, DomainManifest, DomainResourceQuery, DomainResourceRecord, DomainStore,
-    DraftChangeInput, MapDraftOperation, SafeTextPatch, SafeXlsDraftPatch,
+    DraftChangeInput, GuiWorkspaceOperateRequest, MapDraftOperation, SafeTextPatch,
+    SafeXlsDraftPatch,
 };
 use semver::{Version, VersionReq};
 use serde_json::{json, Value};
@@ -16,7 +17,11 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 #[cfg(test)]
-const TOOLS: [&str; 12] = [
+const TOOLS: [&str; 16] = [
+    "mir3_gui_context",
+    "mir3_gui_operate",
+    "mir3_gui_asset_query",
+    "mir3_gui_validate",
     "mir3_system_list",
     "mir3_system_describe",
     "mir3_resource_query",
@@ -147,6 +152,116 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
         .map(str::trim)
         .unwrap_or_default();
     let result = match name {
+        "mir3_gui_context" => required_string(&args, "path")
+            .and_then(|path| {
+                let token = required_string(&args, "workspaceToken")?;
+                store.authorize_gui_workspace(project_id, &path, &token)?;
+                store.get_gui_workspace(project_id, &path)
+            })
+            .map(|snapshot| {
+                let selected_node = snapshot.selected_node_id.as_ref().and_then(|node_id| {
+                    snapshot
+                        .document
+                        .nodes
+                        .iter()
+                        .find(|node| &node.id == node_id)
+                });
+                json!({
+                    "guiResult": {
+                        "kind": "context",
+                        "workspaceId": snapshot.workspace_id,
+                        "path": snapshot.path,
+                        "baseSha256": snapshot.base_sha256,
+                        "workingRevision": snapshot.working_revision,
+                        "dirty": snapshot.dirty,
+                        "selectedNodeId": snapshot.selected_node_id,
+                        "selectedNode": selected_node,
+                        "roots": snapshot.document.roots,
+                        "nodes": snapshot.document.nodes,
+                        "assets": snapshot.document.assets,
+                        "diagnostics": snapshot.document.diagnostics,
+                        "source": snapshot.source,
+                    }
+                })
+            }),
+        "mir3_gui_operate" => serde_json::from_value::<GuiWorkspaceOperateRequest>(args.clone())
+            .map_err(|error| format!("MCP_ARGUMENT_INVALID: {error}"))
+            .and_then(|request| store.operate_gui_workspace(project_id, &request))
+            .map(|result| {
+                json!({
+                    "guiResult": {
+                        "kind": "operation",
+                        "workspaceId": result.workspace_id,
+                        "path": result.path,
+                        "baseSha256": result.base_sha256,
+                        "workingRevision": result.working_revision,
+                        "source": result.source,
+                        "diagnostics": result.diagnostics,
+                        "valid": result.valid,
+                    }
+                })
+            }),
+        "mir3_gui_asset_query" => required_string(&args, "path")
+            .and_then(|path| {
+                let token = required_string(&args, "workspaceToken")?;
+                store.authorize_gui_workspace(project_id, &path, &token)?;
+                store.get_gui_workspace(project_id, &path)
+            })
+            .map(|snapshot| {
+                let query = args
+                    .get("query")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                let assets = snapshot
+                    .document
+                    .assets
+                    .into_iter()
+                    .filter(|asset| {
+                        query.is_empty() || asset.logical_path.to_ascii_lowercase().contains(&query)
+                    })
+                    .take(MCP_MAX_QUERY_ITEMS)
+                    .collect::<Vec<_>>();
+                json!({
+                    "guiResult": {
+                        "kind": "assets",
+                        "workspaceId": snapshot.workspace_id,
+                        "path": snapshot.path,
+                        "workingRevision": snapshot.working_revision,
+                        "assets": assets,
+                    }
+                })
+            }),
+        "mir3_gui_validate" => {
+            let path = required_string(&args, "path");
+            let expected_revision = required_i64(&args, "expectedRevision");
+            path.and_then(|path| expected_revision.map(|revision| (path, revision)))
+                .and_then(|(path, expected_revision)| {
+                    let token = required_string(&args, "workspaceToken")?;
+                    store.authorize_gui_workspace(project_id, &path, &token)?;
+                    let snapshot = store.get_gui_workspace(project_id, &path)?;
+                    if snapshot.working_revision != expected_revision {
+                        return Err(format!(
+                            "GUI_WORKSPACE_REVISION_CONFLICT: expected {expected_revision}, got {}",
+                            snapshot.working_revision
+                        ));
+                    }
+                    let valid = !snapshot.document.diagnostics.iter().any(|diagnostic| {
+                        diagnostic.severity == mir3_ui::DiagnosticSeverity::Error
+                    });
+                    Ok(json!({
+                        "guiResult": {
+                            "kind": "validation",
+                            "workspaceId": snapshot.workspace_id,
+                            "path": snapshot.path,
+                            "baseSha256": snapshot.base_sha256,
+                            "workingRevision": snapshot.working_revision,
+                            "valid": valid,
+                            "diagnostics": snapshot.document.diagnostics,
+                        }
+                    }))
+                })
+        }
         "mir3_system_list" => authorize_project_read(store, project_id, scope_token, None)
             .and_then(|lease| {
                 store.list_domain_systems().map(|systems| match lease {
@@ -1023,6 +1138,52 @@ fn system_list_payload(systems: Vec<DomainManifest>) -> Value {
 fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
+            "mir3_gui_context",
+            "读取 Studio 已同步到应用私有目录的当前 GUI 工作副本、控件树和选择上下文；不会读取项目源文件。",
+            gui_path_schema(false),
+        ),
+        tool(
+            "mir3_gui_operate",
+            "使用 expectedRevision 对私有 GUI 工作副本执行属性、位置、核心组件或行为操作；不会写入项目文件。",
+            json!({
+                "type":"object",
+                "properties":{
+                    "workspaceToken":{"type":"string","minLength":32},
+                    "path":{"type":"string","minLength":1},
+                    "expectedRevision":{"type":"integer","minimum":0},
+                    "operation":{
+                        "type":"object",
+                        "properties":{
+                            "type":{"type":"string","enum":["setPosition","setProperty","addNode","addBehavior"]},
+                            "nodeId":{"type":"string","minLength":1},
+                            "parentNodeId":{"type":"string","minLength":1},
+                            "nodeType":{"type":"string","enum":["Panel","Image","Text","Button"]},
+                            "name":{"type":"string","minLength":1},
+                            "x":{"type":"number"},
+                            "y":{"type":"number"},
+                            "property":{"type":"string","minLength":1},
+                            "value":{},
+                            "behavior":{"type":"string","enum":["timeline","action"]}
+                        },
+                        "required":["type"],
+                        "additionalProperties":false
+                    }
+                },
+                "required":["workspaceToken","path","expectedRevision","operation"],
+                "additionalProperties":false
+            }),
+        ),
+        tool(
+            "mir3_gui_asset_query",
+            "列出私有 GUI 工作副本静态引用的素材逻辑路径；不读取或导出游戏加密资源。",
+            json!({"type":"object","properties":{"workspaceToken":{"type":"string","minLength":32},"path":{"type":"string","minLength":1},"query":{"type":"string"}},"required":["workspaceToken","path"],"additionalProperties":false}),
+        ),
+        tool(
+            "mir3_gui_validate",
+            "按 expectedRevision 校验私有 GUI 工作副本并返回静态诊断；不会保存到项目。",
+            gui_path_schema(true),
+        ),
+        tool(
             "mir3_system_list",
             "列出当前项目可读的 33 个领域系统；普通工作台无需令牌，受管任务可附带作用域令牌收窄结果。",
             with_project_read(empty_schema()),
@@ -1099,6 +1260,23 @@ fn tool_definitions() -> Vec<Value> {
             ),
         ),
     ]
+}
+
+fn gui_path_schema(require_revision: bool) -> Value {
+    let mut schema = json!({
+        "type":"object",
+        "properties":{
+            "workspaceToken":{"type":"string","minLength":32},
+            "path":{"type":"string","minLength":1},
+            "expectedRevision":{"type":"integer","minimum":0}
+        },
+        "required":["workspaceToken","path"],
+        "additionalProperties":false
+    });
+    if require_revision {
+        schema["required"] = json!(["workspaceToken", "path", "expectedRevision"]);
+    }
+    schema
 }
 
 fn empty_schema() -> Value {
@@ -3175,8 +3353,7 @@ mod tests {
         let schemas = serde_json::to_string(&definitions).unwrap();
         assert!(!schemas.contains("\"root\""));
         assert!(!schemas.contains("\"primitive\""));
-        assert!(!schemas.contains("\"action\""));
-        assert!(!schemas.contains("\"path\""));
+        assert!(!schemas.contains("\"action\":"));
         assert!(!schemas.contains("\"field\""));
         let project_read_tools = [
             "mir3_system_list",
@@ -3184,6 +3361,10 @@ mod tests {
             "mir3_resource_query",
             "mir3_resource_get",
             "mir3_dependency_resolve",
+            "mir3_gui_context",
+            "mir3_gui_operate",
+            "mir3_gui_asset_query",
+            "mir3_gui_validate",
         ];
         for definition in &definitions {
             let name = definition["name"].as_str().unwrap();
@@ -3192,6 +3373,14 @@ mod tests {
                 .and_then(Value::as_array)
                 .is_some_and(|required| required.iter().any(|value| value == "scopeToken"));
             assert_eq!(requires_scope, !project_read_tools.contains(&name));
+            if name.starts_with("mir3_gui_") {
+                assert!(definition
+                    .pointer("/inputSchema/required")
+                    .and_then(Value::as_array)
+                    .is_some_and(|required| required
+                        .iter()
+                        .any(|value| value == "workspaceToken")));
+            }
         }
         let schema_bytes = serde_json::to_vec(&definitions).unwrap().len();
         assert!(
@@ -3768,12 +3957,7 @@ mod tests {
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
 
-        let workbench_systems = call_tool(
-            &store,
-            &project.id,
-            "mir3_system_list",
-            json!({}),
-        );
+        let workbench_systems = call_tool(&store, &project.id, "mir3_system_list", json!({}));
         assert_eq!(
             workbench_systems
                 .pointer("/structuredContent/systems")
