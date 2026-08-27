@@ -1213,6 +1213,11 @@ impl DomainStore {
             .map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
         let offset = query.offset.unwrap_or_default();
         let limit = query.limit.unwrap_or(250).clamp(1, 10_000);
+        // 文件树只展示索引投影，不应为每一行同步解析真实 XLS/MAP；真正打开或写入时仍走完整格式门禁。
+        let projected_write_enabled = self.read_only_reason().is_none()
+            && self
+                .assert_project_engine_compatible(project_id, manifest)
+                .is_ok();
         let mut matched = Vec::new();
         for row in rows {
             let (path, role, category, extension, size, modified_at, content) =
@@ -1234,10 +1239,10 @@ impl DomainStore {
             } else {
                 "owned"
             };
-            let access = if dependency_file || self.read_only_reason().is_some() {
+            let access = if dependency_file || !projected_write_enabled {
                 "readonly"
             } else {
-                self.verified_access_for(project_id, manifest, &path, extension.as_deref())
+                access_for(manifest, extension.as_deref())
             };
             let resource_manifest = systems
                 .first()
@@ -3927,6 +3932,48 @@ mod tests {
             std::fs::read_to_string(root.join(relative)).unwrap(),
             "level=1\nrequiredExperience=200\n"
         );
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn file_list_does_not_parse_structured_payloads_but_open_still_verifies() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-file-list-access-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let root = base.join("木立");
+        let relative = "引擎/Mir200/Envir/Data/cfg_mapinfo.xls";
+        std::fs::create_dir_all(root.join("客户端")).unwrap();
+        std::fs::create_dir_all(root.join("引擎/Mir200/Envir/Data")).unwrap();
+        std::fs::write(root.join(relative), b"not-an-ole-workbook").unwrap();
+
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let files = store
+            .query_domain_files(
+                &project.id,
+                "map",
+                &DomainFileQuery {
+                    text: "cfg_mapinfo".to_string(),
+                    limit: Some(10),
+                    offset: None,
+                },
+            )
+            .unwrap();
+        let file = files
+            .iter()
+            .find(|file| file.path == relative)
+            .expect("indexed XLS should remain visible without parsing its payload");
+        assert_eq!(file.access, "structured");
+
+        let manifest = store.runtime_manifest("map").unwrap();
+        assert_eq!(
+            store.verified_access_for(&project.id, &manifest, relative, Some("xls")),
+            "readonly"
+        );
+        assert!(store.safe_xls_open(&project.id, relative).is_err());
         std::fs::remove_dir_all(base).ok();
     }
 
