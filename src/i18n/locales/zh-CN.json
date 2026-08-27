@@ -775,6 +775,7 @@
   "studio.devtools.ai.memory_activate": "激活记忆",
   "studio.devtools.ai.memory_reject": "驳回",
   "studio.devtools.ai.global": "转全局",
+  "studio.devtools.ai.global_needs_session": "请先启动当前系统 AI 任务，再升级到全局工作台。",
   "studio.devtools.ai.global_context": "请在全局工作台继续规划以下领域任务，只使用结构化摘要、资源引用和Draft，不复制完整对话：",
   "studio.devtools.ai.global_draft_intent": "全局任务：{{system}}",
   "studio.devtools.ai.global_scope": "全局任务可写系统（依赖默认只读）",

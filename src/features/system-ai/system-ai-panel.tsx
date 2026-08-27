@@ -8,11 +8,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
-import { activateMemoryCandidate, associateDomainDraftComposite, bindSystemSession, compileUserCapability, getSystemSession, issueTaskScope, listDomainDrafts, listDomainMemories, listDomainSystems, listMemoryCandidates, listTaskReceipts, openDomainDraft, previewDomainDraft, resolveUserCapabilities, revokeMemoryCandidate, revokeTaskScope, saveTaskReceipt, setUserCapabilityStatus, validateDomainDraft } from '@/features/devtools/domain/api'
+import { activateMemoryCandidate, associateDomainDraftComposite, bindSystemSession, compileUserCapability, getSystemSession, issueTaskScope, listDomainDrafts, listDomainMemories, listDomainSystems, listMemoryCandidates, listTaskReceipts, openDomainDraft, previewDomainDraft, resolveUserCapabilities, revokeMemoryCandidate, revokeTaskScope, revokeTaskScopes, saveTaskReceipt, setUserCapabilityStatus, validateDomainDraft } from '@/features/devtools/domain/api'
 import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
-import { draftHandoffs, includeGlobalTaskDraft, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask } from './ai-handoff'
+import { draftHandoffs, includeGlobalTaskDraft, markGlobalTaskMcpDisabled, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask } from './ai-handoff'
 import { CapabilityGovernance } from './capability-governance'
 import { compensateGlobalDraftSetup } from './global-draft-compensation'
+import { appendScopedUserRequest, buildGlobalTaskHandoff, buildTaskSemanticSummary, formatTaskReceiptSummary, projectTaskMessages, sanitizeTaskSemanticList, taskGoalFromMessages } from './global-task-handoff'
+import { retireSourceTaskScope } from './global-task-recovery'
 import { currentScopeLease, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from './scope-lease-manager'
 
 interface AiMessage {
@@ -107,9 +109,13 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
           includeScopeLeaseDraft(globalTask, handoff.draftId)
         }
       }
-      if (globalTask && (message.type === 'mir3/globalSession.cancelled' || message.type === 'mir3/bridge.error')) {
+      if (globalTask && message.type === 'mir3/globalSession.cancelled') {
         void stopScopeLease(globalTask)
         unregisterGlobalTask(globalTask)
+      }
+      else if (globalTask && message.type === 'mir3/bridge.error') {
+        void stopScopeLease(globalTask)
+        markGlobalTaskMcpDisabled(globalTask, bridgeError(message))
       }
       const identity = {
         projectId: project.id,
@@ -378,17 +384,28 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   }
 
   async function summarizeTask() {
-    const summary = messages.slice(-8).map(message => `${message.role}: ${message.content}`).join('\n')
+    const semanticSummary = buildTaskSemanticSummary({
+      messages,
+      decisions: usedCapabilities.map(capability => `capability:${capability.id}@${capability.version}`),
+      completedOperations: taskToolCalls.map(toolCallLabel),
+      constraints: [
+        `writeSystems:${manifest.systemId}`,
+        `readSystems:${[manifest.systemId, ...manifest.dependencies].join(',')}`,
+      ],
+      openQuestions: pending.map(interaction => `${interaction.kind}:${interaction.key}`),
+      unfinishedSteps: runningCalls.map(toolCallLabel),
+    })
     const receiptDraftId = draftId ?? scopeDraftId
     setReceiptStatus('saving')
     try {
       const now = Date.now()
       const draftEvidence = await taskDraftEvidence(project.id, manifest.systemId, receiptDraftId)
+      const summary = formatTaskReceiptSummary(semanticSummary) || t('studio.devtools.ai.receipt_empty')
       await saveTaskReceipt(project.id, {
-        id: `receipt-${taskId}-${Date.now()}`,
+        id: `receipt-summary-${taskId}-${stableTextKey(JSON.stringify(semanticSummary))}`,
         taskId,
         systemId: manifest.systemId,
-        summary: summary || t('studio.devtools.ai.receipt_empty'),
+        summary,
         status: taskReceiptStatus(running),
         draftId: receiptDraftId,
         pluginVersions: { [manifest.systemId]: manifest.version },
@@ -396,7 +413,8 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
           selectedPath,
           sessionId,
           messageCount: messages.length,
-          toolCalls: taskToolCalls.map(toolCallLabel),
+          toolCalls: semanticSummary.completedOperations ?? [],
+          semanticSummary,
           ...draftEvidence,
         },
         createdAt: now,
@@ -431,13 +449,21 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   }
 
   async function openGlobalTask() {
+    const sourceSessionId = sessionId
+    if (!sourceSessionId) {
+      setError(t('studio.devtools.ai.global_needs_session'))
+      return
+    }
     setGlobalPending(true)
     setError(null)
     const createdDraftIds: string[] = []
     let associatedDraft: { draftId: string, systemId: string, pluginVersion: string, compositeId: string } | null = null
     let globalIdentity: { projectId: string, taskId: string, sessionId: string } | null = null
     try {
-      const manifests = await listDomainSystems()
+      const [manifests, taskReceipts] = await Promise.all([
+        listDomainSystems(),
+        listTaskReceipts(project.id, manifest.systemId),
+      ])
       const writeSystems = uniqueStrings([manifest.systemId, ...globalWriteSystems])
       const readSystems = domainReadScope(manifests, writeSystems)
       const pluginVersions = domainPluginVersions(manifests, readSystems)
@@ -472,6 +498,39 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         pluginVersions,
       )
       globalIdentity = { projectId: project.id, taskId: globalTaskId, sessionId: globalSessionId }
+      manageGlobalLease(lease, globalIdentity, project, manifest.systemId, reason => setError(String(reason)))
+      const sourceReceipts = taskReceipts.filter(receipt => receipt.taskId === taskId)
+      const handoff = buildGlobalTaskHandoff({
+        source: {
+          projectId: project.id,
+          systemId: manifest.systemId,
+          taskId,
+          sessionId: sourceSessionId,
+        },
+        explicitSummary: {
+          goal: currentTaskGoal(messages),
+          decisions: usedCapabilities.map(capability => `capability:${capability.id}@${capability.version}`),
+        },
+        taskState: {
+          completedOperations: taskToolCalls.map(toolCallLabel),
+          constraints: [
+            `writeSystems:${writeSystems.join(',')}`,
+            `readSystems:${readSystems.join(',')}`,
+          ],
+          openQuestions: pending.map(interaction => `${interaction.kind}:${interaction.key}`),
+          unfinishedSteps: runningCalls.map(toolCallLabel),
+        },
+        receipts: sourceReceipts,
+        references: {
+          receiptIds: sourceReceipts.map(receipt => receipt.id),
+          resourceIds: optionalValue(selectedResourceId),
+          relativePaths: optionalValue(selectedPath),
+          draftIds: lease.draftIds,
+        },
+        pluginVersions: lease.pluginVersions,
+        allowedReadSystems: lease.readSystems,
+        allowedWriteSystems: lease.writeSystems,
+      })
       registerGlobalTask({
         ...globalIdentity,
         systemId: manifest.systemId,
@@ -479,36 +538,16 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         allowedSystems: readSystems,
         allowedWriteSystems: writeSystems,
         draftIds: lease.draftIds,
+        handoff,
       })
-      manageGlobalLease(lease, globalIdentity, project, manifest.systemId, reason => setError(String(reason)))
+      await retireSourceTaskScope(
+        { projectId: project.id, taskId, sessionId: sourceSessionId },
+        { revokeTask: revokeTaskScopes },
+      )
       const structuredContext = {
-        projectId: project.id,
-        sourceSystemId: manifest.systemId,
-        sourceTaskId: taskId,
-        sourceSessionId: sessionId,
-        globalTaskId,
-        globalSessionId,
+        ...handoff,
         scopeToken: lease.token,
-        allowedReadSystems: lease.readSystems,
-        allowedWriteSystems: lease.writeSystems,
-        pluginVersions: lease.pluginVersions,
         compositeId,
-        taskSummary: {
-          messageCount: messages.length,
-          toolCallCount: taskToolCalls.length,
-          capabilityIds: usedCapabilities.map(capability => capability.id),
-          receiptStatus,
-        },
-        resourceReferences: {
-          relativePath: optionalValue(selectedPath),
-          resourceId: optionalValue(selectedResourceId),
-        },
-        draftIds: lease.draftIds,
-        unfinishedPlan: {
-          status: running ? 'running' : 'ready',
-          pendingInteractions: pending.map(interaction => ({ key: interaction.key, kind: interaction.kind })),
-          runningCalls: runningCalls.map(toolCallLabel),
-        },
         returnTo: {
           view: 'devtools',
           projectId: project.id,
@@ -667,7 +706,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
             <MagicWand className="size-3.5" />
             {t('studio.devtools.ai.promote')}
           </Button>
-          <Button size="sm" variant="ghost" isPending={globalPending} onPress={() => void openGlobalTask()}>{t('studio.devtools.ai.global')}</Button>
+          <Button size="sm" variant="ghost" isDisabled={!sessionId} isPending={globalPending} onPress={() => void openGlobalTask()}>{t('studio.devtools.ai.global')}</Button>
         </div>
         <textarea
           rows={3}
@@ -730,11 +769,20 @@ function receiptButtonKey(status: 'idle' | 'saving' | 'saved') {
 function taskReceiptStatus(running: boolean) {
   if (running)
     return 'in_progress'
-  return 'completed'
+  return 'summary'
+}
+
+function stableTextKey(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function isSuccessfulReceipt(status: string): boolean {
-  return status === 'applied' || status === 'completed' || status === 'success'
+  return status === 'applied'
 }
 
 function aiBubbleClass(role: AiMessage['role']) {
@@ -755,6 +803,10 @@ function optionalValue(value?: string | null) {
   if (value)
     return [value]
   return []
+}
+
+function currentTaskGoal(messages: AiMessage[]): string | null {
+  return taskGoalFromMessages(messages)
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -857,7 +909,7 @@ async function taskDraftEvidence(projectId: string, systemId: string, draftId?: 
     draftRevision: preview.preview.draft.revision,
     changedFiles: preview.preview.changes.map(change => change.path),
     validationValid: validation.valid && validation.systemId === systemId,
-    validationDiagnostics: validation.diagnostics,
+    validationDiagnostics: sanitizeTaskSemanticList(validation.diagnostics),
   }
 }
 
@@ -1052,8 +1104,7 @@ function scopedPrompt(
       `- ${item.capability.id}@${item.capability.version}; scope=${item.resolvedScope}; writes=${item.capability.writeSystems.join(',')}`
     )).join('\n')}`)
   }
-  context.push(content)
-  return context.join('\n')
+  return appendScopedUserRequest(context, content)
 }
 
 function applySnapshot(
@@ -1092,35 +1143,7 @@ function toolCallKey(call: unknown) {
 }
 
 function projectMessages(nodes: unknown[]): AiMessage[] {
-  const messages: AiMessage[] = []
-  nodes.forEach((node, index) => {
-    if (!node || typeof node !== 'object')
-      return
-    const record = node as Record<string, unknown>
-    const role = messageRole(record.role)
-    const content = textContent(record.content ?? record.text ?? record.message)
-    if (content)
-      messages.push({ id: String(record.id ?? `node-${index}`), role, content })
-  })
-  return messages
-}
-
-function messageRole(role: unknown): AiMessage['role'] {
-  if (role === 'user')
-    return 'user'
-  return 'assistant'
-}
-
-function textContent(value: unknown): string {
-  if (typeof value === 'string')
-    return value
-  if (Array.isArray(value))
-    return value.map(textContent).filter(Boolean).join('\n')
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return textContent(record.text ?? record.content ?? record.value)
-  }
-  return ''
+  return projectTaskMessages(nodes)
 }
 
 function bridgeError(message: Mir3BridgeEnvelope) {

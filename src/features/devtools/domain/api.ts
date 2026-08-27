@@ -179,8 +179,25 @@ export function issueTaskScope(projectId: string, taskId: string, readSystems: s
   })
 }
 
+export function recoverGlobalTaskScope(projectId: string, taskId: string, compositeId: string, readSystems: string[], writeSystems: string[], draftIds: string[], pluginVersions: Record<string, string>) {
+  return invoke<TaskScopeLease>('global_task_scope_recover', {
+    projectId,
+    taskId,
+    compositeId,
+    readSystems,
+    writeSystems,
+    draftIds,
+    pluginVersions,
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  })
+}
+
 export function revokeTaskScope(projectId: string, token: string) {
   return invoke<void>('task_scope_revoke', { projectId, token })
+}
+
+export function revokeTaskScopes(projectId: string, taskId: string) {
+  return invoke<void>('task_scopes_revoke', { projectId, taskId })
 }
 
 export function compileUserCapability(projectId: string, request: { receiptId: string, id: string, name: string, description: string }) {

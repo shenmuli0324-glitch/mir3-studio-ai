@@ -1,6 +1,6 @@
 import type { StudioShellState, StudioView } from './studio-types'
 import type { CompositeDraftReviewRequest } from '@/features/devtools/domain/composite-draft-review'
-import type { VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import type { RegisteredGlobalTask, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { Button } from '@heroui/react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,13 +8,14 @@ import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
 import { PluginRecovery } from '@/components/plugin-recovery'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
-import { getDomainResource, previewDomainDraft, validateDomainDraft } from '@/features/devtools/domain/api'
+import { getDomainResource, previewDomainDraft, recoverGlobalTaskScope, revokeTaskScope, validateDomainDraft } from '@/features/devtools/domain/api'
 import { CompositeDraftReviewDialog } from '@/features/devtools/domain/composite-draft-review'
 import { GuiDesignerScope } from '@/features/gui-designer/gui-designer-scope'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
-import { draftHandoffs, GLOBAL_WORKBENCH_EVENT, isCompletedGlobalTask, isGlobalDraftEvent, isGlobalTerminalEvent, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, restoreGlobalTasks, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '@/features/system-ai/ai-handoff'
-import { stopScopeLease } from '@/features/system-ai/scope-lease-manager'
+import { draftHandoffs, GLOBAL_WORKBENCH_EVENT, isCompletedGlobalTask, isGlobalDraftEvent, isGlobalTerminalEvent, markGlobalTaskMcpActive, markGlobalTaskMcpDisabled, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, restoreGlobalTasks, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import { deliverGlobalTaskScope, recoverAndManageGlobalTaskScope } from '@/features/system-ai/global-task-recovery'
+import { currentScopeLease, stopScopeLease } from '@/features/system-ai/scope-lease-manager'
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
 import { store } from '@/store'
@@ -42,6 +43,7 @@ export function App() {
   const [devtoolsTarget, setDevtoolsTarget] = useState<VerifiedDevtoolsTarget | null>(null)
   const [compositeReview, setCompositeReview] = useState<CompositeDraftReviewRequest | null>(null)
   const [pendingCompositeReview, setPendingCompositeReview] = useState<CompositeDraftReviewRequest | null>(null)
+  const globalResumeRequestsRef = useRef(new Set<string>())
   const { activeView, sidebarCollapsed } = shellState
   const harnessVisible = isHarnessView(activeView)
   const harnessSurface = harnessSurfaceFor(activeView)
@@ -75,17 +77,65 @@ export function App() {
 
   useEffect(() => {
     let disposed = false
-    const unsubscribe = subscribeHarnessBridge((message) => {
-      if (message.type === 'mir3/plugin.ready') {
-        for (const task of registeredGlobalTasks()) {
-          postHarnessBridge({
-            type: 'mir3/globalSession.resume',
-            projectId: task.projectId,
-            systemId: task.systemId,
-            taskId: task.taskId,
-            sessionId: task.sessionId,
-            payload: {},
+
+    function postRecoveredGlobalScope(task: RegisteredGlobalTask, content: string): boolean {
+      return postHarnessBridge({
+        type: 'mir3/globalSession.prompt',
+        projectId: task.projectId,
+        systemId: task.systemId,
+        taskId: task.taskId,
+        sessionId: task.sessionId,
+        payload: { content, mode: 'steer' },
+      })
+    }
+
+    async function recoverAndResumeGlobalTask(task: RegisteredGlobalTask) {
+      const key = globalTaskKey(task)
+      if (globalResumeRequestsRef.current.has(key))
+        return
+      globalResumeRequestsRef.current.add(key)
+      if (!task.reviewPending && !currentScopeLease(task)) {
+        markGlobalTaskMcpDisabled(task, 'GLOBAL_TASK_SCOPE_RECOVERY_PENDING')
+        try {
+          await recoverAndManageGlobalTaskScope(task, {
+            recover: (registered, previous) => recoverGlobalTaskScope(
+              registered.projectId,
+              registered.taskId,
+              registered.compositeId,
+              previous?.readSystems ?? registered.allowedSystems,
+              previous?.writeSystems ?? registered.allowedWriteSystems ?? registered.allowedSystems,
+              previous?.draftIds ?? registered.draftIds,
+              previous?.pluginVersions ?? registered.handoff.pluginVersions,
+            ),
+            revoke: revokeTaskScope,
+            postPrompt: postRecoveredGlobalScope,
+            onActive: () => void markGlobalTaskMcpActive(task),
+            onError: reason => void markGlobalTaskMcpDisabled(task, reason),
           })
+        }
+        catch (reason) {
+          markGlobalTaskMcpDisabled(task, reason)
+        }
+      }
+      const posted = postHarnessBridge({
+        type: 'mir3/globalSession.resume',
+        projectId: task.projectId,
+        systemId: task.systemId,
+        taskId: task.taskId,
+        sessionId: task.sessionId,
+        payload: {},
+      })
+      if (!posted) {
+        globalResumeRequestsRef.current.delete(key)
+        await stopScopeLease(task)
+        markGlobalTaskMcpDisabled(task, 'HARNESS_BRIDGE_UNAVAILABLE: global Session resume was not delivered')
+      }
+    }
+
+    const unsubscribe = subscribeHarnessBridge((message) => {
+      if (message.type === 'mir3/plugin.ready' || message.type === 'mir3/bridge.description') {
+        for (const task of registeredGlobalTasks()) {
+          void recoverAndResumeGlobalTask(task)
         }
         return
       }
@@ -96,6 +146,19 @@ export function App() {
         return
       const completed = isCompletedGlobalTask(message)
       const terminal = isGlobalTerminalEvent(message.type)
+      if (message.type === 'mir3/globalSession.resumed') {
+        globalResumeRequestsRef.current.delete(globalTaskKey(registration))
+        if (!completed) {
+          const lease = currentScopeLease(registration)
+          if (lease && deliverGlobalTaskScope(registration, lease, postRecoveredGlobalScope)) {
+            markGlobalTaskMcpActive(registration)
+          }
+          else if (lease) {
+            void stopScopeLease(registration)
+            markGlobalTaskMcpDisabled(registration, 'GLOBAL_TASK_SCOPE_DELIVERY_FAILED')
+          }
+        }
+      }
       if (completed) {
         const request = reviewRequest(registration)
         markGlobalTaskReviewPending(registration)
@@ -111,9 +174,15 @@ export function App() {
       }
       else if (terminal) {
         void stopScopeLease(registration)
-        unregisterGlobalTask(registration)
-        setPendingCompositeReview(value => sameReviewTask(value, registration) ? null : value)
-        setCompositeReview(value => sameReviewTask(value, registration) ? null : value)
+        globalResumeRequestsRef.current.delete(globalTaskKey(registration))
+        if (message.type === 'mir3/globalSession.cancelled') {
+          unregisterGlobalTask(registration)
+          setPendingCompositeReview(value => sameReviewTask(value, registration) ? null : value)
+          setCompositeReview(value => sameReviewTask(value, registration) ? null : value)
+        }
+        else {
+          markGlobalTaskMcpDisabled(registration, bridgeFailure(message))
+        }
       }
       if (!requestedTarget || requestedTarget.projectId !== activeProject?.id)
         return
@@ -280,4 +349,17 @@ function sameReviewTask(review: CompositeDraftReviewRequest | null, task: { proj
   return review?.projectId === task.projectId
     && review.taskId === task.taskId
     && review.sessionId === task.sessionId
+}
+
+function globalTaskKey(task: Pick<RegisteredGlobalTask, 'projectId' | 'taskId' | 'sessionId'>): string {
+  return `${task.projectId}\u241F${task.taskId}\u241F${task.sessionId}`
+}
+
+function bridgeFailure(message: { payload: unknown }): string {
+  if (!message.payload || typeof message.payload !== 'object' || Array.isArray(message.payload))
+    return 'HARNESS_BRIDGE_ERROR'
+  const payload = message.payload as Record<string, unknown>
+  const code = typeof payload.code === 'string' ? payload.code : 'HARNESS_BRIDGE_ERROR'
+  const detail = typeof payload.message === 'string' ? payload.message : null
+  return detail ? `${code}: ${detail}` : code
 }

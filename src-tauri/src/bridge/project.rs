@@ -528,6 +528,7 @@ pub fn system_session_bind(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn task_scope_issue(
     service: State<'_, ProjectService>,
     project_id: String,
@@ -550,12 +551,46 @@ pub fn task_scope_issue(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn global_task_scope_recover(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    task_id: String,
+    composite_id: String,
+    read_systems: Vec<String>,
+    write_systems: Vec<String>,
+    draft_ids: Vec<String>,
+    plugin_versions: serde_json::Value,
+    expires_at: i64,
+) -> Result<TaskScopeLease, String> {
+    service.store().recover_global_task_scope(
+        &project_id,
+        &task_id,
+        &composite_id,
+        &read_systems,
+        &write_systems,
+        &draft_ids,
+        plugin_versions,
+        expires_at,
+    )
+}
+
+#[tauri::command]
 pub fn task_scope_revoke(
     service: State<'_, ProjectService>,
     project_id: String,
     token: String,
 ) -> Result<(), String> {
     service.store().revoke_task_scope(&project_id, &token)
+}
+
+#[tauri::command]
+pub fn task_scopes_revoke(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    task_id: String,
+) -> Result<(), String> {
+    service.store().revoke_task_scopes(&project_id, &task_id)
 }
 
 #[tauri::command]
@@ -664,21 +699,14 @@ pub fn draft_apply(
     confirmation_token: String,
 ) -> Result<Snapshot, String> {
     let confirmation = service.consume_confirmation(&project_id, &draft_id, &confirmation_token)?;
-    let snapshot = service.store().apply_validated_domain_draft(
-        &project_id,
-        &draft_id,
-        confirmation.revision,
-        &confirmation.diff_hash,
-    )?;
-    if let Err(error) = service.store().record_applied_draft_receipt(
-        &project_id,
-        &draft_id,
-        &confirmation.diff_hash,
-        &snapshot,
-    ) {
-        log::error!("Task receipt write failed after applying {draft_id}: {error}");
-    }
-    Ok(snapshot)
+    service
+        .store()
+        .apply_validated_domain_draft_with_governance(
+            &project_id,
+            &draft_id,
+            confirmation.revision,
+            &confirmation.diff_hash,
+        )
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -755,25 +783,13 @@ pub fn draft_composite_apply(
             expected_diff_hash: confirmation.diff_hash,
         });
     }
-    let result = service.store().apply_validated_composite_drafts(
-        &project_id,
-        &composite_id,
-        &confirmations,
-    )?;
-    for confirmation in &confirmations {
-        if let Err(error) = service.store().record_applied_draft_receipt(
+    service
+        .store()
+        .apply_validated_composite_drafts_with_governance(
             &project_id,
-            &confirmation.draft_id,
-            &confirmation.expected_diff_hash,
-            &result.snapshot,
-        ) {
-            log::error!(
-                "Task receipt write failed after composite apply {}: {error}",
-                confirmation.draft_id
-            );
-        }
-    }
-    Ok(result)
+            &composite_id,
+            &confirmations,
+        )
 }
 
 #[tauri::command]
@@ -911,7 +927,9 @@ pub fn snapshot_restore(
     project_id: String,
     snapshot_id: String,
 ) -> Result<Snapshot, String> {
-    service.store().restore_snapshot(&project_id, &snapshot_id)
+    service
+        .store()
+        .restore_snapshot_with_governance(&project_id, &snapshot_id)
 }
 
 #[tauri::command]

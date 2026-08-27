@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "sabac",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -987,7 +987,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1087,7 +1087,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1187,7 +1187,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1259,7 +1259,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1362,7 +1362,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1460,7 +1460,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1564,7 +1564,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1653,7 +1653,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

@@ -1,4 +1,6 @@
+import type { GlobalTaskHandoff } from './global-task-handoff'
 import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
+import { parseGlobalTaskHandoff, sanitizeTaskSemanticText } from './global-task-handoff'
 
 export interface DomainDraftHandoff {
   draftId: string
@@ -52,6 +54,9 @@ export interface AiTaskIdentity {
 export interface RegisteredGlobalTask extends AiTaskIdentity {
   compositeId: string
   draftIds: string[]
+  handoff: GlobalTaskHandoff
+  mcpStatus: 'active' | 'disabled'
+  mcpError: string | null
   reviewPending: boolean
   updatedAt: number
 }
@@ -61,13 +66,34 @@ const GLOBAL_TASK_STORAGE_KEY = 'mir3-global-tasks:v1'
 const GLOBAL_TASK_MAX_AGE = 24 * 60 * 60 * 1000
 export const GLOBAL_WORKBENCH_EVENT = 'mir3:global-workbench-open'
 
-export function registerGlobalTask(task: Omit<RegisteredGlobalTask, 'reviewPending' | 'updatedAt'> & { reviewPending?: boolean, updatedAt?: number }): void {
-  globalTasks.set(taskKey(task), {
-    ...task,
+export function registerGlobalTask(task: Omit<RegisteredGlobalTask, 'mcpStatus' | 'mcpError' | 'reviewPending' | 'updatedAt'> & { mcpStatus?: RegisteredGlobalTask['mcpStatus'], mcpError?: string | null, reviewPending?: boolean, updatedAt?: number }): void {
+  const registered = parseStoredGlobalTask({
+    projectId: task.projectId,
+    systemId: task.systemId,
+    taskId: task.taskId,
+    sessionId: task.sessionId,
+    compositeId: task.compositeId,
+    allowedSystems: task.allowedSystems,
+    allowedWriteSystems: task.allowedWriteSystems ?? task.allowedSystems,
+    draftIds: task.draftIds,
+    handoff: task.handoff,
+    mcpStatus: task.mcpStatus ?? 'active',
+    mcpError: sanitizeTaskSemanticText(task.mcpError),
     reviewPending: task.reviewPending ?? false,
     updatedAt: task.updatedAt ?? Date.now(),
   })
+  if (!registered)
+    throw new Error('GLOBAL_TASK_REGISTRATION_INVALID')
+  globalTasks.set(taskKey(registered), registered)
   persistGlobalTasks()
+}
+
+export function markGlobalTaskMcpActive(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>): RegisteredGlobalTask | null {
+  return updateGlobalTaskMcp(identity, 'active', null)
+}
+
+export function markGlobalTaskMcpDisabled(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>, reason: unknown): RegisteredGlobalTask | null {
+  return updateGlobalTaskMcp(identity, 'disabled', sanitizeTaskSemanticText(String(reason)) ?? 'GLOBAL_TASK_MCP_DISABLED')
 }
 
 export function unregisterGlobalTask(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>): void {
@@ -80,6 +106,7 @@ export function includeGlobalTaskDraft(identity: Pick<AiTaskIdentity, 'projectId
   if (!task || task.draftIds.includes(draftId))
     return
   task.draftIds = [...task.draftIds, draftId]
+  task.handoff.references.draftIds = [...task.handoff.references.draftIds, draftId]
   task.updatedAt = Date.now()
   persistGlobalTasks()
 }
@@ -102,8 +129,13 @@ export function restoreGlobalTasks(now = Date.now()): RegisteredGlobalTask[] {
   const stored = readStoredGlobalTasks()
   globalTasks.clear()
   for (const task of stored) {
-    if (now - task.updatedAt <= GLOBAL_TASK_MAX_AGE)
-      globalTasks.set(taskKey(task), task)
+    if (now - task.updatedAt <= GLOBAL_TASK_MAX_AGE) {
+      globalTasks.set(taskKey(task), {
+        ...task,
+        mcpStatus: 'disabled',
+        mcpError: null,
+      })
+    }
   }
   persistGlobalTasks()
   return [...globalTasks.values()]
@@ -295,7 +327,7 @@ function persistGlobalTasks(): void {
   if (typeof window === 'undefined')
     return
   try {
-    window.localStorage.setItem(GLOBAL_TASK_STORAGE_KEY, JSON.stringify({ schemaVersion: 1, tasks: [...globalTasks.values()] }))
+    window.localStorage.setItem(GLOBAL_TASK_STORAGE_KEY, JSON.stringify({ schemaVersion: 3, tasks: [...globalTasks.values()] }))
   }
   catch {}
 }
@@ -306,7 +338,7 @@ function readStoredGlobalTasks(): RegisteredGlobalTask[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(GLOBAL_TASK_STORAGE_KEY) ?? '') as unknown
     const record = asRecord(parsed)
-    if (record?.schemaVersion !== 1 || !Array.isArray(record.tasks))
+    if (record?.schemaVersion !== 3 || !Array.isArray(record.tasks))
       return []
     return record.tasks.flatMap((value) => {
       const task = parseStoredGlobalTask(value)
@@ -330,10 +362,17 @@ function parseStoredGlobalTask(value: unknown): RegisteredGlobalTask | null {
   const allowedSystems = portableIdentifierArray(record.allowedSystems, 64, 33)
   const allowedWriteSystems = portableIdentifierArray(record.allowedWriteSystems, 64, 33)
   const draftIds = portableIdentifierArray(record.draftIds, 160, 64)
+  const handoff = parseGlobalTaskHandoff(record.handoff)
+  const mcpStatus = record.mcpStatus === 'active' || record.mcpStatus === 'disabled' ? record.mcpStatus : null
+  const mcpError = record.mcpError == null ? null : sanitizeTaskSemanticText(record.mcpError)
   const updatedAt = record.updatedAt
   if (!projectId || !systemId || !taskId || !sessionId || !compositeId
     || allowedSystems.length === 0 || allowedWriteSystems.length === 0 || draftIds.length === 0
     || !allowedSystems.includes(systemId) || allowedWriteSystems.some(item => !allowedSystems.includes(item))
+    || !handoff || !mcpStatus || handoff.source.projectId !== projectId || handoff.source.systemId !== systemId
+    || !sameStringSet(handoff.scope.allowedReadSystems, allowedSystems)
+    || !sameStringSet(handoff.scope.allowedWriteSystems, allowedWriteSystems)
+    || draftIds.some(draftId => !handoff.references.draftIds.includes(draftId))
     || !Number.isSafeInteger(updatedAt) || Number(updatedAt) < 1) {
     return null
   }
@@ -346,9 +385,23 @@ function parseStoredGlobalTask(value: unknown): RegisteredGlobalTask | null {
     allowedSystems,
     allowedWriteSystems,
     draftIds,
+    handoff,
+    mcpStatus,
+    mcpError,
     reviewPending: record.reviewPending === true,
     updatedAt: Number(updatedAt),
   }
+}
+
+function updateGlobalTaskMcp(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>, status: RegisteredGlobalTask['mcpStatus'], error: string | null): RegisteredGlobalTask | null {
+  const task = globalTasks.get(taskKey(identity))
+  if (!task)
+    return null
+  task.mcpStatus = status
+  task.mcpError = error
+  task.updatedAt = Date.now()
+  persistGlobalTasks()
+  return task
 }
 
 function portableIdentifierArray(value: unknown, maxLength: number, maximumItems: number): string[] {
@@ -361,4 +414,8 @@ function portableIdentifierArray(value: unknown, maxLength: number, maximumItems
   if (parsed.length !== value.length)
     return []
   return [...new Set(parsed)]
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every(value => right.includes(value))
 }

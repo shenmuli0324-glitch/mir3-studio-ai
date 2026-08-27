@@ -4,7 +4,7 @@
     {
       "kind": "domain",
       "systemId": "map",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -1103,7 +1103,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1207,7 +1207,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1313,7 +1313,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1568,7 +1568,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1679,7 +1679,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1789,7 +1789,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1876,7 +1876,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1962,7 +1962,7 @@
     {
       "kind": "domain",
       "systemId": "npc",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -2877,7 +2877,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2958,7 +2958,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3061,7 +3061,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3148,7 +3148,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3255,7 +3255,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3356,7 +3356,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3463,7 +3463,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3553,7 +3553,7 @@
     {
       "kind": "domain",
       "systemId": "monster",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -4341,7 +4341,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4436,7 +4436,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4530,7 +4530,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4627,7 +4627,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4727,7 +4727,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4813,7 +4813,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4903,7 +4903,7 @@
     {
       "kind": "domain",
       "systemId": "equipment",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -5638,7 +5638,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5743,7 +5743,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5854,7 +5854,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5942,7 +5942,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6052,7 +6052,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6137,7 +6137,7 @@
     {
       "kind": "domain",
       "systemId": "item",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -6872,7 +6872,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6976,7 +6976,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7086,7 +7086,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7171,7 +7171,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7281,7 +7281,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7366,7 +7366,7 @@
     {
       "kind": "domain",
       "systemId": "level",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -8120,7 +8120,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8215,7 +8215,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8307,7 +8307,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8402,7 +8402,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8492,7 +8492,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8577,7 +8577,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8667,7 +8667,7 @@
     {
       "kind": "domain",
       "systemId": "rebirth",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -8726,6 +8726,9 @@
           },
           {
             "systemId": "talent"
+          },
+          {
+            "systemId": "item"
           }
         ],
         "excludes": [
@@ -8877,7 +8880,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "operations": [
         {
@@ -8914,7 +8918,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [],
           "preconditions": [
@@ -9008,7 +9013,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9106,7 +9112,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9198,7 +9205,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9281,7 +9289,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9348,7 +9357,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [],
           "preconditions": [
@@ -9374,7 +9384,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9446,7 +9456,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9476,7 +9487,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9548,7 +9559,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9578,7 +9590,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9644,7 +9656,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9674,7 +9687,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9731,7 +9744,8 @@
             "level",
             "title",
             "skill",
-            "talent"
+            "talent",
+            "item"
           ],
           "writeSystems": [
             "rebirth"
@@ -9761,7 +9775,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9856,7 +9870,7 @@
     {
       "kind": "domain",
       "systemId": "title",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -10537,7 +10551,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10631,7 +10645,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10731,7 +10745,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10830,7 +10844,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10915,7 +10929,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11000,7 +11014,7 @@
     {
       "kind": "domain",
       "systemId": "buff",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -11799,7 +11813,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11898,7 +11912,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11999,7 +12013,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12103,7 +12117,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12208,7 +12222,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12293,7 +12307,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12378,7 +12392,7 @@
     {
       "kind": "domain",
       "systemId": "skill",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -13070,7 +13084,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13165,7 +13179,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13273,7 +13287,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13351,7 +13365,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13452,7 +13466,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13543,7 +13557,7 @@
     {
       "kind": "domain",
       "systemId": "enhance",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -14247,7 +14261,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14361,7 +14375,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14455,7 +14469,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14556,7 +14570,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14641,7 +14655,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14727,7 +14741,7 @@
     {
       "kind": "domain",
       "systemId": "crafting",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -15429,7 +15443,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15524,7 +15538,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15610,7 +15624,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15704,7 +15718,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15804,7 +15818,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15894,7 +15908,7 @@
     {
       "kind": "domain",
       "systemId": "gem",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -16725,7 +16739,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16838,7 +16852,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16940,7 +16954,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17040,7 +17054,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17146,7 +17160,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17233,7 +17247,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17319,7 +17333,7 @@
     {
       "kind": "domain",
       "systemId": "refine",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -18142,7 +18156,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18248,7 +18262,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18352,7 +18366,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18462,7 +18476,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18572,7 +18586,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18656,7 +18670,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18748,7 +18762,7 @@
     {
       "kind": "domain",
       "systemId": "quest",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -19501,7 +19515,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19602,7 +19616,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19716,7 +19730,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19805,7 +19819,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19912,7 +19926,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20002,7 +20016,7 @@
     {
       "kind": "domain",
       "systemId": "checkin",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -20696,7 +20710,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20799,7 +20813,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20894,7 +20908,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20995,7 +21009,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21080,7 +21094,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21171,7 +21185,7 @@
     {
       "kind": "domain",
       "systemId": "online_reward",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -21943,7 +21957,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22039,7 +22053,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22123,7 +22137,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22222,7 +22236,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22316,7 +22330,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22416,7 +22430,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22506,7 +22520,7 @@
     {
       "kind": "domain",
       "systemId": "limited_event",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -23299,7 +23313,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23396,7 +23410,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23477,7 +23491,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23579,7 +23593,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23682,7 +23696,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23770,7 +23784,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23860,7 +23874,7 @@
     {
       "kind": "domain",
       "systemId": "launch_event",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -23928,6 +23942,12 @@
           },
           {
             "systemId": "ranking"
+          },
+          {
+            "systemId": "limited_event"
+          },
+          {
+            "systemId": "item"
           }
         ],
         "excludes": [
@@ -24082,7 +24102,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "operations": [
         {
@@ -24122,7 +24144,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [],
           "preconditions": [
@@ -24213,7 +24237,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24292,7 +24318,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24392,7 +24420,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24493,7 +24523,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24579,7 +24611,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24649,7 +24683,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [],
           "preconditions": [
@@ -24675,7 +24711,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24744,7 +24780,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24774,7 +24812,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24827,7 +24865,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24857,7 +24897,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24931,7 +24971,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -24961,7 +25003,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25036,7 +25078,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -25066,7 +25110,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25126,7 +25170,9 @@
             "cumulative_charge",
             "shop",
             "quest",
-            "ranking"
+            "ranking",
+            "limited_event",
+            "item"
           ],
           "writeSystems": [
             "launch_event"
@@ -25156,7 +25202,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25246,7 +25292,7 @@
     {
       "kind": "domain",
       "systemId": "first_charge",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -25946,7 +25992,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26032,7 +26078,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26128,7 +26174,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26229,7 +26275,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26331,7 +26377,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26421,7 +26467,7 @@
     {
       "kind": "domain",
       "systemId": "cumulative_charge",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -27117,7 +27163,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27224,7 +27270,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27318,7 +27364,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27418,7 +27464,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27503,7 +27549,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27589,7 +27635,7 @@
     {
       "kind": "domain",
       "systemId": "vip",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -28275,7 +28321,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28380,7 +28426,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28478,7 +28524,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28570,7 +28616,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28657,7 +28703,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28747,7 +28793,7 @@
     {
       "kind": "domain",
       "systemId": "shop",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -29601,7 +29647,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29713,7 +29759,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29801,7 +29847,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29889,7 +29935,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30002,7 +30048,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30108,7 +30154,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30203,7 +30249,7 @@
     {
       "kind": "domain",
       "systemId": "recycle",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -30994,7 +31040,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31103,7 +31149,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31172,7 +31218,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31281,7 +31327,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31384,7 +31430,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31469,7 +31515,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31559,7 +31605,7 @@
     {
       "kind": "domain",
       "systemId": "guild",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -32330,7 +32376,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32423,7 +32469,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32527,7 +32573,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32618,7 +32664,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32715,7 +32761,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32801,7 +32847,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32891,7 +32937,7 @@
     {
       "kind": "domain",
       "systemId": "sabac",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -33877,7 +33923,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -33977,7 +34023,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34077,7 +34123,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34149,7 +34195,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34252,7 +34298,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34350,7 +34396,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34454,7 +34500,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34543,7 +34589,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34633,7 +34679,7 @@
     {
       "kind": "domain",
       "systemId": "ranking",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -34692,6 +34738,9 @@
           },
           {
             "systemId": "season"
+          },
+          {
+            "systemId": "item"
           }
         ],
         "excludes": [
@@ -34840,7 +34889,8 @@
         "level",
         "equipment",
         "guild",
-        "season"
+        "season",
+        "item"
       ],
       "operations": [
         {
@@ -34877,7 +34927,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [],
           "preconditions": [
@@ -34970,7 +35021,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35069,7 +35121,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35152,7 +35205,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35254,7 +35308,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35357,7 +35412,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35424,7 +35480,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [],
           "preconditions": [
@@ -35450,7 +35507,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35521,7 +35578,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35551,7 +35609,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35624,7 +35682,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35654,7 +35713,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35711,7 +35770,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35741,7 +35801,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35817,7 +35877,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35847,7 +35908,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35924,7 +35985,8 @@
             "level",
             "equipment",
             "guild",
-            "season"
+            "season",
+            "item"
           ],
           "writeSystems": [
             "ranking"
@@ -35954,7 +36016,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36039,7 +36101,7 @@
     {
       "kind": "domain",
       "systemId": "resource_production",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -36877,7 +36939,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36980,7 +37042,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37081,7 +37143,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37188,7 +37250,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37295,7 +37357,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37383,7 +37445,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37478,7 +37540,7 @@
     {
       "kind": "domain",
       "systemId": "manor",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -38368,7 +38430,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38466,7 +38528,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38566,7 +38628,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38638,7 +38700,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38741,7 +38803,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38845,7 +38907,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38935,7 +38997,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39025,7 +39087,7 @@
     {
       "kind": "domain",
       "systemId": "hero_soul",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -39739,7 +39801,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39840,7 +39902,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39942,7 +40004,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40038,7 +40100,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40126,7 +40188,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40212,7 +40274,7 @@
     {
       "kind": "domain",
       "systemId": "talent",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -41188,7 +41250,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41289,7 +41351,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41390,7 +41452,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41460,7 +41522,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41565,7 +41627,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41664,7 +41726,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41769,7 +41831,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41855,7 +41917,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41941,7 +42003,7 @@
     {
       "kind": "domain",
       "systemId": "season",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -42795,7 +42857,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42892,7 +42954,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42973,7 +43035,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43044,7 +43106,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43146,7 +43208,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43249,7 +43311,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43337,7 +43399,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43427,7 +43489,7 @@
     {
       "kind": "domain",
       "systemId": "cross_server",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -44355,7 +44417,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44462,7 +44524,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44533,7 +44595,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44645,7 +44707,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44750,7 +44812,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44861,7 +44923,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44948,7 +45010,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.0",
+          "version": "1.3.1",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true

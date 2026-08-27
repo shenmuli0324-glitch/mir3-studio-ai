@@ -168,7 +168,7 @@ exit /b 1
 "#,
         app_dir = escape_path_cmd(app_dir),
         dsh_bin = escape_path_cmd(&dsh_bin),
-        dsh_home = escape_path_cmd(&dsh_home),
+        dsh_home = escape_path_cmd(dsh_home),
         core_home_env = config::core_compat::CORE_HOME_ENV,
         node_resolve = CMD_NODE_RESOLVE,
     )
@@ -201,7 +201,7 @@ exit $LASTEXITCODE
         app_dir = escape_path_ps1(app_dir),
         dsh_bin = escape_path_ps1(&dsh_bin),
         node_resolve = PS1_NODE_RESOLVE,
-        dsh_home = escape_path_ps1(&dsh_home),
+        dsh_home = escape_path_ps1(dsh_home),
         core_home_env = config::core_compat::CORE_HOME_ENV,
     )
 }
@@ -231,7 +231,7 @@ exec "$NODE" "$DSH_BIN" "$@"
 "#,
         app_dir = escape_path_sh(app_dir),
         dsh_bin = escape_path_sh(&dsh_bin),
-        dsh_home = escape_path_sh(&dsh_home),
+        dsh_home = escape_path_sh(dsh_home),
         core_home_env = config::core_compat::CORE_HOME_ENV,
         node_resolve = SH_NODE_RESOLVE,
     )

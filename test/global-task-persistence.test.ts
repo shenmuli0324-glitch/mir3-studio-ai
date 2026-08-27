@@ -2,7 +2,8 @@
 
 import type { Mir3BridgeEnvelope } from '../src/features/projects/workspace-bridge'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GLOBAL_WORKBENCH_EVENT, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, registerGlobalTask, requestGlobalWorkbench, restoreGlobalTasks, unregisterGlobalTask } from '../src/features/system-ai/ai-handoff'
+import { GLOBAL_WORKBENCH_EVENT, markGlobalTaskMcpDisabled, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, registerGlobalTask, requestGlobalWorkbench, restoreGlobalTasks, unregisterGlobalTask } from '../src/features/system-ai/ai-handoff'
+import { buildGlobalTaskHandoff } from '../src/features/system-ai/global-task-handoff'
 
 const identity = {
   projectId: 'project-1',
@@ -13,6 +14,19 @@ const identity = {
   allowedSystems: ['shop', 'item'],
   allowedWriteSystems: ['shop'],
   draftIds: ['draft-1'],
+  handoff: buildGlobalTaskHandoff({
+    source: {
+      projectId: 'project-1',
+      systemId: 'shop',
+      taskId: 'system-task-1',
+      sessionId: 'system-session-1',
+    },
+    explicitSummary: { goal: 'Adjust shop prices', unfinishedSteps: ['Review composite Diff'] },
+    references: { draftIds: ['draft-1'] },
+    pluginVersions: { shop: '1.3.1', item: '1.3.1' },
+    allowedReadSystems: ['shop', 'item'],
+    allowedWriteSystems: ['shop'],
+  }),
 }
 
 describe('global task recovery and workbench navigation', () => {
@@ -32,11 +46,31 @@ describe('global task recovery and workbench navigation', () => {
     const stored = window.localStorage.getItem('mir3-global-tasks:v1')
     expect(stored).toContain('composite-1')
     expect(stored).not.toContain('scopeToken')
+    expect(stored).toContain('Adjust shop prices')
 
     unregisterGlobalTask(identity)
     window.localStorage.setItem('mir3-global-tasks:v1', stored!)
     expect(restoreGlobalTasks(1_700_000_001_000)).toHaveLength(1)
-    expect(registeredGlobalTask(envelope())).toMatchObject({ compositeId: 'composite-1', draftIds: ['draft-1'] })
+    expect(registeredGlobalTask(envelope())).toMatchObject({ compositeId: 'composite-1', draftIds: ['draft-1'], mcpStatus: 'disabled' })
+    expect(registeredGlobalTask(envelope())?.handoff).toEqual(identity.handoff)
+  })
+
+  it('redacts a credential-bearing semantic field at the localStorage registration boundary', () => {
+    registerGlobalTask({
+      ...identity,
+      scopeToken: 'unexpected-root-secret',
+      handoff: {
+        ...identity.handoff,
+        goal: 'Continue with scopeToken=local-storage-secret',
+      },
+      updatedAt: 1_700_000_000_000,
+    } as typeof identity & { scopeToken: string, updatedAt: number })
+    const stored = window.localStorage.getItem('mir3-global-tasks:v1') ?? ''
+
+    expect(stored).toContain('[REDACTED_CREDENTIAL]')
+    expect(stored).not.toContain('local-storage-secret')
+    expect(stored).not.toContain('unexpected-root-secret')
+    expect(stored).not.toContain('scopeToken')
   })
 
   it('keeps a completed task registered until its deferred composite review is applied', () => {
@@ -55,14 +89,29 @@ describe('global task recovery and workbench navigation', () => {
 
   it('discards expired and malformed stored task identities', () => {
     window.localStorage.setItem('mir3-global-tasks:v1', JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 3,
       tasks: [
-        { ...identity, updatedAt: 1 },
-        { ...identity, taskId: '../../foreign', updatedAt: 1_700_000_000_000 },
+        { ...identity, mcpStatus: 'active', mcpError: null, updatedAt: 1 },
+        { ...identity, taskId: '../../foreign', mcpStatus: 'active', mcpError: null, updatedAt: 1_700_000_000_000 },
       ],
     }))
     expect(restoreGlobalTasks(1_700_000_000_001)).toEqual([])
     expect(registeredGlobalTask(envelope())).toBeNull()
+  })
+
+  it('persists a disabled MCP state without discarding the structured recovery record', () => {
+    registerGlobalTask({ ...identity, updatedAt: 1_700_000_000_000 })
+    markGlobalTaskMcpDisabled(identity, 'GLOBAL_TASK_SCOPE_RECOVERY_FAILED: scopeToken=secret')
+    const stored = window.localStorage.getItem('mir3-global-tasks:v1') ?? ''
+
+    expect(registeredGlobalTask(envelope())).toMatchObject({
+      compositeId: 'composite-1',
+      mcpStatus: 'disabled',
+      mcpError: 'GLOBAL_TASK_SCOPE_RECOVERY_FAILED: [REDACTED_CREDENTIAL]',
+    })
+    expect(stored).toContain('GLOBAL_TASK_SCOPE_RECOVERY_FAILED')
+    expect(stored).not.toContain('secret')
+    expect(stored).not.toContain('scopeToken')
   })
 
   it('emits an app-level request that makes the visible Harness workbench selectable', () => {

@@ -366,7 +366,7 @@ pub async fn download(app_handle: &AppHandle) -> Result<DesktopUpdateInfo, Strin
 
     // 官方直连 → ghfast.top 镜像兜底。安装包无 SHA-256 元数据，切换源时
     // 丢弃上一源的部分字节从头下载，避免混用两个源的字节流。
-    let urls = vec![
+    let urls = [
         release.url.clone(),
         config::mirror_download_url(&release.url),
     ];

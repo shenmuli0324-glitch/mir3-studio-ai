@@ -34,6 +34,10 @@ pub struct DomainStore {
     #[cfg(test)]
     pub(crate) composite_apply_crash_after_commit: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(test)]
+    pub(crate) composite_capability_crash_after_operation: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(test)]
+    pub(crate) snapshot_restore_crash_after_files: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(test)]
     pub(crate) governance_copy_test_gate: TestBarrierGate,
     #[cfg(test)]
     pub(crate) trusted_fixture_engine_override: bool,
@@ -72,6 +76,12 @@ impl DomainStore {
             #[cfg(test)]
             composite_apply_crash_after_commit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             #[cfg(test)]
+            composite_capability_crash_after_operation: Arc::new(
+                std::sync::atomic::AtomicBool::new(false),
+            ),
+            #[cfg(test)]
+            snapshot_restore_crash_after_files: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(test)]
             governance_copy_test_gate: Arc::new(Mutex::new(None)),
             #[cfg(test)]
             trusted_fixture_engine_override: false,
@@ -89,6 +99,10 @@ impl DomainStore {
         if let Err(error) = store.migrate_existing_projects() {
             store.read_only_reason = Some(Arc::from(error));
         } else if let Err(error) = store.recover_composite_apply_journals() {
+            store.read_only_reason = Some(Arc::from(error));
+        } else if let Err(error) = store.recover_composite_capability_journals() {
+            store.read_only_reason = Some(Arc::from(error));
+        } else if let Err(error) = store.recover_snapshot_governance_journals() {
             store.read_only_reason = Some(Arc::from(error));
         }
         Ok(store)
@@ -778,6 +792,11 @@ CREATE TABLE IF NOT EXISTS task_scope_leases(
   plugin_versions TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
   revoked INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS composite_tasks(
+  composite_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS domain_memories(

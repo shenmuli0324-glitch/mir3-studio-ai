@@ -101,7 +101,7 @@ function draftReview(draftId: string, systemId: string, intent: string, confirma
   return {
     draftId,
     systemId,
-    pluginVersion: '1.3.0',
+    pluginVersion: '1.3.1',
     confirmation: {
       confirmationToken,
       preview: {

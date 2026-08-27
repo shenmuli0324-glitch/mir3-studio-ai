@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static REPLACE_NONCE: AtomicU64 = AtomicU64::new(0);
-const COMPOSITE_APPLY_JOURNAL_SCHEMA: u32 = 1;
+const COMPOSITE_APPLY_JOURNAL_SCHEMA: u32 = 2;
 const COMPOSITE_APPLY_JOURNAL_DIRECTORY: &str = "composite-transactions";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -110,6 +110,17 @@ struct CompositeApplyJournal {
     composite_id: String,
     confirmations: Vec<CompositeDraftConfirmation>,
     snapshot: Snapshot,
+    #[serde(default)]
+    governance_required: bool,
+    #[serde(default)]
+    applied_files: Vec<AppliedFileState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppliedFileState {
+    path: String,
+    sha256: Option<String>,
 }
 
 impl DomainStore {
@@ -400,6 +411,32 @@ impl DomainStore {
         self.apply_draft(project_id, draft_id, expected_revision, expected_diff_hash)
     }
 
+    /// 治理入口必须把崩溃日志保留到 Receipt 与 Memory 提交完成。
+    pub(crate) fn apply_validated_domain_draft_retaining_governance(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        expected_revision: i64,
+        expected_diff_hash: &str,
+    ) -> Result<Snapshot, String> {
+        self.ensure_single_draft_apply_allowed(project_id, draft_id)?;
+        let report = self.validate_domain_draft(project_id, draft_id)?;
+        if !report.valid {
+            return Err(format!(
+                "DRAFT_VALIDATION_FAILED: {}: {}",
+                report.system_id,
+                report.diagnostics.join(" | ")
+            ));
+        }
+        self.apply_draft_internal(
+            project_id,
+            draft_id,
+            expected_revision,
+            expected_diff_hash,
+            true,
+        )
+    }
+
     /// 已绑定组合任务的 Draft 必须走组合确认入口，避免跨系统变更被拆开提交。
     fn ensure_single_draft_apply_allowed(
         &self,
@@ -432,7 +469,26 @@ impl DomainStore {
         expected_revision: i64,
         expected_diff_hash: &str,
     ) -> Result<Snapshot, String> {
+        self.apply_draft_internal(
+            project_id,
+            draft_id,
+            expected_revision,
+            expected_diff_hash,
+            false,
+        )
+    }
+
+    fn apply_draft_internal(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        expected_revision: i64,
+        expected_diff_hash: &str,
+        governance_required: bool,
+    ) -> Result<Snapshot, String> {
         self.ensure_writable()?;
+        let _composite_mutation = self.reserve_composite_mutation(project_id)?;
+        self.recover_composite_apply_journals_for_project(project_id)?;
         let _mutation = self.reserve_draft_mutation(project_id, draft_id)?;
         let preview = self.preview_draft(project_id, draft_id)?;
         if preview.draft.status != DraftStatus::Open {
@@ -460,12 +516,46 @@ impl DomainStore {
             .map(|change| change.path.clone())
             .collect();
         let snapshot = self.create_snapshot(project_id, Some(draft_id), &paths)?;
-        let connection = self.project_connection(project_id)?;
+        let transaction_id = format!("single-{draft_id}");
+        let confirmation = CompositeDraftConfirmation {
+            draft_id: draft_id.to_string(),
+            expected_revision,
+            expected_diff_hash: expected_diff_hash.to_string(),
+        };
+        let journal = CompositeApplyJournal {
+            schema_version: COMPOSITE_APPLY_JOURNAL_SCHEMA,
+            project_id: project_id.to_string(),
+            composite_id: transaction_id,
+            confirmations: vec![confirmation.clone()],
+            snapshot: snapshot.clone(),
+            governance_required,
+            applied_files: preview
+                .changes
+                .iter()
+                .map(|change| AppliedFileState {
+                    path: change.path.clone(),
+                    sha256: change.new_sha256.clone(),
+                })
+                .collect(),
+        };
+        let journal_path = self.persist_composite_apply_journal(&journal)?;
+        if let Err(error) = self.reserve_composite_drafts(project_id, &[confirmation]) {
+            return Err(self.recover_composite_after_failure(&journal_path, &journal, error));
+        }
+        let connection = self.project_connection(project_id).map_err(|error| {
+            self.recover_composite_after_failure(&journal_path, &journal, error)
+        })?;
         let mut statement = connection
             .prepare(
                 "SELECT path,content,deleted FROM draft_changes WHERE draft_id=?1 ORDER BY path",
             )
-            .map_err(|e| format!("DRAFT_APPLY_FAILED: {e}"))?;
+            .map_err(|error| {
+                self.recover_composite_after_failure(
+                    &journal_path,
+                    &journal,
+                    format!("DRAFT_APPLY_FAILED: {error}"),
+                )
+            })?;
         let rows = statement
             .query_map([draft_id], |row| {
                 Ok((
@@ -474,12 +564,24 @@ impl DomainStore {
                     row.get::<_, i64>(2)? != 0,
                 ))
             })
-            .map_err(|e| format!("DRAFT_APPLY_FAILED: {e}"))?;
-        let operations = rows
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("DRAFT_APPLY_FAILED: {e}"))?;
+            .map_err(|error| {
+                self.recover_composite_after_failure(
+                    &journal_path,
+                    &journal,
+                    format!("DRAFT_APPLY_FAILED: {error}"),
+                )
+            })?;
+        let operations = rows.collect::<Result<Vec<_>, _>>().map_err(|error| {
+            self.recover_composite_after_failure(
+                &journal_path,
+                &journal,
+                format!("DRAFT_APPLY_FAILED: {error}"),
+            )
+        })?;
         for (path, content, deleted) in operations {
-            let target = safe_project_target(&root, &path)?;
+            let target = safe_project_target(&root, &path).map_err(|error| {
+                self.recover_composite_after_failure(&journal_path, &journal, error)
+            })?;
             let result = if deleted {
                 if target.exists() {
                     fs::remove_file(&target)
@@ -489,9 +591,9 @@ impl DomainStore {
             } else {
                 if let Some(parent) = target.parent() {
                     if let Err(error) = fs::create_dir_all(parent) {
-                        return Err(self.restore_after_apply_failure(
-                            project_id,
-                            &snapshot.id,
+                        return Err(self.recover_composite_after_failure(
+                            &journal_path,
+                            &journal,
                             format!("DRAFT_APPLY_FAILED: {}: {error}", parent.display()),
                         ));
                     }
@@ -499,36 +601,55 @@ impl DomainStore {
                 replace_file_safely(&target, &content.unwrap_or_default())
             };
             if let Err(error) = result {
-                return Err(self.restore_after_apply_failure(
-                    project_id,
-                    &snapshot.id,
+                return Err(self.recover_composite_after_failure(
+                    &journal_path,
+                    &journal,
                     format!("DRAFT_APPLY_FAILED: {}: {error}", target.display()),
                 ));
             }
+            if let Some(parent) = target.parent() {
+                if let Err(error) = sync_directory_ancestors(parent, &root) {
+                    return Err(self.recover_composite_after_failure(
+                        &journal_path,
+                        &journal,
+                        format!("DRAFT_APPLY_SYNC_FAILED: {}: {error}", target.display()),
+                    ));
+                }
+            }
         }
-        let connection = self
-            .project_connection(project_id)
-            .map_err(|error| self.restore_after_apply_failure(project_id, &snapshot.id, error))?;
+        let connection = self.project_connection(project_id).map_err(|error| {
+            self.recover_composite_after_failure(&journal_path, &journal, error)
+        })?;
         let update = connection.execute(
-            "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1 AND status='open' AND revision=?3",
+            "UPDATE drafts SET status='applied',updated_at=?2 WHERE id=?1 AND status='applying' AND revision=?3",
             params![draft_id, now_millis(), expected_revision],
         );
         match update {
             Ok(1) => {}
             Ok(rows) => {
-                return Err(self.restore_after_apply_failure(
-                    project_id,
-                    &snapshot.id,
+                return Err(self.recover_composite_after_failure(
+                    &journal_path,
+                    &journal,
                     format!("DRAFT_STATUS_CONFLICT: expected one open draft, updated {rows}"),
                 ));
             }
             Err(error) => {
-                return Err(self.restore_after_apply_failure(
-                    project_id,
-                    &snapshot.id,
+                return Err(self.recover_composite_after_failure(
+                    &journal_path,
+                    &journal,
                     format!("DRAFT_UPDATE_FAILED: {error}"),
                 ));
             }
+        }
+        #[cfg(test)]
+        if self
+            .composite_apply_crash_after_commit
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            panic!("DRAFT_APPLY_POST_COMMIT_CRASH_INJECTED");
+        }
+        if !governance_required {
+            self.remove_composite_apply_journal(&journal_path)?;
         }
         Ok(snapshot)
     }
@@ -556,12 +677,41 @@ impl DomainStore {
         self.apply_composite_drafts(project_id, composite_id, confirmations)
     }
 
+    pub(crate) fn apply_validated_composite_drafts_retaining_governance(
+        &self,
+        project_id: &str,
+        composite_id: &str,
+        confirmations: &[CompositeDraftConfirmation],
+    ) -> Result<CompositeApplyResult, String> {
+        for confirmation in confirmations {
+            let report = self.validate_domain_draft(project_id, &confirmation.draft_id)?;
+            if !report.valid {
+                return Err(format!(
+                    "DRAFT_VALIDATION_FAILED: {}: {}",
+                    report.system_id,
+                    report.diagnostics.join(" | ")
+                ));
+            }
+        }
+        self.apply_composite_drafts_internal(project_id, composite_id, confirmations, true)
+    }
+
     /// 组合 Apply 的低层实现只接受已经通过上层领域校验门禁的调用。
     pub fn apply_composite_drafts(
         &self,
         project_id: &str,
         composite_id: &str,
         confirmations: &[CompositeDraftConfirmation],
+    ) -> Result<CompositeApplyResult, String> {
+        self.apply_composite_drafts_internal(project_id, composite_id, confirmations, false)
+    }
+
+    fn apply_composite_drafts_internal(
+        &self,
+        project_id: &str,
+        composite_id: &str,
+        confirmations: &[CompositeDraftConfirmation],
+        governance_required: bool,
     ) -> Result<CompositeApplyResult, String> {
         self.ensure_writable()?;
         if composite_id.trim().is_empty() || confirmations.len() < 2 {
@@ -580,6 +730,7 @@ impl DomainStore {
         let project = self.get_project(project_id)?;
         let root = PathBuf::from(&project.root);
         let mut all_paths = Vec::new();
+        let mut applied_files = Vec::new();
         let mut operations = Vec::new();
         let mut draft_ids = Vec::new();
         for confirmation in confirmations {
@@ -629,6 +780,10 @@ impl DomainStore {
                     ));
                 }
                 all_paths.push(change.path.clone());
+                applied_files.push(AppliedFileState {
+                    path: change.path.clone(),
+                    sha256: change.new_sha256.clone(),
+                });
             }
             let connection = self.project_connection(project_id)?;
             let mut statement = connection
@@ -688,6 +843,8 @@ impl DomainStore {
             composite_id: composite_id.to_string(),
             confirmations: confirmations.to_vec(),
             snapshot: snapshot.clone(),
+            governance_required,
+            applied_files,
         };
         let journal_path = self.persist_composite_apply_journal(&journal)?;
         if let Err(error) = self.reserve_composite_drafts(project_id, confirmations) {
@@ -794,8 +951,10 @@ impl DomainStore {
         {
             panic!("COMPOSITE_APPLY_POST_COMMIT_CRASH_INJECTED");
         }
-        self.remove_composite_apply_journal(&journal_path)
-            .map_err(|error| format!("COMPOSITE_APPLIED_JOURNAL_CLEANUP_FAILED: {error}"))?;
+        if !governance_required {
+            self.remove_composite_apply_journal(&journal_path)
+                .map_err(|error| format!("COMPOSITE_APPLIED_JOURNAL_CLEANUP_FAILED: {error}"))?;
+        }
         Ok(CompositeApplyResult {
             composite_id: composite_id.to_string(),
             draft_ids,
@@ -933,10 +1092,10 @@ impl DomainStore {
         project_id: &str,
         journal: &CompositeApplyJournal,
     ) -> Result<(), String> {
-        if journal.schema_version != COMPOSITE_APPLY_JOURNAL_SCHEMA
+        if !matches!(journal.schema_version, 1 | COMPOSITE_APPLY_JOURNAL_SCHEMA)
             || journal.project_id != project_id
             || journal.composite_id.trim().is_empty()
-            || journal.confirmations.len() < 2
+            || journal.confirmations.is_empty()
             || journal.snapshot.id.trim().is_empty()
             || !is_safe_storage_id(&journal.snapshot.id)
         {
@@ -1035,7 +1194,14 @@ impl DomainStore {
             );
         }
         if statuses.iter().all(|(status, _)| status == "applied") {
-            return self.remove_composite_apply_journal(path);
+            if !journal.governance_required
+                || self.governance_receipts_complete(&journal.project_id, journal)?
+            {
+                return self.remove_composite_apply_journal(path);
+            }
+            self.ensure_apply_recovery_has_no_external_edits(journal)?;
+            self.restore_snapshot_files(&journal.project_id, &journal.snapshot)?;
+            return self.rollback_governance_journal(path, journal, "applied");
         }
         if statuses.iter().all(|(status, _)| status == "open") {
             return self.remove_composite_apply_journal(path);
@@ -1047,6 +1213,7 @@ impl DomainStore {
             );
         }
 
+        self.ensure_apply_recovery_has_no_external_edits(journal)?;
         self.restore_snapshot_files(&journal.project_id, &journal.snapshot)?;
         let mut connection = self.project_connection(&journal.project_id)?;
         let transaction = connection
@@ -1072,6 +1239,206 @@ impl DomainStore {
         self.remove_composite_apply_journal(path)
     }
 
+    fn ensure_apply_recovery_has_no_external_edits(
+        &self,
+        journal: &CompositeApplyJournal,
+    ) -> Result<(), String> {
+        let project = self.get_project(&journal.project_id)?;
+        let root = PathBuf::from(project.root);
+        let mut expected = journal
+            .applied_files
+            .iter()
+            .map(|file| (file.path.clone(), file.sha256.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        if expected.is_empty() {
+            let connection = self.project_connection(&journal.project_id)?;
+            for confirmation in &journal.confirmations {
+                let mut statement = connection
+                    .prepare("SELECT path,content,deleted FROM draft_changes WHERE draft_id=?1")
+                    .map_err(|error| format!("APPLY_RECOVERY_HASH_READ_FAILED: {error}"))?;
+                let rows = statement
+                    .query_map([&confirmation.draft_id], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<Vec<u8>>>(1)?,
+                            row.get::<_, i64>(2)? != 0,
+                        ))
+                    })
+                    .map_err(|error| format!("APPLY_RECOVERY_HASH_READ_FAILED: {error}"))?;
+                for row in rows {
+                    let (path, content, deleted) =
+                        row.map_err(|error| format!("APPLY_RECOVERY_HASH_READ_FAILED: {error}"))?;
+                    expected.insert(
+                        path,
+                        if deleted {
+                            None
+                        } else {
+                            Some(hash_bytes(&content.unwrap_or_default()))
+                        },
+                    );
+                }
+            }
+        }
+        for snapshot_file in &journal.snapshot.files {
+            let applied_hash = expected.get(&snapshot_file.path).ok_or_else(|| {
+                format!(
+                    "APPLY_RECOVERY_HASH_MISSING: {} has no applied target hash",
+                    snapshot_file.path
+                )
+            })?;
+            let target = safe_project_target(&root, &snapshot_file.path)?;
+            let current_hash = match fs::read(&target) {
+                Ok(bytes) => Some(hash_bytes(&bytes)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => {
+                    return Err(format!(
+                        "APPLY_RECOVERY_CURRENT_READ_FAILED: {}: {error}",
+                        target.display()
+                    ));
+                }
+            };
+            let snapshot_hash = snapshot_file.sha256.clone();
+            if &current_hash != applied_hash && current_hash != snapshot_hash {
+                return Err(format!(
+                    "APPLY_RECOVERY_EXTERNAL_EDIT_CONFLICT: {} changed outside the pending Apply",
+                    snapshot_file.path
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn governance_receipts_complete(
+        &self,
+        project_id: &str,
+        journal: &CompositeApplyJournal,
+    ) -> Result<bool, String> {
+        let connection = self.project_connection(project_id)?;
+        for confirmation in &journal.confirmations {
+            let mut statement = connection
+                .prepare(
+                    "SELECT evidence FROM task_receipts WHERE draft_id=?1 AND status='applied'",
+                )
+                .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_READ_FAILED: {error}"))?;
+            let rows = statement
+                .query_map([&confirmation.draft_id], |row| row.get::<_, String>(0))
+                .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_READ_FAILED: {error}"))?;
+            let mut matched = false;
+            for row in rows {
+                let evidence = row
+                    .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_READ_FAILED: {error}"))?;
+                let evidence: serde_json::Value = serde_json::from_str(&evidence)
+                    .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_INVALID: {error}"))?;
+                if evidence
+                    .get("snapshotId")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(journal.snapshot.id.as_str())
+                    && evidence
+                        .pointer("/provenance/issuer")
+                        .and_then(serde_json::Value::as_str)
+                        == Some("mir3-kernel")
+                {
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn rollback_governance_journal(
+        &self,
+        path: &Path,
+        journal: &CompositeApplyJournal,
+        current_status: &str,
+    ) -> Result<(), String> {
+        let mut connection = self.project_connection(&journal.project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("GOVERNANCE_RECOVERY_TRANSACTION_FAILED: {error}"))?;
+        for confirmation in &journal.confirmations {
+            let mut receipt_ids = transaction
+                .prepare("SELECT id,evidence FROM task_receipts WHERE draft_id=?1")
+                .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_READ_FAILED: {error}"))?
+                .query_map([&confirmation.draft_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_READ_FAILED: {error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_READ_FAILED: {error}"))?;
+            receipt_ids.retain(|(_, evidence)| {
+                serde_json::from_str::<serde_json::Value>(evidence)
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .get("snapshotId")
+                            .and_then(serde_json::Value::as_str)
+                            .map(|value| value == journal.snapshot.id)
+                    })
+                    .unwrap_or(false)
+            });
+            for (receipt_id, _) in receipt_ids {
+                let memory_id = format!("memory-{}", &hash_bytes(receipt_id.as_bytes())[..20]);
+                transaction
+                    .execute("DELETE FROM domain_memories WHERE id=?1", [&memory_id])
+                    .map_err(|error| format!("GOVERNANCE_RECOVERY_MEMORY_FAILED: {error}"))?;
+                transaction
+                    .execute("DELETE FROM task_receipts WHERE id=?1", [&receipt_id])
+                    .map_err(|error| format!("GOVERNANCE_RECOVERY_RECEIPT_FAILED: {error}"))?;
+            }
+            let updated = transaction
+                .execute(
+                    "UPDATE drafts SET status='open',updated_at=?2 WHERE id=?1 AND status=?3 AND revision=?4",
+                    params![
+                        confirmation.draft_id,
+                        now_millis(),
+                        current_status,
+                        confirmation.expected_revision
+                    ],
+                )
+                .map_err(|error| format!("GOVERNANCE_RECOVERY_DRAFT_FAILED: {error}"))?;
+            if updated != 1 {
+                return Err(format!(
+                    "GOVERNANCE_RECOVERY_DRAFT_CONFLICT: {}",
+                    confirmation.draft_id
+                ));
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("GOVERNANCE_RECOVERY_COMMIT_FAILED: {error}"))?;
+        self.remove_composite_apply_journal(path)
+    }
+
+    pub(crate) fn complete_governance_apply_journal(
+        &self,
+        project_id: &str,
+        transaction_id: &str,
+    ) -> Result<(), String> {
+        let path = self
+            .project_dir(project_id)?
+            .join(COMPOSITE_APPLY_JOURNAL_DIRECTORY)
+            .join(format!("{}.json", hash_bytes(transaction_id.as_bytes())));
+        if !path.exists() {
+            return Err(format!("GOVERNANCE_JOURNAL_MISSING: {transaction_id}"));
+        }
+        let journal: CompositeApplyJournal = serde_json::from_slice(
+            &fs::read(&path).map_err(|error| format!("GOVERNANCE_JOURNAL_READ_FAILED: {error}"))?,
+        )
+        .map_err(|error| format!("GOVERNANCE_JOURNAL_INVALID: {error}"))?;
+        if !journal.governance_required
+            || !self.governance_receipts_complete(project_id, &journal)?
+        {
+            return Err(
+                "GOVERNANCE_JOURNAL_INCOMPLETE: applied receipts are incomplete".to_string(),
+            );
+        }
+        self.remove_composite_apply_journal(&path)
+    }
+
     fn remove_composite_apply_journal(&self, path: &Path) -> Result<(), String> {
         if path.exists() {
             fs::remove_file(path)
@@ -1081,22 +1448,6 @@ impl DomainStore {
             }
         }
         Ok(())
-    }
-
-    /// 文件系统与 SQLite 无法共享事务；因此数据库状态提交失败时必须把同一快照
-    /// 恢复结果合并进错误，不能吞掉二次失败后继续声称已原子回滚。
-    fn restore_after_apply_failure(
-        &self,
-        project_id: &str,
-        snapshot_id: &str,
-        original: String,
-    ) -> String {
-        match self.restore_snapshot(project_id, snapshot_id) {
-            Ok(_) => original,
-            Err(restore_error) => {
-                format!("{original}; SNAPSHOT_RESTORE_AFTER_APPLY_FAILED: {restore_error}")
-            }
-        }
     }
 
     pub fn discard_draft(&self, project_id: &str, draft_id: &str) -> Result<Draft, String> {
@@ -1476,7 +1827,7 @@ mod tests {
         let imported = store.import_project(&project).unwrap();
         let draft = store.open_draft(&imported.id, "修改入口").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.0", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.1", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -1523,7 +1874,7 @@ mod tests {
 
         let quest = store.open_draft(&imported.id, "更新任务").unwrap();
         store
-            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.3.0", Some("release-1"))
+            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.3.1", Some("release-1"))
             .unwrap();
         let denied = store.patch_draft(
             &imported.id,
@@ -1555,7 +1906,7 @@ mod tests {
 
         let shop = store.open_draft(&imported.id, "更新商城").unwrap();
         store
-            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.3.0", Some("release-1"))
+            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.3.1", Some("release-1"))
             .unwrap();
         let shop_preview = store
             .patch_draft(
@@ -1718,7 +2069,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.0",
+                    "1.3.1",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -1902,7 +2253,7 @@ mod tests {
         store.scan_project(&imported.id, || false).unwrap();
         let draft = store.open_draft(&imported.id, "并发修改").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.0", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.1", None)
             .unwrap();
 
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
@@ -1984,7 +2335,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.0",
+                    "1.3.1",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -2132,7 +2483,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.0",
+                    "1.3.1",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -2157,7 +2508,7 @@ mod tests {
         }
         let late = store.open_draft(&imported.id, "late member").unwrap();
         store
-            .bind_draft_domain(&imported.id, &late.id, "item", "1.3.0", None)
+            .bind_draft_domain(&imported.id, &late.id, "item", "1.3.1", None)
             .unwrap();
         let second_store = DomainStore::new_trusted_fixture(&data_root).unwrap();
         let entered = std::sync::Arc::new(std::sync::Barrier::new(2));
@@ -2176,7 +2527,7 @@ mod tests {
         });
         entered.wait();
         let rejected = second_store
-            .associate_draft_composite(&imported.id, &late.id, "item", "1.3.0", composite_id)
+            .associate_draft_composite(&imported.id, &late.id, "item", "1.3.1", composite_id)
             .unwrap_err();
         assert!(rejected.starts_with("DRAFT_MUTATION_RESERVED:"));
         release.wait();
@@ -2227,7 +2578,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.0",
+                    "1.3.1",
                     Some(composite_id),
                 )
                 .unwrap();

@@ -1217,29 +1217,16 @@ impl DomainStore {
         for row in rows {
             let (path, role, category, extension, size, modified_at, content) =
                 row.map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
-            let owns_file =
-                matches_projection(manifest, &path, extension.as_deref(), content.as_deref());
+            let systems =
+                projection_system_ids(&registry, &path, extension.as_deref(), content.as_deref());
+            let owns_file = systems.contains(&manifest.system_id);
             let dependency_file = !owns_file
-                && registry.packs.iter().any(|candidate| {
-                    manifest.dependencies.contains(&candidate.system_id)
-                        && matches_projection(
-                            candidate,
-                            &path,
-                            extension.as_deref(),
-                            content.as_deref(),
-                        )
-                });
+                && systems
+                    .iter()
+                    .any(|system_id| manifest.dependencies.contains(system_id));
             if !owns_file && !dependency_file {
                 continue;
             }
-            let systems = registry
-                .packs
-                .iter()
-                .filter(|candidate| {
-                    matches_projection(candidate, &path, extension.as_deref(), content.as_deref())
-                })
-                .map(|candidate| candidate.system_id.clone())
-                .collect::<Vec<_>>();
             let ownership = if dependency_file {
                 "dependency"
             } else if systems.len() > 1 {
@@ -1306,9 +1293,9 @@ impl DomainStore {
         for row in rows {
             let (path, role, category, extension, size, modified_at, content) =
                 row.map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
-            if registry.packs.iter().any(|manifest| {
-                matches_projection(manifest, &path, extension.as_deref(), content.as_deref())
-            }) {
+            if !projection_system_ids(&registry, &path, extension.as_deref(), content.as_deref())
+                .is_empty()
+            {
                 continue;
             }
             files.push(DomainFileRecord {
@@ -1567,6 +1554,14 @@ impl DomainStore {
                         diagnostics
                             .push(format!("DOMAIN_SCHEMA_FILE_INVALID:{}", file.record.path));
                     }
+                    if file
+                        .record
+                        .extension
+                        .as_deref()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("map"))
+                    {
+                        continue;
+                    }
                     let Some(schema) = schema else {
                         continue;
                     };
@@ -1621,30 +1616,32 @@ impl DomainStore {
                     }
                 }
                 if let Some(fields) = validator.fields.as_array() {
-                    for field in fields.iter().filter_map(serde_json::Value::as_str) {
-                        let mut values_by_role = BTreeMap::<&str, BTreeSet<String>>::new();
-                        for record in projected_records {
-                            let Some(value) = record.value.get(field) else {
-                                continue;
-                            };
-                            let value = match value {
-                                Value::String(value) => value.clone(),
-                                Value::Number(value) => value.to_string(),
-                                Value::Bool(value) => value.to_string(),
-                                _ => continue,
-                            };
-                            checked += 1;
-                            if !values_by_role
-                                .entry(record.role.as_str())
-                                .or_default()
-                                .insert(value.clone())
-                            {
-                                valid = false;
-                                diagnostics.push(format!(
-                                    "DOMAIN_UNIQUENESS_FIELD_CONFLICT:{}:{field}:{value}",
-                                    record.role
-                                ));
-                            }
+                    let fields = fields
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>();
+                    let mut values_by_role = BTreeMap::<&str, BTreeSet<String>>::new();
+                    for record in projected_records {
+                        let values = fields
+                            .iter()
+                            .map(|field| record.value.get(field).and_then(scalar_value_string))
+                            .collect::<Option<Vec<_>>>();
+                        let Some(values) = values else {
+                            continue;
+                        };
+                        checked += 1;
+                        let value = values.join("\u{1f}");
+                        if !values_by_role
+                            .entry(record.role.as_str())
+                            .or_default()
+                            .insert(value.clone())
+                        {
+                            valid = false;
+                            diagnostics.push(format!(
+                                "DOMAIN_UNIQUENESS_FIELD_CONFLICT:{}:{}:{value}",
+                                record.role,
+                                fields.join("+")
+                            ));
                         }
                     }
                 }
@@ -1815,6 +1812,7 @@ impl DomainStore {
         overlay: Option<&DomainDraftOverlay>,
     ) -> Result<Vec<DomainValidationFile>, String> {
         let project = self.get_project(project_id)?;
+        let registry = self.runtime_domain_registry()?;
         let root = PathBuf::from(project.root);
         let connection = self.project_connection(project_id)?;
         let mut statement = connection
@@ -1864,12 +1862,14 @@ impl DomainStore {
                 .as_deref()
                 .and_then(crate::safe_files::decode_supported_text)
                 .or_else(|| indexed_content.clone());
-            if !matches_projection(
-                manifest,
+            if !projection_system_ids(
+                &registry,
                 &path,
                 extension.as_deref(),
                 fingerprint_content.as_deref(),
-            ) {
+            )
+            .contains(&manifest.system_id)
+            {
                 continue;
             }
             let access = access_for(manifest, extension.as_deref());
@@ -1911,12 +1911,14 @@ impl DomainStore {
                     .and_then(|value| value.to_str())
                     .map(|value| value.to_lowercase());
                 let fingerprint_content = crate::safe_files::decode_supported_text(bytes);
-                if !matches_projection(
-                    manifest,
+                if !projection_system_ids(
+                    &registry,
                     path,
                     extension.as_deref(),
                     fingerprint_content.as_deref(),
-                ) {
+                )
+                .contains(&manifest.system_id)
+                {
                     continue;
                 }
                 let access = access_for(manifest, extension.as_deref());
@@ -2820,6 +2822,36 @@ fn matches_projection(
     extension: Option<&str>,
     content: Option<&str>,
 ) -> bool {
+    matches_projection_path(manifest, path, extension)
+        || matches_projection_content(manifest, path, content)
+}
+
+/// 全局归属先比较真实路径；只有没有任何路径所有者时才允许内容指纹推断。
+/// 这样依赖字段名不会把一个已经明确归属的文件错误标成被引用领域的共享文件。
+fn projection_system_ids(
+    registry: &DomainRegistry,
+    path: &str,
+    extension: Option<&str>,
+    content: Option<&str>,
+) -> Vec<String> {
+    let path_owners = registry
+        .packs
+        .iter()
+        .filter(|manifest| matches_projection_path(manifest, path, extension))
+        .map(|manifest| manifest.system_id.clone())
+        .collect::<Vec<_>>();
+    if !path_owners.is_empty() {
+        return path_owners;
+    }
+    registry
+        .packs
+        .iter()
+        .filter(|manifest| matches_projection_content(manifest, path, content))
+        .map(|manifest| manifest.system_id.clone())
+        .collect()
+}
+
+fn matches_projection_path(manifest: &DomainManifest, path: &str, extension: Option<&str>) -> bool {
     let normalized = path.replace('\\', "/").to_lowercase();
     if manifest
         .file_projection
@@ -2849,22 +2881,38 @@ fn matches_projection(
                     })
             }
         })
-        || manifest
-            .file_projection
-            .content_fingerprints
-            .iter()
-            .any(|fingerprint| {
-                content.is_some_and(|content| {
-                    if fingerprint.case_sensitive {
-                        selector_contains(content, &fingerprint.contains)
-                    } else {
-                        selector_contains(
-                            &content.to_lowercase(),
-                            &fingerprint.contains.to_lowercase(),
-                        )
-                    }
-                })
+}
+
+fn matches_projection_content(
+    manifest: &DomainManifest,
+    path: &str,
+    content: Option<&str>,
+) -> bool {
+    let normalized = path.replace('\\', "/").to_lowercase();
+    if manifest
+        .file_projection
+        .excludes
+        .iter()
+        .any(|selector| globish_matches(&normalized, selector))
+    {
+        return false;
+    }
+    manifest
+        .file_projection
+        .content_fingerprints
+        .iter()
+        .any(|fingerprint| {
+            content.is_some_and(|content| {
+                if fingerprint.case_sensitive {
+                    selector_contains(content, &fingerprint.contains)
+                } else {
+                    selector_contains(
+                        &content.to_lowercase(),
+                        &fingerprint.contains.to_lowercase(),
+                    )
+                }
             })
+        })
 }
 
 /// ASCII 领域词必须出现在路径/内容的词边界上，避免 `mall` 误命中
@@ -3252,6 +3300,13 @@ fn project_runtime_schema_records(
 ) -> Vec<RuntimeProjectedRecord> {
     files
         .iter()
+        .filter(|file| {
+            !file
+                .record
+                .extension
+                .as_deref()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("map"))
+        })
         .filter_map(|file| file.content.as_deref().map(|content| (file, content)))
         .flat_map(|(file, content)| {
             project_schema_records(content, schema, field_mappings)
@@ -3551,7 +3606,7 @@ mod tests {
         let registry = bundled_domain_registry().unwrap();
         assert_eq!(registry.packs.len(), 33);
         assert!(registry.packs.iter().all(|pack| {
-            pack.version == "1.3.0"
+            pack.version == "1.3.1"
                 && pack.supported_engine_range == ">=1.0.0"
                 && pack.engine_compatibility.strategy == "evidence-gated-auto-generalization-v1"
                 && !pack.engine_compatibility.version_aliases.is_empty()
@@ -3793,7 +3848,7 @@ mod tests {
         assert_eq!(files[0].access, "readonly");
         let unknown = store.open_draft(&project.id, "unknown engine").unwrap();
         store
-            .bind_draft_domain(&project.id, &unknown.id, "level", "1.3.0", None)
+            .bind_draft_domain(&project.id, &unknown.id, "level", "1.3.1", None)
             .unwrap();
         assert!(store
             .patch_draft(
@@ -3814,7 +3869,7 @@ mod tests {
         let project = store.validate_project(&project.id).unwrap();
         let draft = store.open_draft(&project.id, "recognized engine").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -3918,6 +3973,33 @@ mod tests {
     }
 
     #[test]
+    fn path_ownership_prevents_reference_fields_from_claiming_foreign_files() {
+        let registry = bundled_domain_registry().unwrap();
+        let owners = projection_system_ids(
+            registry,
+            "客户端/dev/domains/item/cfg_item.txt",
+            Some("txt"),
+            Some(
+                "itemId=ITEM_A\nitemType=material\nlinkedBuffId=BUFF_A\nclientIcon=item.png\nengineStdMode=1\nstackLimit=10\n",
+            ),
+        );
+        assert_eq!(owners, vec!["item"]);
+        assert!(!owners.contains(&"buff".to_string()));
+    }
+
+    #[test]
+    fn content_fingerprint_claims_a_file_only_when_no_path_owner_exists() {
+        let registry = bundled_domain_registry().unwrap();
+        let owners = projection_system_ids(
+            registry,
+            "客户端/dev/misc/opaque.txt",
+            Some("txt"),
+            Some("status_effect=poison\n"),
+        );
+        assert_eq!(owners, vec!["buff"]);
+    }
+
+    #[test]
     fn unclaimed_files_remain_visible_and_readonly() {
         let base = std::env::temp_dir().join(format!("mir3-unclaimed-{}", std::process::id()));
         let root = base.join("木立");
@@ -4005,7 +4087,7 @@ mod tests {
             .open_draft(&project.id, "invalid level overlay")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -4084,7 +4166,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "level",
-                "1.3.0",
+                "1.3.1",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -4094,7 +4176,7 @@ mod tests {
                 &project.id,
                 &companion.id,
                 "shop",
-                "1.3.0",
+                "1.3.1",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -4151,7 +4233,7 @@ mod tests {
         copy_test_directory(&bundled, &v1_staging);
         let v1_hash = hash_runtime_release(&v1_staging).unwrap();
         let v1 = RuntimeDomainPackRelease {
-            version: "1.3.0".to_string(),
+            version: "1.3.1".to_string(),
             directory: format!("level-{}", &v1_hash[..12]),
             hash: v1_hash,
         };
@@ -4159,10 +4241,10 @@ mod tests {
 
         let v101_staging = base.join("level-v101");
         copy_test_directory(&bundled, &v101_staging);
-        mutate_test_pack_contract(&v101_staging, "1.3.1", "v101");
+        mutate_test_pack_contract(&v101_staging, "1.3.2", "v101");
         let v101_hash = hash_runtime_release(&v101_staging).unwrap();
         let v101 = RuntimeDomainPackRelease {
-            version: "1.3.1".to_string(),
+            version: "1.3.2".to_string(),
             directory: format!("level-{}", &v101_hash[..12]),
             hash: v101_hash,
         };
@@ -4170,10 +4252,10 @@ mod tests {
 
         let v102_staging = base.join("level-v102");
         copy_test_directory(&bundled, &v102_staging);
-        mutate_test_pack_contract(&v102_staging, "1.3.2", "v102");
+        mutate_test_pack_contract(&v102_staging, "1.3.3", "v102");
         let v102_hash = hash_runtime_release(&v102_staging).unwrap();
         let v102 = RuntimeDomainPackRelease {
-            version: "1.3.2".to_string(),
+            version: "1.3.3".to_string(),
             directory: format!("level-{}", &v102_hash[..12]),
             hash: v102_hash,
         };
@@ -4186,9 +4268,9 @@ mod tests {
         let project = store.import_project(&project_root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
 
-        let draft = store.open_draft(&project.id, "pinned v1.3.0").unwrap();
+        let draft = store.open_draft(&project.id, "pinned v1.3.1").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
             .unwrap();
         let old_lease = store
             .issue_task_scope(
@@ -4197,7 +4279,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"level":"1.3.0"}),
+                serde_json::json!({"level":"1.3.1"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
@@ -4213,14 +4295,14 @@ mod tests {
                     body: serde_json::json!({"maximumLevel": 80}),
                     status: "active".to_string(),
                     source_task_id: "old-task".to_string(),
-                    plugin_version: "1.3.0".to_string(),
+                    plugin_version: "1.3.1".to_string(),
                     created_at: crate::now_millis(),
                     updated_at: crate::now_millis(),
                 },
             )
             .unwrap();
 
-        // 两次升级后 v1.3.0 已不在 current/previous/LKG，但目录仍保留给旧任务。
+        // 两次升级后 v1.3.1 已不在 current/previous/LKG，但目录仍保留给旧任务。
         write_test_runtime_state(
             &system_root,
             "level",
@@ -4235,7 +4317,7 @@ mod tests {
             .into_iter()
             .find(|manifest| manifest.system_id == "level")
             .unwrap();
-        assert_eq!(active.version, "1.3.2");
+        assert_eq!(active.version, "1.3.3");
         assert_eq!(
             store
                 .list_domain_memories(&project.id, "level", true)
@@ -4248,7 +4330,7 @@ mod tests {
             .iter()
             .any(|operation| operation.id == "scale-experience-v102"));
         let pinned_manifest = store.draft_domain_manifest(&project.id, &draft.id).unwrap();
-        assert_eq!(pinned_manifest.version, "1.3.0");
+        assert_eq!(pinned_manifest.version, "1.3.1");
         assert!(pinned_manifest
             .operations
             .iter()
@@ -4274,7 +4356,7 @@ mod tests {
             )
             .is_ok());
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.2", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.3", None)
             .unwrap();
         assert!(store
             .authorize_task_scope(
@@ -4287,7 +4369,7 @@ mod tests {
             .unwrap_err()
             .starts_with("TASK_SCOPE_DRAFT_VERSION_MISMATCH:"));
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
             .unwrap();
 
         let new_lease = store
@@ -4297,11 +4379,11 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 &[],
-                serde_json::json!({"level":"1.3.2"}),
+                serde_json::json!({"level":"1.3.3"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
-        assert_eq!(new_lease.plugin_versions["level"], "1.3.2");
+        assert_eq!(new_lease.plugin_versions["level"], "1.3.3");
 
         // 保留另一个可用领域，用来证明禁用包从新任务清单消失而非拖垮注册表。
         let shop_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -4310,7 +4392,7 @@ mod tests {
         copy_test_directory(&shop_bundled, &shop_staging);
         let shop_hash = hash_runtime_release(&shop_staging).unwrap();
         let shop_release = RuntimeDomainPackRelease {
-            version: "1.3.0".to_string(),
+            version: "1.3.1".to_string(),
             directory: format!("shop-{}", &shop_hash[..12]),
             hash: shop_hash,
         };
@@ -4370,7 +4452,7 @@ mod tests {
         )
         .unwrap();
         assert!(store
-            .runtime_manifest_at_version("level", Some("1.3.0"))
+            .runtime_manifest_at_version("level", Some("1.3.1"))
             .unwrap_err()
             .starts_with("DOMAIN_PACK_VERSION_UNAVAILABLE:"));
         assert!(store

@@ -422,11 +422,11 @@ pub async fn set_active(app_handle: &AppHandle, id: &str) -> Result<HarnessCore,
         return Err(format!("CORE_INVALID_ID: {id}"));
     }
 
-    Ok(list(app_handle)
+    list(app_handle)
         .await
         .into_iter()
         .find(|c| c.active)
-        .ok_or_else(|| "CORE_NOT_FOUND: active core disappeared after switch".to_string())?)
+        .ok_or_else(|| "CORE_NOT_FOUND: active core disappeared after switch".to_string())
 }
 
 /// 切换到指定 tag 的预打包版本（已下载的历史槽位）。
@@ -710,7 +710,7 @@ pub async fn update_local_core(app_handle: AppHandle) -> Result<String, String> 
     };
 
     if !status {
-        let output = tail(stdout.into_iter().chain(stderr.into_iter()).collect());
+        let output = tail(stdout.into_iter().chain(stderr).collect());
         return Err(format!("CORE_UPDATE_FAILED: {output}"));
     }
 

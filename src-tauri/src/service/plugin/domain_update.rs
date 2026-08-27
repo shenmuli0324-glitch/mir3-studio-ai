@@ -456,7 +456,7 @@ fn signed_release_payload(release: &RemoteRelease) -> Result<Vec<u8>, String> {
 fn unpack_archive(bytes: &[u8], destination: &Path) -> Result<(), String> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| format!("DOMAIN_PACK_UPDATE_ARCHIVE_INVALID: {error}"))?;
-    if archive.len() == 0 || archive.len() > MAX_ARCHIVE_FILES {
+    if archive.is_empty() || archive.len() > MAX_ARCHIVE_FILES {
         return Err(format!(
             "DOMAIN_PACK_UPDATE_ARCHIVE_FILE_COUNT_INVALID: expected 1..{MAX_ARCHIVE_FILES} entries"
         ));
@@ -535,8 +535,8 @@ fn safe_archive_path(name: &str) -> Result<PathBuf, String> {
     }
     let path = Path::new(name);
     if path.components().any(|component| {
-        !matches!(component, Component::Normal(_))
-            && !(matches!(component, Component::CurDir) && name.ends_with('/'))
+        !(matches!(component, Component::Normal(_))
+            || matches!(component, Component::CurDir) && name.ends_with('/'))
     }) {
         return Err(format!("DOMAIN_PACK_UPDATE_ARCHIVE_PATH_FORBIDDEN: {name}"));
     }

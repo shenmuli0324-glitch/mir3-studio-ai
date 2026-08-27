@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "launch_event",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -69,6 +69,12 @@
       },
       {
         "systemId": "ranking"
+      },
+      {
+        "systemId": "limited_event"
+      },
+      {
+        "systemId": "item"
       }
     ],
     "excludes": [
@@ -223,7 +229,9 @@
     "cumulative_charge",
     "shop",
     "quest",
-    "ranking"
+    "ranking",
+    "limited_event",
+    "item"
   ],
   "operations": [
     {
@@ -263,7 +271,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [],
       "preconditions": [
@@ -354,7 +364,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -433,7 +445,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -533,7 +547,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -634,7 +650,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -720,7 +738,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -790,7 +810,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [],
       "preconditions": [
@@ -816,7 +838,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -885,7 +907,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -915,7 +939,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -968,7 +992,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -998,7 +1024,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1072,7 +1098,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -1102,7 +1130,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1177,7 +1205,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -1207,7 +1237,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1267,7 +1297,9 @@
         "cumulative_charge",
         "shop",
         "quest",
-        "ranking"
+        "ranking",
+        "limited_event",
+        "item"
       ],
       "writeSystems": [
         "launch_event"
@@ -1297,7 +1329,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

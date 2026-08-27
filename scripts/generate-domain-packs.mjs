@@ -101,7 +101,7 @@ const compoundUniqueKeys = {
   talent: ['treeId', 'nodeId'],
 }
 
-function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.3.0') {
+function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.3.1') {
   return { id, category, complexity, renderer, keywords, dependencies, capabilities, version }
 }
 
@@ -111,13 +111,17 @@ function createPack(definition) {
   const primitive = primitiveForRenderer(renderer)
   const uniqueKey = compoundUniqueKeys[id] || [spec.fields[0].name]
   const completedCapabilities = completeOperationFamilies(id, capabilities)
-  const operations = completedCapabilities.map(capabilityId => operation(id, dependencies, capabilityId, spec, operationPrimitive(capabilityId, primitive)))
   const rangeFields = spec.fields
     .filter(field => field.minimum !== undefined || field.maximum !== undefined)
     .map(field => ({ field: field.name, minimum: field.minimum, maximum: field.maximum }))
   const references = spec.fields
     .filter(field => field.referenceSystem)
     .map(field => ({ field: field.name, systemId: field.referenceSystem, required: true }))
+  const completeDependencies = [...new Set([
+    ...dependencies,
+    ...references.map(reference => reference.systemId),
+  ])]
+  const operations = completedCapabilities.map(capabilityId => operation(id, completeDependencies, capabilityId, spec, operationPrimitive(capabilityId, primitive)))
   return {
     kind: 'domain',
     systemId: id,
@@ -143,7 +147,7 @@ function createPack(definition) {
     fileProjection: {
       keywords,
       ownedSelectors: [...new Set([id, ...keywords])],
-      dependencySelectors: dependencies.map(systemId => ({ systemId })),
+      dependencySelectors: completeDependencies.map(systemId => ({ systemId })),
       excludes: ['**/.git/**', '**/node_modules/**', '**/.mir3-studio/**'],
       contentFingerprints: keywords.map(value => ({ contains: value, caseSensitive: false })),
       pathAliases: [{ from: 'client', to: '客户端' }, { from: 'engine', to: '引擎' }],
@@ -171,7 +175,7 @@ function createPack(definition) {
       primaryView: renderer,
       safePrimitive: primitive,
     },
-    dependencies,
+    dependencies: completeDependencies,
     operations,
     capabilities: operations.map(entry => ({
       ...entry,
@@ -603,7 +607,7 @@ for (const entry of packs) {
   const compatibility = `Pack version: \`${entry.version}\`; compiler compatibility: MIR3 System Kernel \`${entry.kernelApiRange}\`; engine range: \`${entry.supportedEngineRange}\`.`
   writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. ${compatibility} Engine versions are normalized only from SemVer, v-prefixed SemVer, or major.minor aliases. Write access additionally requires the real project layout, an owned selector or content fingerprint, and resource-schema validation; unknown/incompatible engines and unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
   const mapChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
-  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.3.0\n\n- Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.\n- Resource projection now preserves canonical fields for validation, cross-system references, and structured operations.\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.3.1\n\n- Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.\n- Confirmed at least one safe operation for this system completes validation, Draft Diff, governed Apply, byte change, and Snapshot restore.\n\n## 1.3.0\n\n- Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.\n- Resource projection now preserves canonical fields for validation, cross-system references, and structured operations.\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
 }
 
 const sdkExample = packs.find(entry => entry.systemId === 'level')
@@ -634,6 +638,6 @@ writeFileSync(join(sdkExampleRoot, 'package.json'), `${JSON.stringify({
     changelog: 'CHANGELOG.md',
   },
 }, null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'CHANGELOG.md'), '# Changelog\n\n## 1.3.0 - 2026-08-27\n\n- Added executable schema-backed field mappings to the runtime-installable example.\n')
+writeFileSync(join(sdkExampleRoot, 'CHANGELOG.md'), '# Changelog\n\n## 1.3.1 - 2026-08-27\n\n- Revalidated dependency closure and the complete governed lifecycle contract.\n\n## 1.3.0 - 2026-08-27\n\n- Added executable schema-backed field mappings to the runtime-installable example.\n')
 
 process.stdout.write(`Generated ${packs.length} MIR3 domain packs with schemas and contract fixtures.\n`)

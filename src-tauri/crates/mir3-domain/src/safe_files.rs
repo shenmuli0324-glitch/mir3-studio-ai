@@ -1138,7 +1138,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "安全编辑任务配置").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.3.1", None)
             .unwrap();
         let result = store
             .safe_text_patch(
@@ -1239,7 +1239,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "修改商品价格").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.1", None)
             .unwrap();
         let result = store
             .safe_xls_patch(

@@ -7,6 +7,7 @@
 //!    其允许键（depPath = `name@<pkgResolutionId>`）随 pnpm 的克隆方式变化
 //!    （git+ssh#sha / codeload tar.gz），无法预先确定；
 //! 2. 传递依赖的原生构建（如 `node-pty`，`ERR_PNPM_IGNORED_BUILDS`）。
+//!
 //! 因此在安装失败时从 pnpm 错误输出解析它建议的 `allowBuilds` 键，写入 profile
 //! 的 `pnpm-workspace.yaml` 后重试，直至成功或无可解析项。
 
@@ -1055,10 +1056,10 @@ allowBuilds:
             "dsh-better-sidebar@git+ssh://git@github.com/omdsh-dev/DSH-better-sidebar.git#6c89"
                 .to_string();
         // 空内容也能生成合法配置
-        let out = apply_allow_build_keys("", &[dep.clone()]).unwrap();
+        let out = apply_allow_build_keys("", std::slice::from_ref(&dep)).unwrap();
         let map = allow_builds_map(&out);
         assert_eq!(
-            map.get(&serde_yaml::Value::String(dep)),
+            map.get(serde_yaml::Value::String(dep)),
             Some(&serde_yaml::Value::Bool(true))
         );
         // 库负责正确加引号，键原样（含 @ / : / #）可回读

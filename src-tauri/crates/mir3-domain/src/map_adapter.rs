@@ -176,7 +176,7 @@ mod tests {
         );
         let draft = store.open_draft(&project.id, "编辑地图碰撞").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.3.0", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.3.1", None)
             .unwrap();
         let opened = store
             .map_resource_open(&project.id, relative, None, Some((0, 0, 4)))

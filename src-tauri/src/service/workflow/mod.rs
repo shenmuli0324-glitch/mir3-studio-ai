@@ -307,6 +307,7 @@ pub fn sweep_orphan_core(app_handle: &tauri::AppHandle) {
 /// 占用指定端口的进程 PID（LISTENING 状态）。
 /// - Windows：`netstat -ano` 解析；
 /// - Unix：`lsof -ti tcp:<port>`，不可用时返回 None。
+///
 /// 返回 None 视为"无法确认"，调用方不会因此杀任何进程。
 fn port_owner_pid(port: u16) -> Option<u32> {
     #[cfg(windows)]
@@ -661,7 +662,7 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
                 .arg("--host")
                 .arg("127.0.0.1")
                 .arg("--port")
-                .arg(&setting.port.to_string());
+                .arg(setting.port.to_string());
             if no_open {
                 cmd.arg("--no-open");
             }
@@ -1149,9 +1150,11 @@ mod tests {
 
     #[test]
     fn core_canary_evidence_names_every_public_runtime_gate() {
-        let mut setting = config::Setting::default();
-        setting.dsh_pkg_tag = Some("dsh-test".to_string());
-        setting.dsh_pkg_commit = Some("commit-test".to_string());
+        let setting = config::Setting {
+            dsh_pkg_tag: Some("dsh-test".to_string()),
+            dsh_pkg_commit: Some("commit-test".to_string()),
+            ..Default::default()
+        };
         let value = core_canary_state_value(&setting, "test-version", 1234);
         assert_eq!(value["status"], "passed");
         assert_eq!(value["protocolVersion"], 2);

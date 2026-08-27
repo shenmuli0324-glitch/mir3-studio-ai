@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "rebirth",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -60,6 +60,9 @@
       },
       {
         "systemId": "talent"
+      },
+      {
+        "systemId": "item"
       }
     ],
     "excludes": [
@@ -211,7 +214,8 @@
     "level",
     "title",
     "skill",
-    "talent"
+    "talent",
+    "item"
   ],
   "operations": [
     {
@@ -248,7 +252,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [],
       "preconditions": [
@@ -342,7 +347,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -440,7 +446,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -532,7 +539,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -615,7 +623,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -682,7 +691,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [],
       "preconditions": [
@@ -708,7 +718,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -780,7 +790,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -810,7 +821,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -882,7 +893,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -912,7 +924,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -978,7 +990,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -1008,7 +1021,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1065,7 +1078,8 @@
         "level",
         "title",
         "skill",
-        "talent"
+        "talent",
+        "item"
       ],
       "writeSystems": [
         "rebirth"
@@ -1095,7 +1109,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.0",
+      "version": "1.3.1",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true

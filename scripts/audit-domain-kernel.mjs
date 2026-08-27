@@ -41,7 +41,7 @@ for (const file of [
 }
 if (existsSync(join(sdkRoot, 'package.json'))) {
   const sdkPackage = JSON.parse(readFileSync(join(sdkRoot, 'package.json'), 'utf8'))
-  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.3.0')
+  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.3.1')
     failures.push('Domain Plugin SDK package identity or SemVer is invalid')
   if (sdkPackage.exports?.['./contract'] !== './contract.mjs')
     failures.push('Domain Plugin SDK contract export is missing')
@@ -410,7 +410,12 @@ const runtimeValidators = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-d
 const domainMcp = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-mcp', 'src', 'main.rs'), 'utf8')
 const corpusRunner = readFileSync(join(root, 'scripts', 'run-domain-corpus-acceptance.mjs'), 'utf8')
 const domainFixtures = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'fixtures.rs'), 'utf8')
+const domainDrafts = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'draft.rs'), 'utf8')
+const domainGovernance = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'governance.rs'), 'utf8')
+const domainStore = readFileSync(join(root, 'src-tauri', 'crates', 'mir3-domain', 'src', 'store.rs'), 'utf8')
 const systemAi = readFileSync(join(root, 'src', 'features', 'system-ai', 'system-ai-panel.tsx'), 'utf8')
+const globalTaskHandoff = readFileSync(join(root, 'src', 'features', 'system-ai', 'global-task-handoff.ts'), 'utf8')
+const globalTaskRecovery = readFileSync(join(root, 'src', 'features', 'system-ai', 'global-task-recovery.ts'), 'utf8')
 const rendererSource = readFileSync(join(root, 'src', 'features', 'devtools', 'domain', 'renderers', 'resource-renderer.tsx'), 'utf8')
 const pluginBridge = readFileSync(join(root, 'src-tauri', 'src', 'bridge', 'plugin.rs'), 'utf8')
 const iframeShim = readFileSync(join(root, 'src', 'hooks', 'use-iframe-shim.ts'), 'utf8')
@@ -438,7 +443,10 @@ if (!mcp.includes('.map(system_list_payload)') || !mcp.includes('MCP_RESULT_BUDG
   failures.push('MCP list output must use summaries and fail closed when the result budget is exceeded')
 if (!mcp.includes('every_writable_official_operation_compiles_into_a_scoped_draft')
   || !mcp.includes('.filter(|capability| !capability.write_systems.is_empty())')
-  || !mcp.includes('assert_eq!(compiled.len(), 155')) {
+  || !mcp.includes('assert_capability_lifecycle_coverage(&coverage)')
+  || !mcp.includes('assert_eq!(coverage.len(), 33')
+  || !mcp.includes('assert_eq!(compiled, 155')
+  || !mcp.includes('systems without a representative Apply/restore lifecycle')) {
   failures.push('MCP tests must compile every writable operation from all 33 packs, not only shaped examples')
 }
 if (!packLifecycle.includes('all_33_domain_packs_support_disable_upgrade_and_rollback')
@@ -511,6 +519,23 @@ if (!systemAi.includes('manifest.capabilities')
   || !systemAi.includes('writeSystems')
   || !systemAi.includes('registerGlobalTask')) {
   failures.push('System AI must consume manifest capabilities and support global multi-system tasks')
+}
+if (!domainDrafts.includes('recover_composite_apply_journals')
+  || !domainGovernance.includes('apply_validated_domain_draft_with_governance')
+  || !domainGovernance.includes('recover_composite_capability_journals')
+  || !domainGovernance.includes('recover_snapshot_governance_journals')
+  || !domainGovernance.includes('SNAPSHOT_GOVERNANCE_EXTERNAL_EDIT_CONFLICT:')
+  || !domainStore.includes('recover_composite_apply_journals()')
+  || !domainStore.includes('recover_snapshot_governance_journals()')) {
+  failures.push('Draft Apply, capability invocation, Receipt/Memory and Snapshot rollback must share durable crash recovery without overwriting external edits')
+}
+if (!globalTaskHandoff.includes('appendScopedUserRequest')
+  || !globalTaskHandoff.includes('buildGlobalTaskHandoff')
+  || !globalTaskHandoff.includes('REDACTED_CREDENTIAL')
+  || !globalTaskRecovery.includes('recoverAndManageGlobalTaskScope')
+  || !globalTaskRecovery.includes('retireSourceTaskScope')
+  || !domainGovernance.includes('recover_global_task_scope')) {
+  failures.push('System-to-global handoff must persist only redacted semantics and recover a backend-verified scoped lease')
 }
 for (const marker of ['ChartPreview', 'CalendarPreview', 'RankingPreview', 'RelationshipPreview', 'MapCanvas']) {
   if (!rendererSource.includes(marker))

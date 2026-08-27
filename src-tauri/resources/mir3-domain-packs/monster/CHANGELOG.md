@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.
+- Confirmed at least one safe operation for this system completes validation, Draft Diff, governed Apply, byte change, and Snapshot restore.
+
 ## 1.3.0
 
 - Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.

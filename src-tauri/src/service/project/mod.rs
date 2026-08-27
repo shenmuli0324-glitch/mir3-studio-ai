@@ -261,6 +261,27 @@ pub struct ConfirmationValues {
     pub diff_hash: String,
 }
 
+/// 开发与发布环境下定位 Rust MCP sidecar。
+pub fn mcp_binary_path(app: &AppHandle) -> Option<PathBuf> {
+    let binary = if cfg!(windows) {
+        "mir3-mcp.exe"
+    } else {
+        "mir3-mcp"
+    };
+    let mut candidates = Vec::new();
+    if let Ok(resource) = app.path().resource_dir() {
+        candidates.push(resource.join(binary));
+        candidates.push(resource.join("binaries").join(binary));
+    }
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("debug")
+            .join(binary),
+    );
+    candidates.into_iter().find(|path| path.is_file())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,25 +323,4 @@ mod tests {
             .unwrap();
         std::fs::remove_dir_all(base).ok();
     }
-}
-
-/// 开发与发布环境下定位 Rust MCP sidecar。
-pub fn mcp_binary_path(app: &AppHandle) -> Option<PathBuf> {
-    let binary = if cfg!(windows) {
-        "mir3-mcp.exe"
-    } else {
-        "mir3-mcp"
-    };
-    let mut candidates = Vec::new();
-    if let Ok(resource) = app.path().resource_dir() {
-        candidates.push(resource.join(binary));
-        candidates.push(resource.join("binaries").join(binary));
-    }
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target")
-            .join("debug")
-            .join(binary),
-    );
-    candidates.into_iter().find(|path| path.is_file())
 }

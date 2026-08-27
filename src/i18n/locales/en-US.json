@@ -775,6 +775,7 @@
   "studio.devtools.ai.memory_activate": "Activate memory",
   "studio.devtools.ai.memory_reject": "Reject",
   "studio.devtools.ai.global": "Open globally",
+  "studio.devtools.ai.global_needs_session": "Start this system AI task before upgrading it to the global workbench.",
   "studio.devtools.ai.global_context": "Continue planning this domain task in the global workbench using only the structured summary, resource references, and Drafts—not the full conversation:",
   "studio.devtools.ai.global_draft_intent": "Global task: {{system}}",
   "studio.devtools.ai.global_scope": "Global task write systems (dependencies are read-only by default)",

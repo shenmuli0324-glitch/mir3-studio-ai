@@ -1100,7 +1100,7 @@ function fallbackManifest(tool: DevToolDefinition): DomainManifest {
   return {
     kind: 'domain',
     systemId: tool.id,
-    version: '1.3.0',
+    version: '1.3.1',
     kernelApiRange: '^1.0.0',
     supportedEngineRange: '>=1.0.0',
     engineCompatibility: {

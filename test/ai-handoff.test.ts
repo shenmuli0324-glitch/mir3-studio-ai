@@ -2,6 +2,7 @@ import type { TaskScopeLease } from '../src/features/devtools/domain/types'
 import type { Mir3BridgeEnvelope } from '../src/features/projects/workspace-bridge'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { draftHandoffs, isCompletedGlobalTask, isGlobalDraftEvent, isGlobalTerminalEvent, registeredGlobalTask, registerGlobalTask, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '../src/features/system-ai/ai-handoff'
+import { buildGlobalTaskHandoff } from '../src/features/system-ai/global-task-handoff'
 import { currentScopeLease, hasPendingScopeRevocation, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from '../src/features/system-ai/scope-lease-manager'
 
 describe('aI Draft handoff contract', () => {
@@ -13,6 +14,14 @@ describe('aI Draft handoff contract', () => {
     allowedSystems: ['shop', 'item'],
     allowedWriteSystems: ['shop'],
     compositeId: 'composite-1',
+    handoff: buildGlobalTaskHandoff({
+      source: { projectId: 'project-1', systemId: 'shop', taskId: 'system-task-1', sessionId: 'system-session-1' },
+      explicitSummary: { goal: 'Update shop' },
+      references: { draftIds: ['draft-1'] },
+      pluginVersions: { shop: '1.3.1', item: '1.3.1' },
+      allowedReadSystems: ['shop', 'item'],
+      allowedWriteSystems: ['shop'],
+    }),
   }
 
   afterEach(() => {

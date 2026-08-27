@@ -132,7 +132,7 @@ pub fn build_main_window(app: &tauri::AppHandle<Wry>) -> tauri::Result<tauri::We
             // “源码”按钮在桌面端因此无法跳转（浏览器里正常）。
             // 这里把 http(s) 链接交给系统浏览器打开，其余协议一律拒绝。
             .on_new_window(move |url, features| on_new_window(app_handle.clone(), url, features))
-            .on_download(|webview, event| on_download(webview, event));
+            .on_download(on_download);
 
     #[cfg(windows)]
     let webview_builder = webview_builder.on_page_load(move |webview_window, payload| {
@@ -293,7 +293,9 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::system_session_get,
         crate::bridge::system_session_bind,
         crate::bridge::task_scope_issue,
+        crate::bridge::global_task_scope_recover,
         crate::bridge::task_scope_revoke,
+        crate::bridge::task_scopes_revoke,
         crate::bridge::draft_list,
         crate::bridge::domain_draft_open,
         crate::bridge::domain_draft_composite_associate,
@@ -372,24 +374,6 @@ fn is_trusted_studio_origin(origin: &str) -> bool {
             && (origin == "http://localhost:1420" || origin == "http://127.0.0.1:1420"))
 }
 
-#[cfg(test)]
-mod studio_origin_tests {
-    use super::is_trusted_studio_origin;
-
-    #[test]
-    fn remote_harness_origin_cannot_invoke_gui_commands() {
-        assert!(!is_trusted_studio_origin("http://127.0.0.1:3080"));
-        assert!(!is_trusted_studio_origin("http://127.0.0.1:3081"));
-        assert!(!is_trusted_studio_origin("https://example.com"));
-    }
-
-    #[test]
-    fn packaged_studio_origins_are_allowed() {
-        assert!(is_trusted_studio_origin("tauri://localhost"));
-        assert!(is_trusted_studio_origin("http://tauri.localhost"));
-    }
-}
-
 // configure tauri builder
 pub fn builder() -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
@@ -445,4 +429,22 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_store::Builder::new().build())
         // Clipboard plugin
         .plugin(tauri_plugin_clipboard_manager::init())
+}
+
+#[cfg(test)]
+mod studio_origin_tests {
+    use super::is_trusted_studio_origin;
+
+    #[test]
+    fn remote_harness_origin_cannot_invoke_gui_commands() {
+        assert!(!is_trusted_studio_origin("http://127.0.0.1:3080"));
+        assert!(!is_trusted_studio_origin("http://127.0.0.1:3081"));
+        assert!(!is_trusted_studio_origin("https://example.com"));
+    }
+
+    #[test]
+    fn packaged_studio_origins_are_allowed() {
+        assert!(is_trusted_studio_origin("tauri://localhost"));
+        assert!(is_trusted_studio_origin("http://tauri.localhost"));
+    }
 }

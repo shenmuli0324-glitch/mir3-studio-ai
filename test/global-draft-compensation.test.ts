@@ -18,7 +18,7 @@ describe('global Draft setup compensation', () => {
       {
         draftId: 'draft-existing',
         systemId: 'shop',
-        pluginVersion: '1.3.0',
+        pluginVersion: '1.3.1',
         compositeId: 'composite-failed',
       },
     )
@@ -31,7 +31,7 @@ describe('global Draft setup compensation', () => {
         projectId: 'project-1',
         draftId: 'draft-existing',
         systemId: 'shop',
-        pluginVersion: '1.3.0',
+        pluginVersion: '1.3.1',
         compositeId: 'composite-failed',
       }],
     ])
@@ -45,7 +45,7 @@ describe('global Draft setup compensation', () => {
       {
         draftId: 'draft-existing',
         systemId: 'shop',
-        pluginVersion: '1.3.0',
+        pluginVersion: '1.3.1',
         compositeId: 'composite-failed',
       },
     )
