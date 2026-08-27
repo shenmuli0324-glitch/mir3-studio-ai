@@ -38,9 +38,6 @@ export function GuiAiPanel() {
   const [pending, setPending] = useState<AiPendingInteraction[]>([])
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [executablePath, setExecutablePath] = useState(() => window.localStorage.getItem('mir3-gui-game-executable') ?? '')
-  const [gameDetectionSupported, setGameDetectionSupported] = useState(true)
-  const [gameRunning, setGameRunning] = useState(false)
   const expectedSessionRef = useRef(sessionId)
   const resumedSessionRef = useRef('')
   const aiTurnRef = useRef<{ path: string, workingRevision: number } | null>(null)
@@ -135,32 +132,6 @@ export function GuiAiPanel() {
     }
   }, [connected, project, sessionId, t, taskId])
 
-  useEffect(() => {
-    const normalized = executablePath.trim()
-    if (!normalized)
-      return
-    let cancelled = false
-    async function pollGameStatus() {
-      try {
-        const status = await scopeRef.current.gameProcessStatus(normalized)
-        if (!cancelled) {
-          setGameDetectionSupported(status.supported)
-          setGameRunning(status.running)
-        }
-      }
-      catch {
-        if (!cancelled)
-          setGameRunning(false)
-      }
-    }
-    void pollGameStatus()
-    const timer = window.setInterval(() => void pollGameStatus(), 2_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [executablePath])
-
   async function sendPrompt() {
     const content = input.trim()
     if (!project || !scope.currentPath || !content)
@@ -229,13 +200,6 @@ export function GuiAiPanel() {
       postGuiSession('mir3/guiSession.respond', project.id, taskId, sessionId, { pendingKey, response })
   }
 
-  function updateExecutablePath(value: string) {
-    setExecutablePath(value)
-    setGameDetectionSupported(true)
-    setGameRunning(false)
-    window.localStorage.setItem('mir3-gui-game-executable', value)
-  }
-
   function handleResizeStart(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault()
     const startX = event.clientX
@@ -260,8 +224,6 @@ export function GuiAiPanel() {
   const displayedError = error ?? (scope.diskConflict ? t('studio.gui.ai.disk_conflict') : null) ?? (scope.aiConflict ? t('studio.gui.ai.revision_conflict') : null)
   const fileContext = scope.currentPath ?? t('studio.gui.no_file')
   const nodeContext = scope.selectedNode?.name?.value ?? scope.selectedNode?.luaVariable ?? scope.selectedNode?.kind ?? t('studio.gui.ai.no_node')
-  const gameConfigured = executablePath.trim().length > 0
-  const gameStatusKey = !gameConfigured ? 'studio.gui.game.not_configured' : !gameDetectionSupported ? 'studio.gui.game.unsupported' : gameRunning ? 'studio.gui.game.running' : 'studio.gui.game.stopped'
   if (collapsed) {
     return (
       <aside className="flex h-full w-10 shrink-0 flex-col items-center border-l border-line bg-panel py-2">
@@ -287,17 +249,6 @@ export function GuiAiPanel() {
         <div className="flex min-w-0 items-center gap-2 text-[10px]">
           <span className="min-w-0 flex-1 truncate text-ink" title={fileContext}>{fileContext}</span>
           <span className="max-w-28 truncate text-muted" title={nodeContext}>{nodeContext}</span>
-        </div>
-        <div className="mt-1.5 flex items-center gap-2">
-          <span className={gameStatusClass(gameConfigured, gameRunning)} />
-          <span className="shrink-0 text-[9px] text-muted">{t(gameStatusKey)}</span>
-          <input
-            className="h-6 min-w-0 flex-1 rounded-md border border-line bg-panel px-2 text-[9px] text-ink outline-none focus:border-accent"
-            value={executablePath}
-            placeholder={t('studio.gui.game.executable_placeholder')}
-            aria-label={t('studio.gui.game.executable')}
-            onChange={event => updateExecutablePath(event.target.value)}
-          />
         </div>
       </div>
       <AiConversationPanel
@@ -408,15 +359,6 @@ function bridgeError(message: Mir3BridgeEnvelope): string {
 
 function isMissingGuiSession(error: string): boolean {
   return error.includes('SYSTEM_SESSION_NOT_FOUND')
-}
-
-function gameStatusClass(configured: boolean, running: boolean): string {
-  const base = 'size-1.5 shrink-0 rounded-full'
-  if (!configured)
-    return `${base} bg-muted`
-  if (running)
-    return `${base} bg-success shadow-[0_0_8px_var(--color-success)]`
-  return `${base} bg-warning`
 }
 
 function guiRequestId(): string {

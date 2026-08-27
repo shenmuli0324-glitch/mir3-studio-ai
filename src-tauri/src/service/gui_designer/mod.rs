@@ -1105,10 +1105,65 @@ pub fn record_external_change(
     })
 }
 
-/// Windows MVP 只按用户配置的完整 exe 路径判断是否在运行，不控制或注入游戏进程。
-pub fn game_process_status(executable_path: &str) -> Result<GuiGameProcessStatus, String> {
-    let executable_path = validate_executable_path(executable_path)?;
-    game_process_status_platform(executable_path)
+/// 从当前已导入项目中确定客户端程序，再按完整路径判断是否运行。
+pub fn game_process_status(
+    project_service: &ProjectService,
+    project_id: &str,
+) -> Result<GuiGameProcessStatus, String> {
+    let project = ensure_active_project(project_service, project_id)?;
+    let project_root =
+        fs::canonicalize(&project.root).map_err(|e| format!("GUI_PROJECT_PATH_INVALID: {e}"))?;
+    let client_root = fs::canonicalize(&project.client_root)
+        .map_err(|e| format!("GUI_CLIENT_PATH_INVALID: {e}"))?;
+    if !client_root.starts_with(&project_root) {
+        return Err("GUI_CLIENT_PATH_OUTSIDE: 客户端目录超出项目根".to_string());
+    }
+    let candidates = game_executable_candidates(&client_root)?;
+    if candidates.is_empty() {
+        return Ok(GuiGameProcessStatus {
+            supported: cfg!(windows),
+            executable_path: String::new(),
+            running: false,
+        });
+    }
+
+    let mut stopped = None;
+    for candidate in candidates {
+        let executable_path = candidate.to_string_lossy().into_owned();
+        #[cfg(windows)]
+        let executable_path = validate_executable_path(&executable_path)?;
+        let status = game_process_status_platform(executable_path)?;
+        if status.running {
+            return Ok(status);
+        }
+        if stopped.is_none() {
+            stopped = Some(status);
+        }
+    }
+    stopped.ok_or_else(|| "GUI_GAME_PROCESS_NOT_CONFIGURED: 未找到客户端启动程序".to_string())
+}
+
+fn game_executable_candidates(client_root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut candidates = Vec::new();
+    for name in ["996M3_Client.exe", "game.exe"] {
+        let candidate = client_root.join(name);
+        let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            continue;
+        }
+        let canonical = fs::canonicalize(&candidate).map_err(|e| {
+            format!(
+                "GUI_GAME_PROCESS_PATH_INVALID: {}: {e}",
+                candidate.display()
+            )
+        })?;
+        if canonical.starts_with(client_root) {
+            candidates.push(canonical);
+        }
+    }
+    Ok(candidates)
 }
 
 #[derive(Debug, Clone)]
@@ -1497,6 +1552,7 @@ fn validate_content_ref(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn validate_executable_path(value: &str) -> Result<String, String> {
     let value = value.trim();
     let bytes = value.as_bytes();
@@ -2577,6 +2633,17 @@ mod tests {
         assert!(validate_executable_path(r"C:\Games\MIR3\Mir3.bat")
             .unwrap_err()
             .starts_with("GUI_GAME_PROCESS_PATH_INVALID"));
+    }
+
+    #[test]
+    fn game_process_detection_uses_the_imported_client_executable() {
+        let (base, service, project_id) = fixture_service();
+        let executable = base.join("project/客户端/996M3_Client.exe");
+        fs::write(&executable, b"MZ").unwrap();
+        let status = game_process_status(&service, &project_id).unwrap();
+        assert!(status.executable_path.ends_with("996M3_Client.exe"));
+        assert!(!status.running);
+        fs::remove_dir_all(base).ok();
     }
 
     #[test]

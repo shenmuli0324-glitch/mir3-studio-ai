@@ -242,10 +242,12 @@ pub async fn gui_external_change_record(
 
 #[tauri::command]
 pub async fn gui_game_process_status(
-    executable_path: String,
+    service: State<'_, ProjectService>,
+    project_id: String,
 ) -> Result<GuiGameProcessStatus, String> {
+    let service = service.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        gui_designer::game_process_status(&executable_path)
+        gui_designer::game_process_status(&service, &project_id)
     })
     .await
     .map_err(|e| format!("GUI_GAME_PROCESS_TASK_FAILED: {e}"))?

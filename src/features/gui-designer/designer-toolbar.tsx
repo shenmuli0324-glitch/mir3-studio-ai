@@ -2,6 +2,7 @@ import { ArrowUturnCcwLeft, ArrowUturnCwRight, ClockArrowRotateLeft, Display, Fl
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useScope } from '@/hooks/use-scope'
+import { GameProcessButton } from './game-process-button'
 import { GuiDesignerScope } from './gui-designer-scope'
 import { PC_VIEWPORTS } from './types'
 
@@ -41,6 +42,7 @@ export function DesignerToolbar() {
       </div>
       <ToolbarIcon label={t('studio.gui.undo')} disabled={!file || file.history.length === 0} onPress={scope.undo}><ArrowUturnCcwLeft /></ToolbarIcon>
       <ToolbarIcon label={t('studio.gui.redo')} disabled={!file || file.future.length === 0} onPress={scope.redo}><ArrowUturnCwRight /></ToolbarIcon>
+      <GameProcessButton />
       <span className="min-w-0 flex-1 truncate text-center text-[11px] text-muted">
         <If cond={file == null}><span>{t('studio.gui.no_file')}</span></If>
         <If cond={file != null}><span>{file?.path}</span></If>

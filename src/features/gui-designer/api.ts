@@ -222,8 +222,10 @@ export function useGuiDocumentActions(projectId?: string) {
     return invoke<unknown>('gui_ai_workspace_get', { projectId, path }).then(normalizeAiWorkspace)
   }
 
-  function gameProcessStatus(executablePath: string): Promise<GuiGameProcessStatus> {
-    return invoke<unknown>('gui_game_process_status', { executablePath }).then(normalizeGameProcessStatus)
+  function gameProcessStatus(): Promise<GuiGameProcessStatus> {
+    if (!projectId)
+      return Promise.reject(new Error('GUI_PROJECT_REQUIRED'))
+    return invoke<unknown>('gui_game_process_status', { projectId }).then(normalizeGameProcessStatus)
   }
 
   return {

@@ -2804,7 +2804,7 @@ dependencies = [
 
 [[package]]
 name = "mir3-studio-ai"
-version = "0.9.20"
+version = "0.9.21"
 dependencies = [
  "arboard",
  "async-trait",
