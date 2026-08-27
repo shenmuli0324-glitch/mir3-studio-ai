@@ -4060,7 +4060,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "安全能力调用").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "map", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "map", "1.3.2", None)
             .unwrap();
         let lease = store
             .issue_task_scope(
@@ -4069,7 +4069,7 @@ mod tests {
                 &["map".to_string()],
                 &["map".to_string()],
                 &[],
-                json!({"map":"1.3.1"}),
+                json!({"map":"1.3.2"}),
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
@@ -4206,7 +4206,7 @@ mod tests {
             &project.id,
             &lease.token,
             &draft.id,
-            Some("1.3.1"),
+            Some("1.3.2"),
             valid_params,
         );
         assert_eq!(applied.get("isError"), Some(&Value::Bool(false)));

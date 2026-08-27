@@ -708,10 +708,14 @@ pub(crate) fn project_xls_validation_content(bytes: &[u8]) -> Result<String, Str
         projection.push_str("sheet=");
         projection.push_str(&name);
         projection.push('\n');
-        let Some(headers) = rows.first() else {
+        let Some(header_index) = xls_validation_header_index(&rows) else {
             continue;
         };
-        for row in rows.iter().skip(1) {
+        let headers = &rows[header_index];
+        for row in rows.iter().skip(header_index + 1) {
+            if xls_validation_comment_row(row) {
+                continue;
+            }
             for column in 0..column_count {
                 let header = headers.get(column).map(String::as_str).unwrap_or_default();
                 let value = row.get(column).map(String::as_str).unwrap_or_default();
@@ -725,6 +729,34 @@ pub(crate) fn project_xls_validation_content(bytes: &[u8]) -> Result<String, Str
         }
     }
     Ok(projection)
+}
+
+/// 旧 996 表格可能先放编号和中文说明；机器字段行通常拥有最多 ASCII 字段标识符。
+fn xls_validation_header_index(rows: &[Vec<String>]) -> Option<usize> {
+    let mut best = None;
+    for (index, row) in rows.iter().take(32).enumerate() {
+        let score = row
+            .iter()
+            .filter(|value| {
+                value
+                    .chars()
+                    .any(|character| character.is_ascii_alphabetic())
+            })
+            .count();
+        if score > 0 && best.is_none_or(|(_, best_score)| score > best_score) {
+            best = Some((index, score));
+        }
+    }
+    best.map(|(index, _)| index)
+}
+
+fn xls_validation_comment_row(row: &[String]) -> bool {
+    row.iter()
+        .find(|value| !value.trim().is_empty())
+        .is_some_and(|value| {
+            let value = value.trim();
+            value.starts_with("//") || value.starts_with('#') || value.starts_with(';')
+        })
 }
 
 fn decode_as(payload: &[u8], encoding: TextEncoding) -> Result<String, String> {
@@ -958,6 +990,31 @@ fn hash_bytes(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use easyexcel_xls::biff8::{Biff8Book, Biff8Sheet};
+
+    #[test]
+    fn validation_header_prefers_machine_fields_after_legacy_annotations() {
+        let rows = vec![
+            vec!["///key".to_string(), "idx".to_string(), "1".to_string()],
+            vec!["//".to_string(), "传出地图".to_string(), "坐标".to_string()],
+            vec![
+                "///idx".to_string(),
+                "MapId".to_string(),
+                "EventPosX".to_string(),
+            ],
+            vec!["//1".to_string(), "//2".to_string(), "416".to_string()],
+        ];
+        assert_eq!(xls_validation_header_index(&rows), Some(2));
+        assert!(xls_validation_comment_row(&rows[3]));
+    }
+
+    #[test]
+    fn validation_header_keeps_the_first_row_when_data_has_the_same_ascii_score() {
+        let rows = vec![
+            vec!["MapId".to_string(), "EventPosX".to_string()],
+            vec!["town".to_string(), "portal".to_string()],
+        ];
+        assert_eq!(xls_validation_header_index(&rows), Some(0));
+    }
 
     #[test]
     fn gb18030_and_crlf_are_preserved_byte_for_byte_outside_edit() {

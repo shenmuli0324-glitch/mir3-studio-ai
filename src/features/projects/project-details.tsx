@@ -8,11 +8,11 @@ import { If } from 'react-if-lite'
 import { SectionPanel } from '@/views/view-primitives'
 import { useProjectDetails } from './use-project-details'
 
-export function ProjectDetails({ projects, activeProject, scan, busy, onActivate, onSelectWorkspace, onScan, onRemove, onRelink }: {
+export function ProjectDetails({ projects, activeProject, scan, pending, onActivate, onSelectWorkspace, onScan, onRemove, onRelink }: {
   projects: Mir3Project[]
   activeProject: Mir3Project | null
   scan: ScanState | null
-  busy: boolean
+  pending: { activate: boolean, workspace: boolean, scan: boolean, remove: boolean, relink: boolean }
   onActivate: (projectId: string) => void
   onSelectWorkspace: (projectId: string) => void
   onScan: (projectId: string) => void
@@ -40,13 +40,15 @@ export function ProjectDetails({ projects, activeProject, scan, busy, onActivate
                 </If>
               </div>
               <div className="flex shrink-0 gap-2">
-                <Button size="sm" variant="ghost" onPress={() => onSelectWorkspace(project.id)}>{t('studio.project.workspace')}</Button>
-                <Button size="sm" variant="ghost" onPress={() => onScan(project.id)}>{t('studio.project.scan')}</Button>
+                <Button size="sm" variant="ghost" isPending={pending.workspace} onPress={() => onSelectWorkspace(project.id)}>{t('studio.project.workspace')}</Button>
+                <Button size="sm" variant="ghost" isPending={pending.scan && scan?.projectId === project.id} onPress={() => onScan(project.id)}>{t('studio.project.scan')}</Button>
                 <If cond={project.status === 'missing'}>
-                  <Button size="sm" variant="ghost" onPress={() => onRelink(project.id)}>{t('studio.project.relink')}</Button>
+                  <Button size="sm" variant="ghost" isPending={pending.relink} onPress={() => onRelink(project.id)}>{t('studio.project.relink')}</Button>
                 </If>
-                <Button size="sm" variant="ghost" className="text-danger" isDisabled={busy} onPress={() => onRemove(project.id)}>{t('studio.project.remove')}</Button>
-                <Button size="sm" variant="primary" isDisabled={activeProject?.id === project.id || busy} onPress={() => onActivate(project.id)}>{t('studio.project.activate')}</Button>
+                <Button size="sm" variant="ghost" className="text-danger" isPending={pending.remove} onPress={() => onRemove(project.id)}>{t('studio.project.remove')}</Button>
+                <Button size="sm" variant="primary" isPending={pending.activate} isDisabled={activeProject?.id === project.id} onPress={() => onActivate(project.id)}>
+                  <If cond={activeProject?.id === project.id} then={t('studio.project.active')} else={t('studio.project.activate')} />
+                </Button>
               </div>
             </article>
           ))}

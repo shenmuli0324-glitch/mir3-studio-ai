@@ -927,9 +927,17 @@ fn migrate_database(path: &Path, schema: &str, prefix: &str) -> Result<(), Strin
             0
         }
         Err(rusqlite::Error::SqliteFailure(_, Some(message)))
-            if !existed && message.contains("no such table") =>
+            if message.contains("no such table") =>
         {
-            0
+            if !existed {
+                0
+            } else if is_recognized_legacy_database(&connection, prefix)? {
+                1
+            } else {
+                return Err(format!(
+                    "{prefix}_SCHEMA_INVALID: schema_version metadata is missing"
+                ));
+            }
         }
         Err(error) => {
             return Err(format!("{prefix}_SCHEMA_READ_FAILED: {error}"));
@@ -981,6 +989,30 @@ fn migrate_database(path: &Path, schema: &str, prefix: &str) -> Result<(), Strin
         return Err(format!("{prefix}_MIGRATION_FAILED: {error}"));
     }
     Ok(())
+}
+
+/// 早期 Studio 数据库没有 metadata 表；仅在核心表集合完整时按 v1 迁移，未知文件继续拒绝。
+fn is_recognized_legacy_database(connection: &Connection, prefix: &str) -> Result<bool, String> {
+    let required: &[&str] = if prefix == "PROJECT_DATABASE" {
+        &["files", "knowledge", "drafts", "draft_changes", "snapshots"]
+    } else {
+        &["projects"]
+    };
+    for table in required {
+        let exists = connection
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(db_error)?
+            .is_some();
+        if !exists {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -1066,6 +1098,54 @@ mod tests {
             )
             .unwrap();
         assert_eq!(legacy, 1);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn metadata_less_legacy_project_migrates_to_v2() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-metadata-less-migration-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let project = base.join("项目/旧项目");
+        let data = base.join("data");
+        fs::create_dir_all(project.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project.join("引擎/Mir200")).unwrap();
+        let store = DomainStore::new(&data).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        let project_path = data.join(&imported.id).join("project.sqlite");
+        let connection = store.project_connection(&imported.id).unwrap();
+        connection.execute("DROP TABLE metadata", []).unwrap();
+        connection
+            .execute("DROP TABLE task_scope_leases", [])
+            .unwrap();
+        drop(connection);
+        drop(store);
+
+        let reopened = DomainStore::new(&data).unwrap();
+        assert!(reopened.read_only_reason().is_none());
+        assert!(project_path.with_extension("sqlite.v1.bak").is_file());
+        let schema: String = reopened
+            .project_connection(&imported.id)
+            .unwrap()
+            .query_row(
+                "SELECT value FROM metadata WHERE key='schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(schema, "2");
+        let scope_table: String = reopened
+            .project_connection(&imported.id)
+            .unwrap()
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='task_scope_leases'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(scope_table, "task_scope_leases");
         fs::remove_dir_all(base).ok();
     }
 

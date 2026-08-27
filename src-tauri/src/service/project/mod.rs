@@ -269,10 +269,15 @@ pub fn mcp_binary_path(app: &AppHandle) -> Option<PathBuf> {
         "mir3-mcp"
     };
     let mut candidates = Vec::new();
+    if let Ok(executable) = app.path().executable_dir() {
+        // Tauri externalBin 在 macOS app 中位于 Contents/MacOS，而不是 Resources。
+        candidates.push(executable.join(binary));
+    }
     if let Ok(resource) = app.path().resource_dir() {
         candidates.push(resource.join(binary));
         candidates.push(resource.join("binaries").join(binary));
     }
+    #[cfg(debug_assertions)]
     candidates.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")

@@ -21,6 +21,7 @@ export interface Mir3BridgeEnvelope<T = unknown> {
 type BridgeListener = (message: Mir3BridgeEnvelope) => void
 
 let activeIframeRef: RefObject<HTMLIFrameElement | null> | null = null
+let bridgePort: MessagePort | null = null
 const bridgeListeners = new Set<BridgeListener>()
 const outgoingSequences = new BridgeSequenceRegistry()
 const incomingSequences = new BridgeSequenceRegistry()
@@ -31,20 +32,36 @@ export function connectHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | nu
     const origin = getIframeOrigin(iframeRef)
     if (!origin || event.origin !== origin || event.source !== iframeRef.current?.contentWindow)
       return
-    if (!isBridgeEnvelope(event.data) || event.data.source !== 'mir3-core-plugin')
-      return
-    if (event.data.type === 'mir3/plugin.ready')
-      incomingSequences.clear()
-    if (!incomingSequences.accept(event.data, event.data.sequence))
-      return
-    bridgeListeners.forEach(listener => listener(event.data))
+    dispatchBridgeMessage(event.data)
   }
   window.addEventListener('message', handleMessage)
   return () => {
     window.removeEventListener('message', handleMessage)
-    if (activeIframeRef === iframeRef)
+    if (activeIframeRef === iframeRef) {
       activeIframeRef = null
+      bridgePort?.close()
+      bridgePort = null
+    }
   }
+}
+
+/** 用一次性 MessagePort 穿过 macOS 的不透明 Tauri origin，后续消息不再依赖宽泛 targetOrigin。 */
+export function bootstrapHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | null>) {
+  const origin = getIframeOrigin(iframeRef)
+  const target = iframeRef.current?.contentWindow
+  if (!origin || !target)
+    return false
+  bridgePort?.close()
+  const channel = new MessageChannel()
+  bridgePort = channel.port1
+  bridgePort.addEventListener('message', event => dispatchBridgeMessage(event.data))
+  bridgePort.start()
+  target.postMessage({
+    source: 'mir3-studio',
+    protocolVersion: MIR3_BRIDGE_PROTOCOL_VERSION,
+    type: 'mir3/bridge.port',
+  }, origin, [channel.port2])
+  return true
 }
 
 export function subscribeHarnessBridge(listener: BridgeListener) {
@@ -77,16 +94,15 @@ export function postHarnessBridge<T>(message: Omit<Mir3BridgeEnvelope<T>, 'sourc
   const iframeRef = activeIframeRef
   if (!iframeRef)
     return false
-  const origin = getIframeOrigin(iframeRef)
-  if (!origin || !iframeRef.current?.contentWindow)
+  if (!bridgePort)
     return false
-  iframeRef.current.contentWindow.postMessage({
+  bridgePort.postMessage({
     ...message,
     source: 'mir3-studio',
     protocolVersion: MIR3_BRIDGE_PROTOCOL_VERSION,
     requestId: message.requestId ?? bridgeRequestId(),
     sequence: outgoingSequences.next(message),
-  } satisfies Mir3BridgeEnvelope<T>, origin)
+  } satisfies Mir3BridgeEnvelope<T>)
   return true
 }
 
@@ -95,28 +111,35 @@ export function postProjectActivation(
   project: Mir3Project,
 ) {
   const origin = getIframeOrigin(iframeRef)
-  if (!origin)
+  if (!origin || !bridgePort)
     return false
-  iframeRef.current?.contentWindow?.postMessage(
-    {
-      source: 'mir3-studio',
-      protocolVersion: MIR3_BRIDGE_PROTOCOL_VERSION,
-      type: 'mir3/project.activate',
-      requestId: bridgeRequestId(),
+  bridgePort.postMessage({
+    source: 'mir3-studio',
+    protocolVersion: MIR3_BRIDGE_PROTOCOL_VERSION,
+    type: 'mir3/project.activate',
+    requestId: bridgeRequestId(),
+    projectId: project.id,
+    systemId: '',
+    taskId: '',
+    sessionId: '',
+    sequence: outgoingSequences.next({ projectId: project.id, taskId: '', sessionId: '' }),
+    payload: {
       projectId: project.id,
-      systemId: '',
-      taskId: '',
-      sessionId: '',
-      sequence: outgoingSequences.next({ projectId: project.id, taskId: '', sessionId: '' }),
-      payload: {
-        projectId: project.id,
-        projectRoot: project.root,
-        workspaceRoot: project.activeWorkspaceRoot,
-      },
+      projectRoot: project.root,
+      workspaceRoot: project.activeWorkspaceRoot,
     },
-    origin,
-  )
+  })
   return true
+}
+
+function dispatchBridgeMessage(value: unknown) {
+  if (!isBridgeEnvelope(value) || value.source !== 'mir3-core-plugin')
+    return
+  if (value.type === 'mir3/plugin.ready')
+    incomingSequences.clear()
+  if (!incomingSequences.accept(value, value.sequence))
+    return
+  bridgeListeners.forEach(listener => listener(value))
 }
 
 export function bridgeRequestId() {

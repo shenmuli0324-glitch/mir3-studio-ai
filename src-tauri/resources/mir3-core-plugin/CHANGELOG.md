@@ -1,5 +1,9 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.0.6 - 2026-08-27
+
+- 增加一次性 `MessagePort` 桥接，在 macOS Tauri 不透明 origin 下仍保持专用双向通道，恢复 Bridge v2、系统会话和候选 canary。
+
 ## 1.0.5 - 2026-08-27
 
 - 修复 macOS 原生包中 `tauri://localhost` referrer 被标准 URL API 折叠为不透明 `null` origin，导致 Core ready、Bridge 描述和兼容 canary 无法回传的问题。

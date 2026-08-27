@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
-import { connectHarnessBridge, postHarnessBridge, postProjectActivation } from '@/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, connectHarnessBridge, postHarnessBridge, postProjectActivation } from '@/features/projects/workspace-bridge'
 import { useIframeShim } from '@/hooks/use-iframe-shim'
 import { Loadable } from '@/layout/components/loadable'
 import { store } from '@/store'
@@ -47,6 +47,7 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
   useEffect(() => {
     if (!iframeLoaded)
       return
+    bootstrapHarnessBridge(iframeRef)
     postHarnessBridge({
       type: 'mir3/bridge.describe',
       projectId: project?.id ?? '',
@@ -55,7 +56,7 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
       sessionId: '',
       payload: {},
     })
-  }, [iframeKey, iframeLoaded, project?.id])
+  }, [iframeKey, iframeLoaded, iframeRef, project?.id])
 
   return (
     <section className={workbenchClass(active)} aria-hidden={!active}>

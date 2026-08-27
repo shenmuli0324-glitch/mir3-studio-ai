@@ -14,6 +14,7 @@ export function ProjectView() {
     activeProject,
     scan,
     busy,
+    pending,
     error,
     importProject,
     activateProject,
@@ -42,7 +43,7 @@ export function ProjectView() {
     // eslint-disable-next-line no-alert
     if (!window.confirm(t('studio.project.switch_confirm')))
       return
-    await activateProject(projectId)
+    await runProjectAction(() => activateProject(projectId), 'studio.project.switched')
   }
 
   async function handleRemove(projectId: string) {
@@ -53,7 +54,7 @@ export function ProjectView() {
     // eslint-disable-next-line no-alert
     if (!window.confirm(t('studio.project.remove_confirm')))
       return
-    await removeProject(projectId)
+    await runProjectAction(() => removeProject(projectId), 'studio.project.removed')
   }
 
   async function handleRelink(projectId: string) {
@@ -61,7 +62,26 @@ export function ProjectView() {
     // eslint-disable-next-line no-alert
     if (projectId === activeProject?.id && hasDirtyStudioEditor() && !window.confirm(t('studio.project.editor_leave_warning')))
       return
-    await relinkProject(projectId)
+    await runProjectAction(() => relinkProject(projectId), 'studio.project.relinked')
+  }
+
+  async function handleWorkspace(projectId: string) {
+    await runProjectAction(() => selectWorkspace(projectId), 'studio.project.workspace_selected')
+  }
+
+  async function handleScan(projectId: string) {
+    await runProjectAction(() => startScan(projectId), 'studio.project.scan_started')
+  }
+
+  async function runProjectAction(action: () => Promise<unknown>, successKey: string) {
+    try {
+      const result = await action()
+      if (result != null)
+        toast(t(successKey), {})
+    }
+    catch (reason) {
+      toast(projectActionError(reason, t), { variant: 'danger' })
+    }
   }
 
   return (
@@ -91,10 +111,10 @@ export function ProjectView() {
               projects={projects}
               activeProject={activeProject}
               scan={scan}
-              busy={busy}
+              pending={pending}
               onActivate={projectId => void handleActivate(projectId)}
-              onSelectWorkspace={projectId => void selectWorkspace(projectId)}
-              onScan={projectId => void startScan(projectId)}
+              onSelectWorkspace={projectId => void handleWorkspace(projectId)}
+              onScan={projectId => void handleScan(projectId)}
               onRemove={projectId => void handleRemove(projectId)}
               onRelink={projectId => void handleRelink(projectId)}
             />
@@ -105,4 +125,13 @@ export function ProjectView() {
 
 function hasDirtyStudioEditor(): boolean {
   return isGuiDesignerDirty()
+}
+
+function projectActionError(reason: unknown, t: (key: string) => string): string {
+  const message = String(reason)
+  if (message.includes('WORKSPACE_OUTSIDE_PROJECT'))
+    return t('studio.project.workspace_outside')
+  if (message.includes('SCAN_BUSY'))
+    return t('studio.project.scan_busy')
+  return message
 }

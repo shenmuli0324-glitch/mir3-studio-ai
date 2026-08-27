@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+
+- Added real 1.8 `cfg_mapinfo.xls` header discovery, comment-row filtering, and stable transition identities.
+- Tightened map ownership to real map directories, map files, and map-info sources so unrelated scripts are no longer claimed by the map domain.
+
 ## 1.3.1
 
 - Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.

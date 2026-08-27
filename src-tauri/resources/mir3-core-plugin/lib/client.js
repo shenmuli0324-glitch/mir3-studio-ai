@@ -58,10 +58,10 @@ window.__ModuleLoader__.load({
     }
 
     function apply(ctx) {
+      let bridgePort = null
+
       function post(type, request, payload) {
-        if (!parentOrigin)
-          return
-        window.parent.postMessage({
+        const message = {
           source: SOURCE,
           protocolVersion: PROTOCOL_VERSION,
           type,
@@ -72,7 +72,19 @@ window.__ModuleLoader__.load({
           sessionId: request.sessionId,
           sequence: nextOutboundSequence(request),
           payload,
-        }, parentOrigin)
+        }
+        if (bridgePort) {
+          bridgePort.postMessage(message)
+          return
+        }
+        if (!parentOrigin)
+          return
+        try {
+          window.parent.postMessage(message, parentOrigin)
+        }
+        catch {
+          // macOS 的 Tauri 自定义协议是 opaque origin，等待宿主下发 MessagePort。
+        }
       }
 
       function postError(request, code, error) {
@@ -439,29 +451,57 @@ window.__ModuleLoader__.load({
       }
 
       function handleMessage(event) {
+        if (event.source === window.parent
+          && event.data?.source === 'mir3-studio'
+          && event.data?.protocolVersion === PROTOCOL_VERSION
+          && event.data?.type === 'mir3/bridge.port'
+          && event.ports?.[0]) {
+          bridgePort?.close()
+          bridgePort = event.ports[0]
+          inboundSequences.clear()
+          outboundSequences.clear()
+          bridgePort.addEventListener('message', handlePortMessage)
+          bridgePort.start()
+          postReady()
+          return
+        }
         if (event.source !== window.parent || !parentOrigin || event.origin !== parentOrigin)
           return
-        if (!validate(event.data))
+        dispatchMessage(event.data)
+      }
+
+      function handlePortMessage(event) {
+        dispatchMessage(event.data)
+      }
+
+      function dispatchMessage(message) {
+        if (!validate(message))
           return
-        if (!acceptInboundSequence(event.data))
+        if (!acceptInboundSequence(message))
           return
-        void dispatch(event.data).catch(error => postError(event.data, 'BRIDGE_REQUEST_FAILED', error))
+        void dispatch(message).catch(error => postError(message, 'BRIDGE_REQUEST_FAILED', error))
+      }
+
+      function postReady() {
+        post('mir3/plugin.ready', {
+          requestId: `ready-${Date.now()}`,
+          projectId: '',
+          systemId: '',
+          taskId: '',
+          sessionId: '',
+          sequence: 0,
+        }, {
+          protocolVersion: PROTOCOL_VERSION,
+        })
       }
 
       window.addEventListener('message', handleMessage)
-      post('mir3/plugin.ready', {
-        requestId: `ready-${Date.now()}`,
-        projectId: '',
-        systemId: '',
-        taskId: '',
-        sessionId: '',
-        sequence: 0,
-      }, {
-        protocolVersion: PROTOCOL_VERSION,
-      })
+      postReady()
 
       return () => {
         window.removeEventListener('message', handleMessage)
+        bridgePort?.close()
+        bridgePort = null
         for (const dispose of activeBindings.values()) {
           if (typeof dispose === 'function')
             dispose()

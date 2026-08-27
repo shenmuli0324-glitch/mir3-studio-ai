@@ -3,6 +3,7 @@
   "fixture": "valid",
   "records": [
     {
+      "recordId": "record-1",
       "mapId": "map-mapId-1",
       "displayName": "map-displayName-1",
       "width": 2,
@@ -11,6 +12,7 @@
       "spawnNpcId": "npc:fixture-1"
     },
     {
+      "recordId": "record-2",
       "mapId": "map-mapId-2",
       "displayName": "map-displayName-2",
       "width": 3,

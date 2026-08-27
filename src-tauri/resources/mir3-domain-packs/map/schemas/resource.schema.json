@@ -10,6 +10,10 @@
       "minLength": 1,
       "pattern": "^[A-Za-z0-9_\\-]+$"
     },
+    "recordId": {
+      "type": "string",
+      "minLength": 1
+    },
     "displayName": {
       "type": "string",
       "minLength": 1
@@ -40,6 +44,7 @@
   },
   "required": [
     "mapId",
+    "recordId",
     "displayName",
     "width",
     "height",
@@ -48,7 +53,8 @@
   ],
   "x-mir3": {
     "uniqueKey": [
-      "mapId"
+      "mapId",
+      "recordId"
     ],
     "clientEngineConsistency": {
       "matchBy": "mapId",

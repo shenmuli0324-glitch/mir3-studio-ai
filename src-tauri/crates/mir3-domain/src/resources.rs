@@ -52,7 +52,7 @@ struct RawResource {
 }
 
 impl DomainStore {
-    /// 返回记录级资源；分页在完成重复键和引用诊断后执行。
+    /// 返回记录级资源；重复键诊断覆盖全集，昂贵的依赖解析只处理当前页。
     pub fn query_domain_resources(
         &self,
         project_id: &str,
@@ -62,34 +62,35 @@ impl DomainStore {
         let manifest = self.runtime_manifest(system_id)?;
         let mut resources = self.collect_raw_resources(project_id, &manifest)?;
         diagnose_duplicate_identities(&mut resources);
-        self.resolve_resource_dependencies(project_id, &manifest, &mut resources)?;
 
         let text = query.text.trim().to_lowercase();
         let offset = query.offset.unwrap_or_default();
         let limit = query.limit.unwrap_or(250).clamp(1, 10_000);
-        Ok(resources
+        let mut page = resources
             .into_iter()
-            .map(|resource| resource.record)
             .filter(|resource| {
                 query
                     .resource_type
                     .as_ref()
-                    .is_none_or(|kind| resource.resource_type == *kind)
+                    .is_none_or(|kind| resource.record.resource_type == *kind)
                     && (text.is_empty()
-                        || resource.id.to_lowercase().contains(&text)
-                        || resource.label.to_lowercase().contains(&text)
+                        || resource.record.id.to_lowercase().contains(&text)
+                        || resource.record.label.to_lowercase().contains(&text)
                         || resource
+                            .record
                             .files
                             .iter()
                             .any(|file| file.path.to_lowercase().contains(&text))
-                        || Value::Object(resource.fields.clone())
+                        || Value::Object(resource.record.fields.clone())
                             .to_string()
                             .to_lowercase()
                             .contains(&text))
             })
             .skip(offset)
             .take(limit)
-            .collect())
+            .collect::<Vec<_>>();
+        self.resolve_resource_dependencies(project_id, &manifest, &mut page)?;
+        Ok(page.into_iter().map(|resource| resource.record).collect())
     }
 
     /// 引用解析仅取目标领域原始记录，避免依赖边形成递归查询。
@@ -207,11 +208,11 @@ impl DomainStore {
         for sheet in workbook.sheets {
             let data =
                 self.safe_xls_sheet_read(project_id, &file.path, &sheet.name, &workbook.sha256)?;
-            let Some(headers) = data.rows.first().map(|row| normalized_headers(row)) else {
+            let Some((header_index, headers)) = xls_header_row(manifest, &data.rows) else {
                 continue;
             };
-            for (index, row) in data.rows.iter().enumerate().skip(1) {
-                if row.iter().all(|value| value.trim().is_empty()) {
+            for (index, row) in data.rows.iter().enumerate().skip(header_index + 1) {
+                if row.iter().all(|value| value.trim().is_empty()) || is_comment_row(row) {
                     continue;
                 }
                 let fields = apply_field_mappings(manifest, fields_from_row(&headers, row));
@@ -240,6 +241,53 @@ impl DomainStore {
             .ok()
             .flatten()
     }
+}
+
+/// 996 的 BIFF 表常在前几行放字段编号和中文注释；选择最符合领域别名及稳定键的真实表头。
+fn xls_header_row(manifest: &DomainManifest, rows: &[Vec<String>]) -> Option<(usize, Vec<String>)> {
+    let aliases = manifest
+        .resources
+        .field_mappings
+        .iter()
+        .flat_map(|mapping| {
+            mapping
+                .aliases
+                .iter()
+                .map(move |alias| (normalize_field(alias), normalize_field(&mapping.field)))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let unique_keys = manifest
+        .resources
+        .unique_key
+        .iter()
+        .map(|field| normalize_field(field))
+        .collect::<BTreeSet<_>>();
+    let mut best: Option<(usize, usize, usize)> = None;
+    for (index, row) in rows.iter().take(32).enumerate() {
+        let matched = row
+            .iter()
+            .filter_map(|value| aliases.get(&normalize_field(value)).cloned())
+            .collect::<BTreeSet<_>>();
+        let unique_matches = matched.intersection(&unique_keys).count();
+        let score = (unique_matches, matched.len());
+        if score == (0, 0) {
+            continue;
+        }
+        if best.is_none_or(|(_, best_unique, best_total)| score > (best_unique, best_total)) {
+            best = Some((index, unique_matches, matched.len()));
+        }
+    }
+    let index = best.map(|value| value.0).unwrap_or_default();
+    rows.get(index).map(|row| (index, normalized_headers(row)))
+}
+
+fn is_comment_row(row: &[String]) -> bool {
+    row.iter()
+        .find(|value| !value.trim().is_empty())
+        .is_some_and(|value| {
+            let value = value.trim();
+            value.starts_with("//") || value.starts_with('#') || value.starts_with(';')
+        })
 }
 
 fn collect_text_resources(
@@ -661,6 +709,36 @@ mod tests {
         );
         assert_eq!(mapped.get("statPoints").and_then(Value::as_i64), Some(3));
         assert!(!mapped.contains_key("required_experience"));
+    }
+
+    #[test]
+    fn xls_header_detection_skips_numbering_and_comment_rows() {
+        let registry = crate::bundled_domain_registry().unwrap();
+        let manifest = registry
+            .packs
+            .iter()
+            .find(|manifest| manifest.system_id == "map")
+            .unwrap();
+        let rows = vec![
+            vec!["///key".to_string(), "idx".to_string(), "1".to_string()],
+            vec![
+                "//".to_string(),
+                "传出地图id".to_string(),
+                "传出坐标X".to_string(),
+            ],
+            vec![
+                "///idx".to_string(),
+                "MapId".to_string(),
+                "EventPosX".to_string(),
+            ],
+            vec!["//1".to_string(), "//2".to_string(), "416".to_string()],
+            vec!["4".to_string(), "1_001".to_string(), "429".to_string()],
+        ];
+        let (index, headers) = xls_header_row(manifest, &rows).unwrap();
+        assert_eq!(index, 2);
+        assert_eq!(headers[1], "MapId");
+        assert!(is_comment_row(&rows[3]));
+        assert!(!is_comment_row(&rows[4]));
     }
 
     fn write_shop_workbook(path: &Path) {

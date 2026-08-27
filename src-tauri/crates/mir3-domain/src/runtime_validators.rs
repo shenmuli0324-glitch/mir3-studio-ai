@@ -77,9 +77,10 @@ fn validate_runtime_projection(
 
     let valid = match rule {
         "map.bounds-contain-spawns" => values.iter().all(|value| {
-            positive_number(value, "width")
-                && positive_number(value, "height")
-                && nonempty_string(value, "spawnNpcId")
+            nonempty_string(value, "mapId")
+                && (!value.contains_key("width") || positive_number(value, "width"))
+                && (!value.contains_key("height") || positive_number(value, "height"))
+                && (!value.contains_key("spawnNpcId") || nonempty_string(value, "spawnNpcId"))
         }),
         "npc.script-entry-resolves" => values.iter().all(|value| {
             safe_relative_reference(value, "scriptPath")

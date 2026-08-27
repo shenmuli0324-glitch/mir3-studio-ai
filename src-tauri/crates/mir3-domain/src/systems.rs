@@ -1794,6 +1794,12 @@ impl DomainStore {
                 diagnostics.push(format!("DOMAIN_VALIDATOR_UNSUPPORTED:{}", validator.kind));
             }
         }
+        const MAX_VALIDATOR_DIAGNOSTICS: usize = 200;
+        if diagnostics.len() > MAX_VALIDATOR_DIAGNOSTICS {
+            let total = diagnostics.len();
+            diagnostics.truncate(MAX_VALIDATOR_DIAGNOSTICS);
+            diagnostics.push(format!("DOMAIN_DIAGNOSTICS_TRUNCATED:{total}"));
+        }
         DomainValidatorResult {
             id: validator.id.clone(),
             kind: validator.kind.clone(),
@@ -1872,7 +1878,12 @@ impl DomainStore {
             {
                 continue;
             }
-            let access = access_for(manifest, extension.as_deref());
+            // 正式校验必须复用查看/编辑相同的格式门禁，未知二进制只读诊断而非误报为可写错误。
+            let access = if root.join(&path).is_file() {
+                self.verified_access_for(project_id, manifest, &path, extension.as_deref())
+            } else {
+                access_for(manifest, extension.as_deref())
+            };
             let (content, syntax_error, projected_size) = validation_file_payload(
                 &path,
                 extension.as_deref(),
@@ -2042,9 +2053,9 @@ impl DomainStore {
                 project_id,
                 system_id,
                 &crate::DomainResourceQuery {
-                    text: String::new(),
+                    text: resource_id.to_string(),
                     resource_type: None,
-                    limit: Some(10_000),
+                    limit: Some(8),
                     offset: None,
                 },
             )?
@@ -3606,7 +3617,12 @@ mod tests {
         let registry = bundled_domain_registry().unwrap();
         assert_eq!(registry.packs.len(), 33);
         assert!(registry.packs.iter().all(|pack| {
-            pack.version == "1.3.1"
+            pack.version
+                == if pack.system_id == "map" {
+                    "1.3.2"
+                } else {
+                    "1.3.1"
+                }
                 && pack.supported_engine_range == ">=1.0.0"
                 && pack.engine_compatibility.strategy == "evidence-gated-auto-generalization-v1"
                 && !pack.engine_compatibility.version_aliases.is_empty()

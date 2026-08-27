@@ -1,24 +1,19 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDependencyGraph, DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainPackRelease, DomainPackRemoteCandidate, DomainPackState, DomainResourceRecord, DomainSnapshot, DomainValidationReport, SafeTextOpen } from './types'
+import type { DomainDependencyGraph, DomainDraft, DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainResourceRecord, DomainSnapshot, DomainValidationReport, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { CircleCheck, CircleExclamation, Magnifier } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { listen } from '@tauri-apps/api/event'
-import { useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { SystemAiPanel } from '@/features/system-ai/system-ai-panel'
 import { toast } from '@/utils'
 import { DevToolWorkspace } from '../shell/devtool-workspace'
 import {
-  activateDomainPack,
   applyDomainDraft,
-  checkDomainPackUpdates,
   cloneLegacyDomainDraft,
-  describeDomainSystem,
-  getDomainPackState,
   getDomainResource,
   listDomainDrafts,
   listDomainSystems,
@@ -31,9 +26,6 @@ import {
   queryUnclaimedDomainFiles,
   resolveDomainDependencies,
   restoreDomainSnapshot,
-  rollbackDomainPack,
-  setDomainPackEnabled,
-  stageDomainPackUpdate,
   validateDomainDraft,
   validateDomainSystem,
 } from './api'
@@ -59,6 +51,8 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
   const [resourceTab, setResourceTab] = useState<ResourceTab>('resources')
   const [centerTab, setCenterTab] = useState<CenterTab>('domain')
   const [search, setSearch] = useState('')
+  const [resourceLimit, setResourceLimit] = useState(200)
+  const deferredSearch = useDeferredValue(search)
   const [selectedFile, setSelectedFile] = useState<DomainFileRecord | null>(null)
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [editedContent, setEditedContent] = useState<string | null>(null)
@@ -74,38 +68,6 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
     enabled: project != null,
   })
   const manifest = manifests.data?.find(item => item.systemId === tool.id) ?? fallbackManifest(tool)
-  const description = useQuery({
-    queryKey: ['domain-system-description', project?.id, tool.id],
-    queryFn: () => describeDomainSystem(project!.id, tool.id),
-    enabled: project != null,
-  })
-  const packState = useQuery({
-    queryKey: ['domain-pack-state', tool.id],
-    queryFn: () => getDomainPackState(tool.id),
-    enabled: project != null,
-  })
-  const activatePack = useMutation({
-    mutationFn: (candidate: DomainPackRelease) => activateDomainPack(tool.id, candidate.version, candidate.hash),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-systems'] })
-    },
-  })
-  const rollbackPack = useMutation({
-    mutationFn: () => rollbackDomainPack(tool.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-systems'] })
-    },
-  })
-  const togglePack = useMutation({
-    mutationFn: (enabled: boolean) => setDomainPackEnabled(tool.id, enabled),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
-      void queryClient.invalidateQueries({ queryKey: ['domain-systems'] })
-    },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
-  })
   const restoreSnapshot = useMutation({
     mutationFn: (snapshotId: string) => restoreDomainSnapshot(project!.id, snapshotId),
     onSuccess: () => {
@@ -124,36 +86,19 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
     if (window.confirm(t('studio.devtools.snapshot.restore_confirm')))
       restoreSnapshot.mutate(snapshotId)
   }
-  const checkPackUpdates = useMutation({
-    mutationFn: () => checkDomainPackUpdates(tool.id),
-    onSuccess: (result) => {
-      if (result.updates.length === 0)
-        toast(t('studio.devtools.pack.no_update'), {})
-    },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
-  })
-  const remoteCandidate = checkPackUpdates.data?.updates[0]
-  const stagePackUpdate = useMutation({
-    mutationFn: (version: string) => stageDomainPackUpdate(tool.id, version),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
-      toast(t('studio.devtools.pack.staged'), {})
-    },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
-  })
   const files = useQuery({
-    queryKey: ['domain-files', project?.id, tool.id, search],
-    queryFn: () => queryDomainFiles(project!.id, tool.id, search),
+    queryKey: ['domain-files', project?.id, tool.id, deferredSearch],
+    queryFn: () => queryDomainFiles(project!.id, tool.id, deferredSearch),
     enabled: project != null,
   })
   const unclaimedFiles = useQuery({
-    queryKey: ['domain-unclaimed-files', project?.id, search],
-    queryFn: () => queryUnclaimedDomainFiles(project!.id, search),
+    queryKey: ['domain-unclaimed-files', project?.id, deferredSearch],
+    queryFn: () => queryUnclaimedDomainFiles(project!.id, deferredSearch),
     enabled: project != null && resourceTab === 'files',
   })
   const resources = useQuery({
-    queryKey: ['domain-resources', project?.id, tool.id, search],
-    queryFn: () => queryDomainResources(project!.id, tool.id, search, 10_000),
+    queryKey: ['domain-resources', project?.id, tool.id, deferredSearch, resourceLimit],
+    queryFn: () => queryDomainResources(project!.id, tool.id, deferredSearch, resourceLimit),
     enabled: project != null && resourceTab === 'resources',
   })
   const dependencyGraph = useQuery({
@@ -249,16 +194,6 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
   })
 
   useEffect(() => {
-    const unlisten = listen<string[]>('domain-pack-candidates-updated', (event) => {
-      if (event.payload.includes(tool.id))
-        void queryClient.invalidateQueries({ queryKey: ['domain-pack-state', tool.id] })
-    })
-    return () => {
-      void unlisten.then(dispose => dispose())
-    }
-  }, [queryClient, tool.id])
-
-  useEffect(() => {
     let cancelled = false
     const openDrafts = (drafts.data ?? []).filter(draft => draft.status === 'open')
     void classifyDraftScopes(project?.id, openDrafts).then((scopes) => {
@@ -290,6 +225,11 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
     setSelectedFile(resource.files[0] ?? null)
     setEditedContent(null)
     setCenterTab('domain')
+  }
+
+  function handleSearch(value: string) {
+    setSearch(value)
+    setResourceLimit(200)
   }
 
   async function runValidation() {
@@ -367,7 +307,7 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
           activeTab={resourceTab}
           onTab={setResourceTab}
           search={search}
-          onSearch={setSearch}
+          onSearch={handleSearch}
           files={files.data ?? []}
           resources={resources.data ?? []}
           unclaimedFiles={unclaimedFiles.data ?? []}
@@ -379,6 +319,8 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
           onSelectResource={selectResource}
           onOpenSystem={onOpenSystem}
           loading={files.isLoading || unclaimedFiles.isLoading || resources.isLoading}
+          hasMoreResources={(resources.data?.length ?? 0) >= resourceLimit}
+          onLoadMoreResources={() => setResourceLimit(value => value + 200)}
         />
       )}
       toolbar={(
@@ -393,31 +335,6 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
           activeTab={centerTab}
           onTab={setCenterTab}
           onValidate={() => void runValidation()}
-          packState={packState.data}
-          remoteCandidate={remoteCandidate}
-          busy={activatePack.isPending || rollbackPack.isPending || togglePack.isPending || checkPackUpdates.isPending || stagePackUpdate.isPending}
-          onCheckUpdate={() => checkPackUpdates.mutate()}
-          onStageUpdate={() => {
-            if (remoteCandidate)
-              stagePackUpdate.mutate(remoteCandidate.version)
-          }}
-          onActivate={() => {
-            const candidate = packState.data?.candidate
-            // eslint-disable-next-line no-alert
-            if (candidate && window.confirm(t('studio.devtools.pack.activate_confirm', { version: candidate.version })))
-              activatePack.mutate(candidate)
-          }}
-          onRollback={() => {
-            // eslint-disable-next-line no-alert
-            if (window.confirm(t('studio.devtools.pack.rollback_confirm')))
-              rollbackPack.mutate()
-          }}
-          onToggleEnabled={() => {
-            const enabled = packState.data?.enabled !== false
-            // eslint-disable-next-line no-alert
-            if (window.confirm(t(packToggleConfirmationKey(enabled))))
-              togglePack.mutate(!enabled)
-          }}
         />
       )}
       rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedResourceKey, draftPreview?.preview.draft.id, handleAiDraftHandoff)}
@@ -427,7 +344,7 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
           activeTab={centerTab}
           manifest={manifest}
           files={files.data ?? []}
-          description={description.data}
+          description={describeLoadedFiles(files.data ?? [])}
           resource={selectedResource.data}
           resourceLoading={selectedResource.isLoading}
           resourceError={selectedResource.error}
@@ -463,7 +380,7 @@ export function DomainSystemView({ tool, project, onBack, onOpenSystem, target }
   )
 }
 
-function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources, unclaimedFiles, manifest, dependencyGraph, selectedPath, selectedResourceId, onSelectFile, onSelectResource, onOpenSystem, loading }: {
+function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources, unclaimedFiles, manifest, dependencyGraph, selectedPath, selectedResourceId, onSelectFile, onSelectResource, onOpenSystem, loading, hasMoreResources, onLoadMoreResources }: {
   activeTab: ResourceTab
   onTab: (tab: ResourceTab) => void
   search: string
@@ -479,6 +396,8 @@ function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources,
   onSelectResource: (resource: DomainResourceRecord) => void
   onOpenSystem?: (systemId: string) => void
   loading: boolean
+  hasMoreResources: boolean
+  onLoadMoreResources: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -495,7 +414,7 @@ function ResourceSidebar({ activeTab, onTab, search, onSearch, files, resources,
         </div>
       </If>
       <div className="min-h-0 flex-1 overflow-auto p-2">
-        <If cond={activeTab === 'dependencies'} else={renderResourceOrFileList(activeTab, resources, files, unclaimedFiles, selectedResourceId, selectedPath, onSelectResource, onSelectFile, loading)}>
+        <If cond={activeTab === 'dependencies'} else={renderResourceOrFileList(activeTab, resources, files, unclaimedFiles, selectedResourceId, selectedPath, onSelectResource, onSelectFile, loading, hasMoreResources, onLoadMoreResources)}>
           <DependencyList manifest={manifest} graph={dependencyGraph} files={files.filter(file => file.ownership === 'dependency')} selectedPath={selectedPath} onSelect={onSelectFile} onOpenSystem={onOpenSystem} loading={loading} />
         </If>
       </div>
@@ -513,17 +432,21 @@ function renderResourceOrFileList(
   onSelectResource: (resource: DomainResourceRecord) => void,
   onSelectFile: (file: DomainFileRecord) => void,
   loading: boolean,
+  hasMoreResources: boolean,
+  onLoadMoreResources: () => void,
 ) {
   if (activeTab === 'resources')
-    return <ResourceRecordList resources={resources} selectedId={selectedResourceId} onSelect={onSelectResource} loading={loading} />
+    return <ResourceRecordList resources={resources} selectedId={selectedResourceId} onSelect={onSelectResource} loading={loading} hasMore={hasMoreResources} onLoadMore={onLoadMoreResources} />
   return <FileProjectionList files={[...files, ...unclaimedFiles]} resourceMode={false} selectedPath={selectedPath} onSelect={onSelectFile} loading={loading} />
 }
 
-function ResourceRecordList({ resources, selectedId, onSelect, loading }: {
+function ResourceRecordList({ resources, selectedId, onSelect, loading, hasMore, onLoadMore }: {
   resources: DomainResourceRecord[]
   selectedId: string | null
   onSelect: (resource: DomainResourceRecord) => void
   loading: boolean
+  hasMore: boolean
+  onLoadMore: () => void
 }) {
   const { t } = useTranslation()
   if (loading)
@@ -543,6 +466,9 @@ function ResourceRecordList({ resources, selectedId, onSelect, loading }: {
           </span>
         </button>
       ))}
+      <If cond={hasMore}>
+        <Button className="mt-2 w-full" size="sm" variant="ghost" onPress={onLoadMore}>{t('studio.devtools.resources.load_more')}</Button>
+      </If>
     </div>
   )
 }
@@ -701,7 +627,7 @@ function DependencyMetric({ label, value }: { label: string, value: number }) {
   )
 }
 
-function WorkspaceToolbar({ manifest, project, drafts, draftScopes, activeDraftId, onDraft, onClearDraft, activeTab, onTab, onValidate, packState, remoteCandidate, busy, onCheckUpdate, onStageUpdate, onActivate, onRollback, onToggleEnabled }: {
+function WorkspaceToolbar({ manifest, project, drafts, draftScopes, activeDraftId, onDraft, onClearDraft, activeTab, onTab, onValidate }: {
   manifest: DomainManifest
   project: Mir3Project | null
   drafts: DomainDraft[]
@@ -712,14 +638,6 @@ function WorkspaceToolbar({ manifest, project, drafts, draftScopes, activeDraftI
   activeTab: CenterTab
   onTab: (tab: CenterTab) => void
   onValidate: () => void
-  packState?: DomainPackState
-  remoteCandidate?: DomainPackRemoteCandidate
-  busy: boolean
-  onCheckUpdate: () => void
-  onStageUpdate: () => void
-  onActivate: () => void
-  onRollback: () => void
-  onToggleEnabled: () => void
 }) {
   const { t } = useTranslation()
   const availableDrafts = drafts.filter((draft) => {
@@ -735,76 +653,26 @@ function WorkspaceToolbar({ manifest, project, drafts, draftScopes, activeDraftI
   }
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2 overflow-auto">
-        <ControlValue label={t('studio.devtools.controls.project')} value={project?.name ?? t('studio.devtools.no_project')} />
-        <ControlValue label={t('studio.devtools.controls.system')} value={t(`studio.devtools.tool.${manifest.systemId}.title`)} />
-        <ControlValue label={t('studio.devtools.controls.plugin')} value={`v${packState?.current?.version ?? manifest.version}`} />
-        <ControlValue label={t('studio.devtools.controls.engine')} value={project?.engineVersion ?? t('studio.devtools.engine_unknown')} />
-        <label className="shrink-0 rounded-lg border border-line bg-panel2 px-2 py-1">
-          <span className="block text-[8px] uppercase tracking-wider text-muted">{t('studio.devtools.controls.draft')}</span>
-          <select className="max-w-48 bg-transparent text-[10px] text-ink outline-none" value={activeDraftId} aria-label={t('studio.devtools.controls.draft')} onChange={event => selectDraft(event.target.value)}>
-            <option value="">{t('studio.devtools.controls.no_draft')}</option>
-            {availableDrafts.map(draft => <option key={draft.id} value={draft.id}>{draftLabel(draft, draftScopes[draft.id], t('studio.devtools.diff.legacy_short'))}</option>)}
-          </select>
-        </label>
-        <DomainConfiguration manifest={manifest} />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="min-w-0">
+          <strong className="block truncate text-xs font-medium text-ink">{t(`studio.devtools.tool.${manifest.systemId}.title`)}</strong>
+          <small className="block truncate text-[9px] text-muted">{project?.name ?? t('studio.devtools.no_project')}</small>
+        </div>
+        <If cond={availableDrafts.length > 0}>
+          <label className="shrink-0 rounded-lg border border-line bg-panel2 px-2 py-1">
+            <span className="block text-[8px] text-muted">{t('studio.devtools.controls.draft')}</span>
+            <select className="max-w-48 bg-transparent text-[10px] text-ink outline-none" value={activeDraftId} aria-label={t('studio.devtools.controls.draft')} onChange={event => selectDraft(event.target.value)}>
+              <option value="">{t('studio.devtools.controls.no_draft')}</option>
+              {availableDrafts.map(draft => <option key={draft.id} value={draft.id}>{draft.intent}</option>)}
+            </select>
+          </label>
+        </If>
       </div>
       <div className="flex items-center gap-1 overflow-auto">
-        <Button size="sm" variant="ghost" isDisabled={busy} onPress={onCheckUpdate}>{t('studio.devtools.pack.check_update')}</Button>
-        <If cond={remoteCandidate != null && packState?.candidate?.version !== remoteCandidate?.version}>
-          <Button size="sm" variant="ghost" isDisabled={busy} onPress={onStageUpdate}>{t('studio.devtools.pack.stage_update', { version: remoteCandidate?.version })}</Button>
-        </If>
-        <If cond={packState?.candidate != null}>
-          <Button size="sm" className="bg-accent text-white" isPending={busy} onPress={onActivate}>{t('studio.devtools.pack.activate', { version: packState?.candidate?.version })}</Button>
-        </If>
-        <If cond={packState?.previous != null || packState?.lkg != null}>
-          <Button size="sm" variant="ghost" isDisabled={busy} onPress={onRollback}>{t('studio.devtools.pack.rollback')}</Button>
-        </If>
-        <Button size="sm" variant="ghost" isDisabled={busy} onPress={onToggleEnabled}>
-          {t(packToggleLabelKey(packState?.enabled !== false))}
-        </Button>
-        <details className="group relative shrink-0">
-          <summary className="cursor-pointer list-none rounded-lg px-2 py-1.5 text-[10px] text-muted hover:bg-panel2 hover:text-ink">{t('studio.devtools.pack.changelog')}</summary>
-          <div className="absolute right-0 top-9 z-30 w-[420px] max-w-[70vw] rounded-xl border border-line bg-panel p-4 shadow-2xl">
-            <strong className="text-xs text-ink">{t('studio.devtools.pack.changelog_title', { system: manifest.systemId })}</strong>
-            <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-[10px] leading-5 text-muted">{packState?.changelog ?? t('studio.devtools.pack.changelog_unavailable')}</pre>
-          </div>
-        </details>
-        {(['domain', 'source', 'diff', 'validation'] as const).map(tab => <Button key={tab} size="sm" variant="ghost" className={centerTabClass(activeTab === tab)} onPress={() => onTab(tab)}>{t(`studio.devtools.center.${tab}`)}</Button>)}
-        <Button size="sm" variant="ghost" onPress={onValidate}>{t('studio.devtools.validate')}</Button>
+        {(['domain', 'source', 'diff'] as const).map(tab => <Button key={tab} size="sm" variant="ghost" className={centerTabClass(activeTab === tab)} onPress={() => onTab(tab)}>{t(`studio.devtools.center.${tab}`)}</Button>)}
+        <Button size="sm" variant="ghost" className={centerTabClass(activeTab === 'validation')} onPress={onValidate}>{t('studio.devtools.center.validation')}</Button>
       </div>
     </div>
-  )
-}
-
-function ControlValue({ label, value }: { label: string, value: string }) {
-  return (
-    <span className="max-w-36 shrink-0 rounded-lg border border-line bg-panel2 px-2 py-1">
-      <small className="block text-[8px] uppercase tracking-wider text-muted">{label}</small>
-      <strong className="block truncate text-[10px] font-medium text-ink">{value}</strong>
-    </span>
-  )
-}
-
-function DomainConfiguration({ manifest }: { manifest: DomainManifest }) {
-  const { t } = useTranslation()
-  return (
-    <details className="group relative shrink-0">
-      <summary className="cursor-pointer list-none rounded-lg border border-line bg-panel2 px-2 py-1.5 text-[10px] text-ink">{t('studio.devtools.controls.domain_config')}</summary>
-      <div className="absolute left-0 top-9 z-40 w-80 rounded-xl border border-line bg-panel p-4 shadow-2xl">
-        <strong className="text-xs text-ink">{t('studio.devtools.controls.domain_config_title')}</strong>
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-[10px]">
-          <dt className="text-muted">{t('studio.devtools.controls.renderer')}</dt>
-          <dd className="text-ink">{manifest.renderer}</dd>
-          <dt className="text-muted">{t('studio.devtools.controls.kernel_api')}</dt>
-          <dd className="text-ink">{manifest.kernelApiRange}</dd>
-          <dt className="text-muted">{t('studio.devtools.controls.engine_range')}</dt>
-          <dd className="text-ink">{manifest.supportedEngineRange}</dd>
-          <dt className="text-muted">{t('studio.devtools.controls.dependencies')}</dt>
-          <dd className="break-words text-ink">{manifest.dependencies.join(', ') || t('studio.devtools.dependencies.empty')}</dd>
-        </dl>
-      </div>
-    </details>
   )
 }
 
@@ -1079,10 +947,14 @@ function isLegacyOrUnscopedError(reason: unknown) {
   return message.includes('DRAFT_DOMAIN_REQUIRED') || message.includes('DRAFT_LEGACY_READONLY')
 }
 
-function draftLabel(draft: DomainDraft, scope: DraftScopeState | undefined, legacyLabel: string) {
-  if (scope?.legacyOrUnscoped)
-    return `${draft.intent} · ${legacyLabel}`
-  return draft.intent
+function describeLoadedFiles(files: DomainFileRecord[]) {
+  return {
+    ownedFiles: files.filter(file => file.ownership === 'owned').length,
+    sharedFiles: files.filter(file => file.ownership === 'shared').length,
+    writableFiles: files.filter(file => file.access !== 'readonly').length,
+    readonlyFiles: files.filter(file => file.access === 'readonly').length,
+    diagnostics: [],
+  }
 }
 
 function isTextFile(file?: DomainFileRecord | null): boolean {
@@ -1204,16 +1076,4 @@ function validationTitleKey(valid: boolean) {
   if (valid)
     return 'studio.devtools.validation.passed'
   return 'studio.devtools.validation.failed'
-}
-
-function packToggleLabelKey(enabled: boolean) {
-  if (enabled)
-    return 'studio.devtools.pack.disable'
-  return 'studio.devtools.pack.enable'
-}
-
-function packToggleConfirmationKey(enabled: boolean) {
-  if (enabled)
-    return 'studio.devtools.pack.disable_confirm'
-  return 'studio.devtools.pack.enable_confirm'
 }

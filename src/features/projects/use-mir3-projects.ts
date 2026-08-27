@@ -44,7 +44,7 @@ export function useMir3Projects() {
   const activateProject = useMutation({
     mutationFn: async (projectId: string) => {
       const project = await invoke<Mir3Project>('project_activate', { projectId })
-      await store.harness.restart()
+      restartHarnessAfterProjectChange()
       return project
     },
     onSuccess: () => invalidateProjectQueries(queryClient),
@@ -70,7 +70,7 @@ export function useMir3Projects() {
       const wasActive = active.data?.id === projectId
       await invoke<void>('project_remove', { projectId })
       if (wasActive)
-        await store.harness.restart()
+        restartHarnessAfterProjectChange()
     },
     onSuccess: () => invalidateProjectQueries(queryClient),
   })
@@ -82,7 +82,7 @@ export function useMir3Projects() {
         return null
       const project = await invoke<Mir3Project>('project_relink', { projectId, path })
       if (active.data?.id === projectId)
-        await store.harness.restart()
+        restartHarnessAfterProjectChange()
       return project
     },
     onSuccess: () => invalidateProjectQueries(queryClient),
@@ -94,6 +94,14 @@ export function useMir3Projects() {
     scan: scan.data ?? null,
     loading: projects.isLoading || active.isLoading,
     busy: importProject.isPending || activateProject.isPending || selectWorkspace.isPending || startScan.isPending || removeProject.isPending || relinkProject.isPending,
+    pending: {
+      import: importProject.isPending,
+      activate: activateProject.isPending,
+      workspace: selectWorkspace.isPending,
+      scan: startScan.isPending,
+      remove: removeProject.isPending,
+      relink: relinkProject.isPending,
+    },
     error: projects.error || active.error || importProject.error || activateProject.error || selectWorkspace.error || startScan.error || removeProject.error || relinkProject.error,
     importProject: importProject.mutateAsync,
     activateProject: activateProject.mutateAsync,
@@ -102,6 +110,12 @@ export function useMir3Projects() {
     removeProject: removeProject.mutateAsync,
     relinkProject: relinkProject.mutateAsync,
   }
+}
+
+function restartHarnessAfterProjectChange() {
+  void store.harness.restart().catch((error) => {
+    console.error('[MIR3 project] Harness restart failed after project change:', error)
+  })
 }
 
 export function invalidateProjectQueries(queryClient: ReturnType<typeof useQueryClient>) {
