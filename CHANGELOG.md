@@ -1,5 +1,9 @@
 # MIR3 Studio AI 更新记录
 
+## 0.9.7 - 2026-08-27
+
+- 修复从旧版真机 Profile 升级时仍加载已合并的 `@mir3-studio/dsh-mir3-safe-files` bundle，导致 MIR3 AI Core 在监听端口前退出的问题；启动迁移现在同时清理正式的 `dsh.profile.bundles` 与早期兼容结构。
+
 ## 0.9.6 - 2026-08-27
 
 - 33 个领域包统一升级至 1.3.1：字段别名参与真实读取、Schema、引用校验与安全写入，引用依赖由字段契约闭包生成，全部 33 条运行时规则由共享 fail-closed 执行器实际运行。

@@ -1397,11 +1397,10 @@ fn ensure_manifest_dependency(path: &Path) -> Result<(), String> {
         Value::String(LOCAL_PLUGIN_SPEC.to_string()),
     );
     dependencies.remove(RETIRED_SAFE_FILES_PACKAGE);
-    if let Some(plugins) = manifest
-        .pointer_mut("/dsh/bundle/plugins")
-        .and_then(Value::as_array_mut)
-    {
-        plugins.retain(|plugin| plugin.as_str() != Some(RETIRED_SAFE_FILES_PACKAGE));
+    for pointer in ["/dsh/profile/bundles", "/dsh/bundle/plugins"] {
+        if let Some(plugins) = manifest.pointer_mut(pointer).and_then(Value::as_array_mut) {
+            plugins.retain(|plugin| plugin.as_str() != Some(RETIRED_SAFE_FILES_PACKAGE));
+        }
     }
     let content = serde_json::to_string_pretty(&manifest)
         .map_err(|e| format!("MIR3_SYSTEM_MANIFEST_RENDER_FAILED: {e}"))?;
@@ -1570,7 +1569,7 @@ mod tests {
             std::env::temp_dir().join(format!("mir3-system-manifest-{}.json", std::process::id()));
         fs::write(
             &path,
-            r#"{"dependencies":{"@mir3-studio/dsh-mir3-safe-files":"file:retired"},"dsh":{"bundle":{"plugins":["regular","@mir3-studio/dsh-mir3-safe-files"]}}}"#,
+            r#"{"dependencies":{"@mir3-studio/dsh-mir3-safe-files":"file:retired"},"dsh":{"profile":{"bundles":["@deepseek-ai/dsh-base","regular","@mir3-studio/dsh-mir3-safe-files"]},"bundle":{"plugins":["legacy-regular","@mir3-studio/dsh-mir3-safe-files"]}}}"#,
         )
         .unwrap();
         ensure_manifest_dependency(&path).unwrap();
@@ -1584,8 +1583,12 @@ mod tests {
             None
         );
         assert_eq!(
+            manifest.pointer("/dsh/profile/bundles"),
+            Some(&serde_json::json!(["@deepseek-ai/dsh-base", "regular"]))
+        );
+        assert_eq!(
             manifest.pointer("/dsh/bundle/plugins"),
-            Some(&serde_json::json!(["regular"]))
+            Some(&serde_json::json!(["legacy-regular"]))
         );
         fs::remove_file(path).ok();
     }
