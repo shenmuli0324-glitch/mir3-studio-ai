@@ -9,7 +9,8 @@ description: 开发、分析、修改或验收996传奇3项目时使用，覆盖
 
 ## 工具边界
 
-- 使用 Harness 原生文件、搜索、编辑、终端和会话能力处理普通文件任务；不要寻找或创建另一套 MIR3 文件工具。
+- 996 的 `.txt`、`.ini`、`.cfg`、`.lua` 等脚本可能使用 GBK/CP936。读取这些领域文件时必须先用 `mcp__mir3__mir3_resource_query` 定位稳定资源 ID，再用 `mcp__mir3__mir3_resource_get` 读取解码后的内容；不要因为 Harness 原生 `read` 仅支持 UTF-8 就判断文件损坏。
+- 只有已确认是 UTF-8 的源码和文档才使用 Harness 原生文件工具。GBK/GB18030 文件的修改必须走 MIR3 Draft 与结构化能力，以保留原编码、BOM、换行和字节稳定性。
 - 使用 `mcp__mir3__mir3_system_list` 和 `mcp__mir3__mir3_system_describe` 确认目标领域、插件版本、文件覆盖和依赖。
 - 使用 `mcp__mir3__mir3_resource_query`、`mcp__mir3__mir3_resource_get` 和 `mcp__mir3__mir3_dependency_resolve` 查询当前领域的真实文件资源与关系。
 - 计划修改正式项目时，先调用 `mcp__mir3__mir3_draft_open`，再用 `mcp__mir3__mir3_domain_operate` 或版本固定的领域能力写入外置 Draft。
@@ -27,7 +28,7 @@ description: 开发、分析、修改或验收996传奇3项目时使用，覆盖
 
 1. 确认项目状态和引擎版本。
 2. 查询领域索引和相关 ACTIVE 知识。
-3. 使用 Harness 原生工具阅读必要文件。
+3. 按文件编码路由读取：UTF-8 源码使用 Harness 原生工具，996 领域脚本使用 MIR3 资源工具。
 4. 创建 Draft 并提交结构化修改。
 5. 查看 Diff，执行 996 领域校验。
 6. 交由用户在 Studio 中预览、备份并应用。

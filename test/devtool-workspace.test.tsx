@@ -21,7 +21,10 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 function FixtureIcon() {
   return <span />
@@ -60,6 +63,7 @@ describe('development tool three-pane workspace', () => {
   })
 
   it('uses one mutually exclusive narrow-screen drawer state', () => {
+    vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList)
     render(
       <DevToolWorkspace
         tool={tool}
@@ -71,9 +75,9 @@ describe('development tool three-pane workspace', () => {
         <span>mobile-center-fixture</span>
       </DevToolWorkspace>,
     )
-    fireEvent.click(screen.getAllByRole('button', { name: 'Resources' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse resource pane' }))
     expect(screen.getByText('mobile-resource-fixture').closest('aside')?.className).toContain('absolute')
-    fireEvent.click(screen.getAllByRole('button', { name: 'AI' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse AI pane' }))
     expect(screen.getByText('mobile-resource-fixture').closest('aside')?.className).toContain('max-[900px]:hidden')
     expect(screen.getByText('mobile-ai-fixture').parentElement?.className).toContain('absolute')
   })

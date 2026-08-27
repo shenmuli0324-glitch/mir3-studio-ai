@@ -52,11 +52,12 @@ describe('system task scope', () => {
     expect(instructions).toContain('scoped MIR3 MCP Draft tools')
   })
 
-  it('keeps the cross-system write selector closed until the user opens it', () => {
+  it('keeps the cross-system write selector inside the composer and closed by default', () => {
     const panel = readFileSync(new URL('../src/features/system-ai/system-ai-panel.tsx', import.meta.url), 'utf8')
-    expect(panel).toContain('const [globalScopeOpen, setGlobalScopeOpen] = useState(false)')
-    expect(panel).toContain('open={globalScopeOpen}')
-    expect(panel).toContain('onToggle={event => setGlobalScopeOpen(event.currentTarget.open)}')
+    expect(panel).toContain('<GlobalScopePicker manifest={manifest}')
+    expect(panel).toContain('<details className="group relative min-w-0">')
+    expect(panel).not.toContain('open={globalScopeOpen}')
+    expect(panel).toContain('studio.devtools.ai.global_scope_summary')
   })
 })
 

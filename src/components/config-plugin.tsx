@@ -10,6 +10,7 @@ import { If } from 'react-if-lite'
 import { store } from '@/store'
 import { toast } from '@/utils'
 import { useDshPlugins } from '../hooks/use-dsh-plugins'
+import { DomainPackManager } from './domain-pack-manager'
 import { Ellipsis as TextEllipsis } from './ellipsis'
 import { Empty } from './empty'
 import { Item } from './item'
@@ -139,6 +140,8 @@ export function ConfigPlugin() {
   return (
     <div>
       <PanelHeader className="sticky top-0 bg-canvas z-10 pb-3" title={t('plugins.title')} description={t('plugins.panel_tooltip')} />
+
+      <DomainPackManager />
 
       {/* 加载 / 失败 / 空态 */}
       <PanelState loading={loading} error={error}>

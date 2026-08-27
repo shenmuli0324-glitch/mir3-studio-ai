@@ -320,15 +320,11 @@ function FileTreeButton({ file, selected, onSelect }: { file: DomainFileRecord, 
 }
 
 function FileWorkspaceToolbar({ manifest, project, selectedPath }: { manifest: DomainManifest, project: Mir3Project | null, selectedPath?: string }) {
-  const { t } = useTranslation()
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
-      <span className="min-w-0 shrink-0">
-        <strong className="block truncate text-xs font-medium text-ink">{t(`studio.devtools.tool.${manifest.systemId}.title`)}</strong>
-        <small className="block truncate text-[9px] text-muted">{project?.name ?? t('studio.devtools.no_project')}</small>
-      </span>
+    <div className="flex min-w-0 flex-1 items-center gap-3 text-[10px] text-muted">
+      <span className="shrink-0">{project?.name ?? manifest.systemId}</span>
       <If cond={selectedPath != null}>
-        <span className="min-w-0 truncate border-l border-line pl-3 font-mono text-[10px] text-muted">{selectedPath}</span>
+        <span className="min-w-0 truncate border-l border-line pl-3 font-mono">{selectedPath}</span>
       </If>
     </div>
   )

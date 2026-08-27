@@ -275,7 +275,11 @@ export function getDomainPackState(systemId: string) {
   return invoke<DomainPackState>('domain_pack_state', { systemId })
 }
 
-export function checkDomainPackUpdates(systemId: string) {
+export function listDomainPacks() {
+  return invoke<DomainPackState[]>('domain_pack_list')
+}
+
+export function checkDomainPackUpdates(systemId?: string) {
   return invoke<DomainPackUpdateCheck>('domain_pack_update_check', { systemId })
 }
 

@@ -20,6 +20,7 @@ import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
 import { store } from '@/store'
 import { StudioViewContent } from '@/views'
+import { DevToolsView } from '@/views/devtools-view'
 import { DesktopUpdater } from './components/desktop-updater'
 import { DownloadToast } from './components/download-toast-trigger'
 import { HarnessUpdater } from './components/harness-updater'
@@ -270,7 +271,7 @@ export function App() {
   }
 
   function readyContent() {
-    if (harnessVisible)
+    if (harnessVisible || activeView === 'devtools')
       return null
     return <StudioViewContent view={activeView} devtoolsTarget={devtoolsTarget} />
   }
@@ -299,6 +300,7 @@ export function App() {
               <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} guiDirty={guiScope.dirty} onNavigate={navigate} />
               <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
                 <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
+                <div className={persistentDevtoolsClass(activeView)}><DevToolsView target={devtoolsTarget} /></div>
                 <div className={studioPageClass(activeView)}>{readyContent()}</div>
                 <If cond={visiblePendingCompositeReview != null && visibleCompositeReview == null}>
                   <Button
@@ -329,9 +331,16 @@ export function App() {
 
 function studioPageClass(view: StudioView): string {
   const base = 'absolute inset-0 min-h-0 min-w-0'
-  if (isHarnessView(view))
+  if (isHarnessView(view) || view === 'devtools')
     return `${base} invisible pointer-events-none`
   return `${base} visible`
+}
+
+function persistentDevtoolsClass(view: StudioView): string {
+  const base = 'absolute inset-0 min-h-0 min-w-0'
+  if (view === 'devtools')
+    return `${base} visible`
+  return `${base} invisible pointer-events-none`
 }
 
 function reviewForActiveProject(review: CompositeDraftReviewRequest | null, projectId?: string): CompositeDraftReviewRequest | null {

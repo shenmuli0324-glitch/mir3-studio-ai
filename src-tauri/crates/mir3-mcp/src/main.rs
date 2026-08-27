@@ -141,32 +141,26 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
     if let Err(error) = validate_json_schema(&input_schema, &args, "arguments") {
         return tool_failure(&error);
     }
-    let scope_token = match required_string(&args, "scopeToken") {
-        Ok(value) => value,
-        Err(error) => return tool_failure(&error),
-    };
-    let scope_token = scope_token.as_str();
+    let scope_token = args
+        .get("scopeToken")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
     let result = match name {
-        "mir3_system_list" => store
-            .authorize_task_scope(project_id, scope_token, None, None, None)
+        "mir3_system_list" => authorize_project_read(store, project_id, scope_token, None)
             .and_then(|lease| {
-                store.list_domain_systems().map(|systems| {
-                    systems
+                store.list_domain_systems().map(|systems| match lease {
+                    Some(lease) => systems
                         .into_iter()
                         .filter(|system| lease.read_systems.contains(&system.system_id))
-                        .collect()
+                        .collect(),
+                    None => systems,
                 })
             })
             .map(system_list_payload),
         "mir3_system_describe" => required_string(&args, "systemId")
             .and_then(|system_id| {
-                store.authorize_task_scope(
-                    project_id,
-                    scope_token,
-                    Some(&system_id),
-                    None,
-                    None,
-                )?;
+                authorize_project_read(store, project_id, scope_token, Some(&system_id))?;
                 store.describe_domain_system(project_id, &system_id)
             })
             .map(|description| json!({"description": description})),
@@ -182,13 +176,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
             system_id
                 .and_then(|system_id| query.map(|query| (system_id, query)))
                 .and_then(|(system_id, query)| {
-                    store.authorize_task_scope(
-                        project_id,
-                        scope_token,
-                        Some(&system_id),
-                        None,
-                        None,
-                    )?;
+                    authorize_project_read(store, project_id, scope_token, Some(&system_id))?;
                     store.query_domain_resources(project_id, &system_id, &query)
                 })
                 .map(|resources| {
@@ -211,26 +199,14 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
             system_id
                 .and_then(|system_id| resource_id.map(|resource_id| (system_id, resource_id)))
                 .and_then(|(system_id, resource_id)| {
-                    store.authorize_task_scope(
-                        project_id,
-                        scope_token,
-                        Some(&system_id),
-                        None,
-                        None,
-                    )?;
+                    authorize_project_read(store, project_id, scope_token, Some(&system_id))?;
                     store.get_domain_resource(project_id, &system_id, &resource_id)
                 })
                 .map(|resource| json!({"resource": resource}))
         }
         "mir3_dependency_resolve" => required_string(&args, "systemId")
             .and_then(|system_id| {
-                store.authorize_task_scope(
-                    project_id,
-                    scope_token,
-                    Some(&system_id),
-                    None,
-                    None,
-                )?;
+                authorize_project_read(store, project_id, scope_token, Some(&system_id))?;
                 store.resolve_domain_dependencies(&system_id)
             })
             .map(|graph| json!({"graph": graph})),
@@ -1048,32 +1024,32 @@ fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "mir3_system_list",
-            "列出 MIR3 Studio Kernel 当前注册的 33 个领域系统。",
-            with_scope(empty_schema()),
+            "列出当前项目可读的 33 个领域系统；普通工作台无需令牌，受管任务可附带作用域令牌收窄结果。",
+            with_project_read(empty_schema()),
         ),
         tool(
             "mir3_system_describe",
             "返回一个领域包的版本、真实文件覆盖、依赖、视图和安全能力。",
-            with_scope(system_schema()),
+            with_project_read(system_schema()),
         ),
         tool(
             "mir3_resource_query",
             "按领域分页查询表格行或文本记录资源，同时返回真实文件来源和依赖诊断。",
-            with_scope(
+            with_project_read(
                 json!({"type":"object","properties":{"systemId":{"type":"string"},"text":{"type":"string"},"resourceType":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":MCP_MAX_QUERY_ITEMS},"offset":{"type":"integer","minimum":0}},"required":["systemId"],"additionalProperties":false}),
             ),
         ),
         tool(
             "mir3_resource_get",
-            "通过稳定资源 ID 读取领域文件元数据。",
-            with_scope(
+            "通过稳定资源 ID 读取领域资源及安全解码后的文件内容；996 的 GBK/GB18030 脚本应使用此工具，不要使用仅支持 UTF-8 的通用 read。",
+            with_project_read(
                 json!({"type":"object","properties":{"systemId":{"type":"string"},"resourceId":{"type":"string"}},"required":["systemId","resourceId"],"additionalProperties":false}),
             ),
         ),
         tool(
             "mir3_dependency_resolve",
             "返回当前系统可读依赖范围。",
-            with_scope(system_schema()),
+            with_project_read(system_schema()),
         ),
         tool(
             "mir3_draft_open",
@@ -1155,6 +1131,31 @@ fn with_scope(mut schema: Value) -> Value {
         }
     }
     schema
+}
+
+fn with_project_read(mut schema: Value) -> Value {
+    if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+        properties.insert(
+            "scopeToken".to_string(),
+            json!({"type":"string","minLength":32}),
+        );
+    }
+    schema
+}
+
+fn authorize_project_read(
+    store: &DomainStore,
+    project_id: &str,
+    scope_token: &str,
+    system_id: Option<&str>,
+) -> Result<Option<mir3_domain::TaskScopeLease>, String> {
+    if scope_token.is_empty() {
+        store.get_project(project_id)?;
+        return Ok(None);
+    }
+    store
+        .authorize_task_scope(project_id, scope_token, system_id, None, None)
+        .map(Some)
 }
 
 fn tool(name: &str, description: &str, input_schema: Value) -> Value {
@@ -3177,10 +3178,21 @@ mod tests {
         assert!(!schemas.contains("\"action\""));
         assert!(!schemas.contains("\"path\""));
         assert!(!schemas.contains("\"field\""));
-        assert!(definitions.iter().all(|definition| definition
-            .pointer("/inputSchema/required")
-            .and_then(Value::as_array)
-            .is_some_and(|required| required.iter().any(|value| value == "scopeToken"))));
+        let project_read_tools = [
+            "mir3_system_list",
+            "mir3_system_describe",
+            "mir3_resource_query",
+            "mir3_resource_get",
+            "mir3_dependency_resolve",
+        ];
+        for definition in &definitions {
+            let name = definition["name"].as_str().unwrap();
+            let requires_scope = definition
+                .pointer("/inputSchema/required")
+                .and_then(Value::as_array)
+                .is_some_and(|required| required.iter().any(|value| value == "scopeToken"));
+            assert_eq!(requires_scope, !project_read_tools.contains(&name));
+        }
         let schema_bytes = serde_json::to_vec(&definitions).unwrap().len();
         assert!(
             schema_bytes <= MCP_MAX_SCHEMA_BYTES,
@@ -3755,6 +3767,34 @@ mod tests {
         let store = DomainStore::new(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
+
+        let workbench_systems = call_tool(
+            &store,
+            &project.id,
+            "mir3_system_list",
+            json!({}),
+        );
+        assert_eq!(
+            workbench_systems
+                .pointer("/structuredContent/systems")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(33)
+        );
+        let workbench_query = call_tool(
+            &store,
+            &project.id,
+            "mir3_resource_query",
+            json!({"systemId":"quest","text":"QuestDiary","limit":10}),
+        );
+        assert_eq!(workbench_query.get("isError"), Some(&Value::Bool(false)));
+        let unscoped_write = call_tool(
+            &store,
+            &project.id,
+            "mir3_draft_open",
+            json!({"systemId":"quest","intent":"must fail"}),
+        );
+        assert!(tool_error(&unscoped_write).contains("scopeToken"));
 
         let lease = store
             .issue_task_scope(

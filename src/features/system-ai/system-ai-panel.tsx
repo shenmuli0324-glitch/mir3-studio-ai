@@ -1,19 +1,18 @@
 import type { DomainDraftHandoff } from './ai-handoff'
-import type { CapabilityResolution, DomainManifest, DomainMemory, TaskReceipt, TaskScopeLease, UserCapability } from '@/features/devtools/domain/types'
+import type { CapabilityResolution, DomainManifest, DomainMemory, TaskReceipt, TaskScopeLease } from '@/features/devtools/domain/types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
-import { ArrowUp, CircleStop, MagicWand, Plus, Sparkles } from '@gravity-ui/icons'
+import { ArrowUp, ChevronDown, CircleStop } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
-import { activateMemoryCandidate, associateDomainDraftComposite, bindSystemSession, compileUserCapability, getSystemSession, issueTaskScope, listDomainDrafts, listDomainMemories, listDomainSystems, listMemoryCandidates, listTaskReceipts, openDomainDraft, previewDomainDraft, resolveUserCapabilities, revokeMemoryCandidate, revokeTaskScope, revokeTaskScopes, saveTaskReceipt, setUserCapabilityStatus, validateDomainDraft } from '@/features/devtools/domain/api'
+import { associateDomainDraftComposite, bindSystemSession, getSystemSession, issueTaskScope, listDomainMemories, listDomainSystems, listTaskReceipts, openDomainDraft, resolveUserCapabilities, revokeTaskScope, revokeTaskScopes } from '@/features/devtools/domain/api'
 import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
 import { draftHandoffs, includeGlobalTaskDraft, markGlobalTaskMcpDisabled, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask } from './ai-handoff'
-import { CapabilityGovernance } from './capability-governance'
 import { compensateGlobalDraftSetup } from './global-draft-compensation'
-import { appendScopedUserRequest, buildGlobalTaskHandoff, buildTaskSemanticSummary, formatTaskReceiptSummary, projectTaskMessages, sanitizeTaskSemanticList, taskGoalFromMessages } from './global-task-handoff'
+import { appendScopedUserRequest, buildGlobalTaskHandoff, projectTaskMessages, taskGoalFromMessages } from './global-task-handoff'
 import { retireSourceTaskScope } from './global-task-recovery'
 import { currentScopeLease, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from './scope-lease-manager'
 import { assertSystemTaskScopeLease, buildSystemTaskRenewalContract, buildSystemTaskScopeContract, systemTaskSafetyInstructions } from './system-task-scope'
@@ -54,16 +53,11 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   const [messages, setMessages] = useState<AiMessage[]>([])
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [receiptStatus, setReceiptStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [scopeDraftId, setScopeDraftId] = useState<string | null>(null)
-  const [capabilityDraft, setCapabilityDraft] = useState<UserCapability | null>(null)
-  const [selectedCapabilityId, setSelectedCapabilityId] = useState('')
-  const [memoryCandidates, setMemoryCandidates] = useState<DomainMemory[]>([])
   const [activeMemories, setActiveMemories] = useState<DomainMemory[]>([])
   const [reusableReceipts, setReusableReceipts] = useState<TaskReceipt[]>([])
   const [resolvedCapabilities, setResolvedCapabilities] = useState<CapabilityResolution[]>([])
   const [globalWriteSystems, setGlobalWriteSystems] = useState<string[]>([])
-  const [globalScopeOpen, setGlobalScopeOpen] = useState(false)
   const [globalPending, setGlobalPending] = useState(false)
   const resumedSessionRef = useRef('')
   const lastSequenceRef = useRef(new Map<string, number>())
@@ -99,12 +93,10 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
 
   useEffect(() => {
     void Promise.all([
-      listMemoryCandidates(project.id, manifest.systemId),
       listDomainMemories(project.id, manifest.systemId, true),
       listTaskReceipts(project.id, manifest.systemId),
       resolveUserCapabilities(project.id, manifest.systemId),
-    ]).then(([candidates, active, receipts, capabilities]) => {
-      setMemoryCandidates(candidates.filter(memory => memory.sourceTaskId === taskId))
+    ]).then(([active, receipts, capabilities]) => {
       setActiveMemories(active)
       setReusableReceipts(receipts.filter(receipt => isSuccessfulReceipt(receipt.status)).slice(0, 6))
       setResolvedCapabilities(capabilities.slice(0, 12))
@@ -220,6 +212,11 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       setError(t('studio.devtools.ai.unavailable'))
       return
     }
+    if (globalWriteSystems.length > 0) {
+      setInput('')
+      await openGlobalTask(content)
+      return
+    }
     if (sessionId && !sessionReady) {
       setError(t('studio.devtools.ai.resuming'))
       return
@@ -311,172 +308,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     }
   }
 
-  function startNewTask() {
-    if (sessionId) {
-      postSessionMessage('mir3/systemSession.complete', project.id, manifest.systemId, taskId, sessionId, {})
-      void stopScopeLease({ projectId: project.id, taskId, sessionId })
-    }
-    const nextTaskId = createSystemTaskId(project.id, manifest.systemId)
-    rememberSystemTaskId(project.id, manifest.systemId, nextTaskId)
-    setTaskId(nextTaskId)
-    setSessionId('')
-    setMessages([])
-    setRunning(false)
-    setSessionReady(false)
-    setPending([])
-    setRunningCalls([])
-    setTaskToolCalls([])
-    setError(null)
-    setReceiptStatus('idle')
-    setScopeDraftId(null)
-    setCapabilityDraft(null)
-    setSelectedCapabilityId('')
-    setMemoryCandidates([])
-    setActiveMemories([])
-    setReusableReceipts([])
-    setResolvedCapabilities([])
-    setGlobalWriteSystems([])
-    setGlobalScopeOpen(false)
-    setGlobalPending(false)
-    lastSequenceRef.current.clear()
-    awaitingSnapshotRef.current.clear()
-    resumedSessionRef.current = ''
-    expectedSessionRef.current = ''
-  }
-
-  async function promoteCapability() {
-    const sourceDraftId = draftId ?? scopeDraftId
-    if (!sourceDraftId) {
-      setError(t('studio.devtools.ai.promote_needs_draft'))
-      return
-    }
-    const now = Date.now()
-    const summary = messages.slice(-6).map(message => message.content).join('\n').slice(0, 2_000)
-    try {
-      const [receipts, drafts] = await Promise.all([
-        listTaskReceipts(project.id, manifest.systemId),
-        listDomainDrafts(project.id),
-      ])
-      const sourceDraft = drafts.find(item => item.id === sourceDraftId)
-      if (sourceDraft?.status !== 'applied') {
-        setError(t('studio.devtools.ai.promote_needs_applied_receipt'))
-        return
-      }
-      const receipt = receipts
-        .filter(item => item.taskId === taskId && item.draftId === sourceDraftId && isSuccessfulReceipt(item.status))
-        .sort((left, right) => right.createdAt - left.createdAt)[0]
-      if (!receipt) {
-        setError(t('studio.devtools.ai.promote_needs_applied_receipt'))
-        return
-      }
-      if (sessionId) {
-        await bindSystemSession(project.id, {
-          taskId,
-          systemId: manifest.systemId,
-          sessionId,
-          pluginVersion: manifest.version,
-          draftId: sourceDraftId,
-          status: 'active',
-          updatedAt: now,
-        })
-      }
-      const capability = await compileUserCapability(project.id, {
-        receiptId: receipt.id,
-        id: `user-${manifest.systemId}-${now}`,
-        name: t('studio.devtools.ai.capability_name', { system: t(`studio.devtools.tool.${manifest.systemId}.title`) }),
-        description: summary || t('studio.devtools.ai.receipt_empty'),
-      })
-      setCapabilityDraft(capability)
-      setError(null)
-    }
-    catch (reason) {
-      setError(String(reason))
-    }
-  }
-
-  async function activateCapability() {
-    if (!capabilityDraft)
-      return
-    try {
-      const active = await setUserCapabilityStatus(project.id, capabilityDraft.id, capabilityDraft.version, 'active', true)
-      setCapabilityDraft(active)
-    }
-    catch (reason) {
-      setError(String(reason))
-    }
-  }
-
-  async function summarizeTask() {
-    const semanticSummary = buildTaskSemanticSummary({
-      messages,
-      decisions: usedCapabilities.map(capability => `capability:${capability.id}@${capability.version}`),
-      completedOperations: taskToolCalls.map(toolCallLabel),
-      constraints: [
-        `writeSystems:${manifest.systemId}`,
-        `readSystems:${[manifest.systemId, ...manifest.dependencies].join(',')}`,
-      ],
-      openQuestions: pending.map(interaction => `${interaction.kind}:${interaction.key}`),
-      unfinishedSteps: runningCalls.map(toolCallLabel),
-    })
-    const receiptDraftId = draftId ?? scopeDraftId
-    setReceiptStatus('saving')
-    try {
-      const now = Date.now()
-      const draftEvidence = await taskDraftEvidence(project.id, manifest.systemId, receiptDraftId)
-      const summary = formatTaskReceiptSummary(semanticSummary) || t('studio.devtools.ai.receipt_empty')
-      await saveTaskReceipt(project.id, {
-        id: `receipt-summary-${taskId}-${stableTextKey(JSON.stringify(semanticSummary))}`,
-        taskId,
-        systemId: manifest.systemId,
-        summary,
-        status: taskReceiptStatus(running),
-        draftId: receiptDraftId,
-        pluginVersions: { [manifest.systemId]: manifest.version },
-        evidence: {
-          selectedPath,
-          sessionId,
-          messageCount: messages.length,
-          toolCalls: semanticSummary.completedOperations ?? [],
-          semanticSummary,
-          ...draftEvidence,
-        },
-        createdAt: now,
-      })
-      const candidates = await listMemoryCandidates(project.id, manifest.systemId)
-      setMemoryCandidates(candidates.filter(memory => memory.sourceTaskId === taskId))
-      setReceiptStatus('saved')
-    }
-    catch (reason) {
-      setReceiptStatus('idle')
-      setError(String(reason))
-    }
-  }
-
-  async function reviewMemory(memory: DomainMemory, status: 'active' | 'revoked') {
-    try {
-      let reviewed: DomainMemory
-      if (status === 'active')
-        reviewed = await activateMemoryCandidate(project.id, memory.id)
-      else
-        reviewed = await revokeMemoryCandidate(project.id, memory.id)
-      setMemoryCandidates(value => value.filter(item => item.id !== reviewed.id))
-      setActiveMemories((value) => {
-        if (reviewed.status === 'active')
-          return replaceMemory(value, reviewed)
-        return value.filter(item => item.id !== reviewed.id)
-      })
-    }
-    catch (reason) {
-      setError(String(reason))
-    }
-  }
-
-  async function openGlobalTask() {
-    const sourceSessionId = sessionId
-    if (!sourceSessionId) {
-      setError(t('studio.devtools.ai.global_needs_session'))
-      return
-    }
+  async function openGlobalTask(content: string) {
     setGlobalPending(true)
     setError(null)
     const createdDraftIds: string[] = []
@@ -492,6 +324,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       const pluginVersions = domainPluginVersions(manifests, readSystems)
       const globalTaskId = `global-${taskId}-${bridgeRequestId()}`
       const globalSessionId = `global-${bridgeRequestId()}`
+      const sourceSessionId = sessionId || globalSessionId
       const compositeId = `composite-${globalTaskId}`
       const draftIds: string[] = []
       for (const systemId of writeSystems) {
@@ -563,10 +396,12 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         draftIds: lease.draftIds,
         handoff,
       })
-      await retireSourceTaskScope(
-        { projectId: project.id, taskId, sessionId: sourceSessionId },
-        { revokeTask: revokeTaskScopes },
-      )
+      if (sessionId) {
+        await retireSourceTaskScope(
+          { projectId: project.id, taskId, sessionId: sourceSessionId },
+          { revokeTask: revokeTaskScopes },
+        )
+      }
       const structuredContext = {
         ...handoff,
         scopeToken: lease.token,
@@ -587,7 +422,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         sessionId: globalSessionId,
         payload: {
           cwd: project.activeWorkspaceRoot,
-          prompt: `${t('studio.devtools.ai.global_context')}\n${JSON.stringify(structuredContext)}`,
+          prompt: `${t('studio.devtools.ai.global_context')}\n${JSON.stringify(structuredContext)}\n\n${content}`,
           structuredContext,
         },
       })
@@ -628,184 +463,75 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col border-l border-line bg-panel">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
-        <span>
-          <strong className="flex items-center gap-2 text-xs font-semibold text-ink">
-            <Sparkles className="size-4 text-accent" />
-            {t('studio.devtools.ai.title')}
-          </strong>
-          <small className="mt-0.5 block text-[10px] text-muted">{t(connectionStatusKey(connected))}</small>
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="rounded-full border border-line bg-panel2 px-2 py-1 text-[9px] text-muted">{draftStatusLabel(t, draftId)}</span>
-          <Button isIconOnly size="sm" variant="ghost" aria-label={t('studio.devtools.ai.new_task')} onPress={startNewTask}><Plus className="size-4" /></Button>
-        </span>
-      </header>
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-        <If cond={messages.length > 0} else={<AiWelcome manifest={manifest} />}>
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-5">
+        <If cond={messages.length > 0}>
           {messages.map(message => <AiBubble key={message.id} message={message} />)}
         </If>
         <If cond={running}>
-          <div className="rounded-xl border border-accent/20 bg-accent/5 px-3 py-2 text-xs text-accent">{t('studio.devtools.ai.running')}</div>
-        </If>
-        <If cond={runningCalls.length > 0}>
-          <div className="rounded-xl border border-line bg-panel2 p-3">
-            <strong className="text-[10px] uppercase tracking-wider text-muted">{t('studio.devtools.ai.tools')}</strong>
-            <div className="mt-2 space-y-1">{runningCalls.map(call => <div key={toolCallKey(call)} className="rounded-md bg-canvas px-2 py-1.5 font-mono text-[9px] text-ink">{toolCallLabel(call)}</div>)}</div>
-          </div>
+          <p className="text-[11px] text-accent">{t('studio.devtools.ai.running')}</p>
         </If>
         <If cond={pending.length > 0}>
           <div className="space-y-2">
             {pending.map(interaction => <PendingCard key={interaction.key} interaction={interaction} onRespond={response => respond(interaction.key, response)} />)}
           </div>
         </If>
-        <If cond={usedCapabilities.length > 0}>
-          <div className="rounded-xl border border-line bg-panel2 p-3">
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted" htmlFor={`capability-${taskId}`}>{t('studio.devtools.ai.capability_operation')}</label>
-            <select
-              id={`capability-${taskId}`}
-              className="mt-2 w-full rounded-lg border border-line bg-panel px-2 py-2 text-xs text-ink outline-none focus:border-accent"
-              value={selectedCapabilityId}
-              onChange={event => setSelectedCapabilityId(event.target.value)}
-            >
-              <option value="">{t('studio.devtools.ai.capability_choose')}</option>
-              {usedCapabilities.map(capability => <option key={capability.id} value={capability.id}>{capability.id}</option>)}
-            </select>
-            <If cond={selectedCapabilityId.length > 0}>
-              <CapabilityContract capability={usedCapabilities.find(capability => capability.id === selectedCapabilityId)} />
+        <If cond={error != null}><p className="whitespace-pre-wrap text-[11px] leading-5 text-danger">{error}</p></If>
+      </div>
+      <div className="shrink-0 p-3">
+        <div className="rounded-2xl border border-line bg-panel2 p-2 shadow-[0_8px_32px_rgba(0,0,0,0.12)] focus-within:border-accent/70">
+          <textarea
+            rows={4}
+            className="w-full resize-none bg-transparent px-2 py-1.5 text-xs leading-5 text-ink outline-none placeholder:text-muted"
+            value={input}
+            placeholder={t('studio.devtools.ai.placeholder')}
+            aria-label={t('studio.devtools.ai.placeholder')}
+            onChange={event => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void sendPrompt()
+              }
+            }}
+          />
+          <div className="flex items-end justify-between gap-2 px-1 pb-0.5">
+            <GlobalScopePicker manifest={manifest} selected={globalWriteSystems} onToggle={toggleGlobalWriteSystem} />
+            <If cond={running && globalWriteSystems.length === 0} else={<Button isIconOnly size="sm" className="size-8 shrink-0 rounded-full bg-accent text-white" isDisabled={input.trim().length === 0 || globalPending} isPending={globalPending} aria-label={t('studio.devtools.ai.send')} onPress={() => void sendPrompt()}><ArrowUp className="size-4" /></Button>}>
+              <Button isIconOnly size="sm" variant="ghost" className="size-8 shrink-0 rounded-full" aria-label={t('studio.devtools.ai.cancel')} onPress={cancel}><CircleStop className="size-4" /></Button>
             </If>
           </div>
-        </If>
-        <If cond={capabilityDraft != null}>
-          <div className="rounded-xl border border-accent/30 bg-accent/5 p-3">
-            <strong className="text-xs text-ink">{capabilityDraft?.name}</strong>
-            <p className="mt-1 text-[10px] text-muted">
-              {capabilityDraft?.id}
-              @
-              {capabilityDraft?.version}
-              {' '}
-              ·
-              {' '}
-              {capabilityDraft?.status}
-            </p>
-            <p className="mt-2 line-clamp-3 text-[10px] leading-4 text-muted">{capabilityDraft?.description}</p>
-            <div className="mt-2 rounded-md border border-line bg-panel px-2 py-1.5 font-mono text-[9px] text-ink">{capabilityDraft?.steps.map(step => step.operation).join(' → ')}</div>
-            <If cond={capabilityDraft?.status === 'draft'}><Button className="mt-2 bg-accent text-white" size="sm" onPress={() => void activateCapability()}>{t('studio.devtools.ai.capability_confirm')}</Button></If>
-          </div>
-        </If>
-        <If cond={memoryCandidates.length > 0}>
-          <div className="space-y-2">
-            <strong className="text-[10px] uppercase tracking-wider text-muted">{t('studio.devtools.ai.memory_candidates')}</strong>
-            {memoryCandidates.map(memory => <MemoryCandidate key={memory.id} memory={memory} onReview={status => void reviewMemory(memory, status)} />)}
-          </div>
-        </If>
-        <CapabilityGovernance
-          projectId={project.id}
-          systemId={manifest.systemId}
-          refreshToken={`${capabilityDraft?.id ?? ''}:${capabilityDraft?.status ?? ''}`}
-        />
-        <If cond={error != null}><p className="rounded-xl border border-danger/30 bg-danger/8 p-3 text-xs text-danger">{error}</p></If>
-      </div>
-      <div className="shrink-0 border-t border-line p-3">
-        <details
-          className="mb-2 rounded-lg border border-line bg-panel2 px-2 py-1.5"
-          open={globalScopeOpen}
-          onToggle={event => setGlobalScopeOpen(event.currentTarget.open)}
-        >
-          <summary className="cursor-pointer text-[9px] text-muted">{t('studio.devtools.ai.global_scope')}</summary>
-          <div className="mt-2 max-h-36 space-y-1.5 overflow-auto">
-            <label className="flex items-center gap-2 text-[10px] text-ink">
-              <input type="checkbox" checked disabled />
-              {t(`studio.devtools.tool.${manifest.systemId}.title`)}
-            </label>
-            {globalSelectableSystems(manifest.systemId).map(systemId => (
-              <label key={systemId} className="flex items-center gap-2 text-[10px] text-ink">
-                <input type="checkbox" checked={globalWriteSystems.includes(systemId)} onChange={() => toggleGlobalWriteSystem(systemId)} />
-                {t(`studio.devtools.tool.${systemId}.title`)}
-                <If cond={manifest.dependencies.includes(systemId)}><small className="text-[8px] text-muted">{t('studio.devtools.ai.global_dependency_readonly')}</small></If>
-              </label>
-            ))}
-          </div>
-        </details>
-        <div className="mb-2 grid grid-cols-3 gap-1">
-          <Button size="sm" variant="ghost" isPending={receiptStatus === 'saving'} onPress={() => void summarizeTask()}>{t(receiptButtonKey(receiptStatus))}</Button>
-          <Button size="sm" variant="ghost" isDisabled={!(draftId ?? scopeDraftId)} onPress={() => void promoteCapability()}>
-            <MagicWand className="size-3.5" />
-            {t('studio.devtools.ai.promote')}
-          </Button>
-          <Button size="sm" variant="ghost" isDisabled={!sessionId} isPending={globalPending} onPress={() => void openGlobalTask()}>{t('studio.devtools.ai.global')}</Button>
-        </div>
-        <textarea
-          rows={3}
-          className="w-full resize-none rounded-xl border border-line bg-panel2 px-3 py-2 text-xs leading-5 text-ink outline-none focus:border-accent"
-          value={input}
-          placeholder={t('studio.devtools.ai.placeholder')}
-          aria-label={t('studio.devtools.ai.placeholder')}
-          onChange={event => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void sendPrompt()
-            }
-          }}
-        />
-        <div className="mt-2 flex items-center justify-between">
-          <small className="text-[9px] text-muted">{t('studio.devtools.ai.scoped_write')}</small>
-          <If cond={running} else={<Button isIconOnly size="sm" className="bg-accent text-white" aria-label={t('studio.devtools.ai.send')} onPress={() => void sendPrompt()}><ArrowUp className="size-4" /></Button>}>
-            <Button isIconOnly size="sm" variant="ghost" aria-label={t('studio.devtools.ai.cancel')} onPress={cancel}><CircleStop className="size-4" /></Button>
-          </If>
         </div>
       </div>
     </aside>
   )
 }
 
-function AiWelcome({ manifest }: { manifest: DomainManifest }) {
+function GlobalScopePicker({ manifest, selected, onToggle }: { manifest: DomainManifest, selected: string[], onToggle: (systemId: string) => void }) {
   const { t } = useTranslation()
   return (
-    <div className="rounded-xl border border-line bg-panel2 p-4">
-      <Sparkles className="size-5 text-accent" />
-      <strong className="mt-3 block text-sm text-ink">{t('studio.devtools.ai.welcome')}</strong>
-      <p className="mt-1 text-xs leading-5 text-muted">{t('studio.devtools.ai.scope', { system: t(`studio.devtools.tool.${manifest.systemId}.title`) })}</p>
-    </div>
+    <details className="group relative min-w-0">
+      <summary className="flex h-7 max-w-52 cursor-pointer list-none items-center gap-1 rounded-md px-2 text-[10px] text-muted hover:bg-panel-hover hover:text-ink">
+        <span className="truncate">{t('studio.devtools.ai.global_scope_summary', { count: selected.length + 1 })}</span>
+        <ChevronDown className="size-3 shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="absolute bottom-9 left-0 z-30 max-h-64 w-64 overflow-auto rounded-xl border border-line bg-panel p-2 shadow-2xl">
+        <p className="px-2 pb-2 text-[10px] text-muted">{t('studio.devtools.ai.global_scope')}</p>
+        <label className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[10px] text-ink">
+          <input type="checkbox" checked disabled />
+          {t(`studio.devtools.tool.${manifest.systemId}.title`)}
+        </label>
+        {globalSelectableSystems(manifest.systemId).map(systemId => (
+          <label key={systemId} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[10px] text-ink hover:bg-panel-hover">
+            <input type="checkbox" checked={selected.includes(systemId)} onChange={() => onToggle(systemId)} />
+            <span className="truncate">{t(`studio.devtools.tool.${systemId}.title`)}</span>
+          </label>
+        ))}
+      </div>
+    </details>
   )
 }
 
 function AiBubble({ message }: { message: AiMessage }) {
   return <div className={aiBubbleClass(message.role)}>{message.content}</div>
-}
-
-function connectionStatusKey(connected: boolean) {
-  if (connected)
-    return 'studio.devtools.ai.connected'
-  return 'studio.devtools.ai.connecting'
-}
-
-function draftStatusLabel(t: ReturnType<typeof useTranslation>['t'], draftId?: string | null) {
-  if (draftId)
-    return t('studio.devtools.ai.draft_active', { id: draftId })
-  return t('studio.devtools.ai.no_draft')
-}
-
-function receiptButtonKey(status: 'idle' | 'saving' | 'saved') {
-  if (status === 'saved')
-    return 'studio.devtools.ai.receipt_saved'
-  return 'studio.devtools.ai.summarize'
-}
-
-function taskReceiptStatus(running: boolean) {
-  if (running)
-    return 'in_progress'
-  return 'summary'
-}
-
-function stableTextKey(value: string) {
-  let hash = 2166136261
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function isSuccessfulReceipt(status: string): boolean {
@@ -816,14 +542,6 @@ function aiBubbleClass(role: AiMessage['role']) {
   if (role === 'user')
     return 'ml-8 rounded-xl bg-accent px-3 py-2 text-xs leading-5 text-white'
   return 'mr-4 whitespace-pre-wrap rounded-xl border border-line bg-panel2 px-3 py-2 text-xs leading-5 text-ink'
-}
-
-function memoryStatusKey(status: DomainMemory['status']) {
-  if (status === 'active')
-    return 'studio.devtools.ai.memory_active'
-  if (status === 'disabled')
-    return 'studio.devtools.ai.memory_disabled'
-  return 'studio.devtools.ai.memory_candidate'
 }
 
 function optionalValue(value?: string | null) {
@@ -917,82 +635,6 @@ function serializeToolCall(call: unknown) {
   catch {
     return String(call)
   }
-}
-
-function replaceMemory(memories: DomainMemory[], replacement: DomainMemory) {
-  return [replacement, ...memories.filter(memory => memory.id !== replacement.id)]
-}
-
-async function taskDraftEvidence(projectId: string, systemId: string, draftId?: string | null) {
-  if (!draftId)
-    return { draftReviewed: false }
-  const [preview, validation] = await Promise.all([
-    previewDomainDraft(projectId, draftId),
-    validateDomainDraft(projectId, draftId),
-  ])
-  return {
-    draftReviewed: true,
-    diffHash: preview.preview.diffHash,
-    draftRevision: preview.preview.draft.revision,
-    changedFiles: preview.preview.changes.map(change => change.path),
-    validationValid: validation.valid && validation.systemId === systemId,
-    validationDiagnostics: sanitizeTaskSemanticList(validation.diagnostics),
-  }
-}
-
-function CapabilityContract({ capability }: { capability: DomainManifest['capabilities'][number] | undefined }) {
-  const { t } = useTranslation()
-  if (!capability)
-    return null
-  return (
-    <div className="mt-2 space-y-1 rounded-lg border border-line bg-panel p-2 font-mono text-[9px] text-muted">
-      <p>
-        {t('studio.devtools.ai.capability_parameters')}
-        :
-        {' '}
-        {JSON.stringify(capability.parameterSchema)}
-      </p>
-      <p>
-        {t('studio.devtools.ai.capability_permissions')}
-        : R[
-        {capability.readSystems.join(', ')}
-        ] W[
-        {capability.writeSystems.join(', ')}
-        ]
-      </p>
-      <p>
-        {t('studio.devtools.ai.capability_steps')}
-        :
-        {' '}
-        {capability.steps.map(step => step.operation).join(' → ')}
-      </p>
-    </div>
-  )
-}
-
-function MemoryCandidate({ memory, onReview }: { memory: DomainMemory, onReview: (status: 'active' | 'revoked') => void }) {
-  const { t } = useTranslation()
-  return (
-    <div className="rounded-xl border border-line bg-panel2 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <strong className="text-xs text-ink">{memory.summary}</strong>
-        <span className="rounded-full border border-line bg-panel px-2 py-1 text-[9px] text-muted">{t(memoryStatusKey(memory.status))}</span>
-      </div>
-      <p className="mt-1 font-mono text-[9px] text-muted">
-        {memory.kind}
-        {' '}
-        ·
-        {' '}
-        {memory.pluginVersion}
-      </p>
-      <If cond={memory.status === 'candidate'}>
-        <div className="mt-2 flex gap-2">
-          <Button size="sm" className="bg-accent text-white" onPress={() => onReview('active')}>{t('studio.devtools.ai.memory_activate')}</Button>
-          <Button size="sm" variant="ghost" className="text-danger" onPress={() => onReview('revoked')}>{t('studio.devtools.ai.memory_reject')}</Button>
-        </div>
-      </If>
-    </div>
-  )
 }
 
 function postSessionMessage(type: string, projectId: string, systemId: string, taskId: string, sessionId: string, payload: unknown) {
@@ -1199,7 +841,7 @@ function PendingCard({ interaction, onRespond }: { interaction: PendingInteracti
   const [answer, setAnswer] = useState('')
   const message = String(interaction.payload.message ?? interaction.payload.question ?? interaction.payload.description ?? '')
   return (
-    <div className="rounded-xl border border-warning/30 bg-warning/8 p-3">
+    <div className="border-l-2 border-warning pl-3">
       <strong className="text-xs text-ink">{t('studio.devtools.ai.confirmation')}</strong>
       <p className="mt-1 text-[11px] leading-5 text-muted">{message}</p>
       <If

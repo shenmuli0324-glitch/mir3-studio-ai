@@ -132,11 +132,6 @@ export function buildTaskSemanticSummary(input: TaskSemanticSummaryInput): Globa
   }
 }
 
-/** 对 Receipt 的诊断等附加语义文本复用同一凭证脱敏规则。 */
-export function sanitizeTaskSemanticList(value: unknown): string[] {
-  return summaryList(value)
-}
-
 /** 对需要单独持久化的恢复错误等文本复用同一凭证脱敏规则。 */
 export function sanitizeTaskSemanticText(value: unknown): string | null {
   return summaryText(value)

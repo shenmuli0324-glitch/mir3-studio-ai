@@ -1,7 +1,7 @@
 use crate::{DomainStore, DraftBinaryChangeInput, DraftPreview};
 use calamine::{Reader, Xls};
 use easyexcel_xls::biff8::{Biff8Cell, Biff8TemplatePackage, Biff8Value};
-use encoding_rs::GB18030;
+use encoding_rs::{GB18030, GBK};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use similar::{DiffTag, TextDiff};
@@ -27,6 +27,7 @@ enum TextEncoding {
     Utf16Be,
     Utf32Le,
     Utf32Be,
+    Gbk,
     Gb18030,
 }
 
@@ -653,11 +654,19 @@ fn detect_text(bytes: &[u8]) -> Result<DetectedText, String> {
         } else if let Ok(value) = std::str::from_utf8(payload) {
             (TextEncoding::Utf8, value.to_string())
         } else {
-            let (value, had_errors) = GB18030.decode_without_bom_handling(payload);
-            if had_errors {
-                return Err("SAFE_TEXT_ENCODING_UNSUPPORTED: expected UTF-8 or GB18030".to_string());
+            let (gbk_value, gbk_errors) = GBK.decode_without_bom_handling(payload);
+            if !gbk_errors {
+                (TextEncoding::Gbk, gbk_value.into_owned())
+            } else {
+                let (value, had_errors) = GB18030.decode_without_bom_handling(payload);
+                if had_errors {
+                    return Err(
+                        "SAFE_TEXT_ENCODING_UNSUPPORTED: expected UTF-8, GBK or GB18030"
+                            .to_string(),
+                    );
+                }
+                (TextEncoding::Gb18030, value.into_owned())
             }
-            (TextEncoding::Gb18030, value.into_owned())
         }
     };
     let (newline, mixed_newlines) = newline_style(&content);
@@ -764,6 +773,12 @@ fn decode_as(payload: &[u8], encoding: TextEncoding) -> Result<String, String> {
         TextEncoding::Ascii | TextEncoding::Utf8 => std::str::from_utf8(payload)
             .map(str::to_string)
             .map_err(|e| format!("SAFE_TEXT_UTF8_INVALID: {e}")),
+        TextEncoding::Gbk => {
+            let (value, had_errors) = GBK.decode_without_bom_handling(payload);
+            (!had_errors)
+                .then(|| value.into_owned())
+                .ok_or_else(|| "SAFE_TEXT_GBK_INVALID: undecodable input".to_string())
+        }
         TextEncoding::Gb18030 => {
             let (value, had_errors) = GB18030.decode_without_bom_handling(payload);
             (!had_errors)
@@ -815,6 +830,12 @@ fn encode_as(value: &str, encoding: TextEncoding) -> Result<Vec<u8>, String> {
             }
         }
         TextEncoding::Utf8 => Ok(value.as_bytes().to_vec()),
+        TextEncoding::Gbk => {
+            let (bytes, _, had_errors) = GBK.encode(value);
+            (!had_errors).then(|| bytes.into_owned()).ok_or_else(|| {
+                "SAFE_TEXT_NOT_REPRESENTABLE: replacement is not GBK/CP936".to_string()
+            })
+        }
         TextEncoding::Gb18030 => {
             let (bytes, _, had_errors) = GB18030.encode(value);
             (!had_errors).then(|| bytes.into_owned()).ok_or_else(|| {
@@ -965,6 +986,7 @@ fn encoding_name(encoding: TextEncoding) -> &'static str {
         TextEncoding::Utf16Be => "UTF-16BE",
         TextEncoding::Utf32Le => "UTF-32LE",
         TextEncoding::Utf32Be => "UTF-32BE",
+        TextEncoding::Gbk => "GBK",
         TextEncoding::Gb18030 => "GB18030",
     }
 }
@@ -1017,8 +1039,8 @@ mod tests {
     }
 
     #[test]
-    fn gb18030_and_crlf_are_preserved_byte_for_byte_outside_edit() {
-        let (payload, _, had_errors) = GB18030.encode("名称=木立\r\n等级=1\r\n");
+    fn gbk_and_crlf_are_preserved_byte_for_byte_outside_edit() {
+        let (payload, _, had_errors) = GBK.encode("名称=木立\r\n等级=1\r\n");
         assert!(!had_errors);
         let original = payload.into_owned();
         let output = splice_document(
@@ -1029,9 +1051,15 @@ mod tests {
         )
         .unwrap();
         let detected = detect_text(&output).unwrap();
-        assert_eq!(detected.encoding, TextEncoding::Gb18030);
+        assert_eq!(detected.encoding, TextEncoding::Gbk);
         assert_eq!(detected.newline.as_deref(), Some("\r\n"));
         assert_eq!(detected.content, "名称=木立\r\n等级=2\r\n");
+    }
+
+    #[test]
+    fn gbk_edit_rejects_characters_that_legacy_engine_cannot_represent() {
+        let error = encode_as("任务😀", TextEncoding::Gbk).unwrap_err();
+        assert!(error.starts_with("SAFE_TEXT_NOT_REPRESENTABLE"));
     }
 
     #[test]
@@ -1183,7 +1211,7 @@ mod tests {
         fs::create_dir_all(project_root.join("引擎")).unwrap();
         let target = project_root.join("客户端/dev/Quest/任务配置.txt");
         fs::create_dir_all(target.parent().unwrap()).unwrap();
-        let (encoded, _, had_errors) = GB18030.encode("名称=木立\r\n等级=1\r\n");
+        let (encoded, _, had_errors) = GBK.encode("名称=木立\r\n等级=1\r\n");
         assert!(!had_errors);
         let original = encoded.into_owned();
         fs::write(&target, &original).unwrap();
@@ -1224,7 +1252,7 @@ mod tests {
             .unwrap();
         let applied = fs::read(&target).unwrap();
         let detected = detect_text(&applied).unwrap();
-        assert_eq!(detected.encoding, TextEncoding::Gb18030);
+        assert_eq!(detected.encoding, TextEncoding::Gbk);
         assert_eq!(detected.newline.as_deref(), Some("\r\n"));
         assert_eq!(detected.content, "名称=木立\r\n等级=2\r\n");
         fs::remove_dir_all(base).ok();

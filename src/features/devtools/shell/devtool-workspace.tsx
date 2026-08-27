@@ -1,6 +1,6 @@
 import type { ReactNode, PointerEvent as ReactPointerEvent } from 'react'
 import type { DevToolDefinition } from '../devtool-registry'
-import { ArrowLeft } from '@gravity-ui/icons'
+import { ArrowLeft, LayoutSideContentLeft, LayoutSideContentRight } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -30,6 +30,20 @@ export function DevToolWorkspace({ tool, onBack, sidebar, toolbar, rightPanel, c
     })
   }
 
+  function toggleResources() {
+    if (window.matchMedia('(max-width: 900px)').matches)
+      toggleMobilePanel('resources')
+    else
+      setLeftCollapsed(value => !value)
+  }
+
+  function toggleAi() {
+    if (window.matchMedia('(max-width: 900px)').matches)
+      toggleMobilePanel('ai')
+    else
+      setRightCollapsed(value => !value)
+  }
+
   function beginResize(side: 'left' | 'right', event: ReactPointerEvent<HTMLButtonElement>) {
     event.preventDefault()
     const startX = event.clientX
@@ -51,45 +65,40 @@ export function DevToolWorkspace({ tool, onBack, sidebar, toolbar, rightPanel, c
   }
 
   return (
-    <div className="flex h-full min-h-0 bg-canvas">
-      <aside className={resourcePanelClass(mobilePanel, leftCollapsed)} style={{ width: leftWidth }}>
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-3">
-          <Button
-            className="size-8 shrink-0 rounded-lg"
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            aria-label={t('studio.devtools.back')}
-            onPress={onBack}
-          >
-            <ArrowLeft className="size-4" />
-          </Button>
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/14 text-accent"><Icon className="size-4" /></span>
-          <span className="min-w-0">
-            <strong className="block truncate text-xs font-semibold text-ink">{t(devToolTitleKey(tool.id))}</strong>
-            <small className="mt-0.5 block truncate text-[10px] text-muted">{t('studio.devtools.workspace')}</small>
-          </span>
-        </header>
-        <div className="min-h-0 flex-1">{sidebar}</div>
-        <button type="button" className="absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize bg-transparent hover:bg-accent/40 max-[900px]:hidden" aria-label={t('studio.devtools.resize.resources')} onPointerDown={event => beginResize('left', event)} />
-      </aside>
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="relative flex min-h-14 shrink-0 items-center border-b border-line bg-panel px-4">
-          <div className="mr-2 hidden shrink-0 gap-1 max-[900px]:flex">
-            <Button size="sm" variant="ghost" onPress={() => toggleMobilePanel('resources')}>{t('studio.devtools.mobile.resources')}</Button>
-            <Button size="sm" variant="ghost" onPress={() => toggleMobilePanel('ai')}>{t('studio.devtools.mobile.ai')}</Button>
-          </div>
-          <div className="mr-2 flex shrink-0 gap-1 max-[900px]:hidden">
-            <Button size="sm" variant="ghost" aria-label={t(resourceToggleKey(leftCollapsed))} onPress={() => setLeftCollapsed(value => !value)}>{t('studio.devtools.mobile.resources')}</Button>
-            <Button size="sm" variant="ghost" aria-label={t(aiToggleKey(rightCollapsed))} onPress={() => setRightCollapsed(value => !value)}>{t('studio.devtools.mobile.ai')}</Button>
-          </div>
+    <div className="flex h-full min-h-0 flex-col bg-canvas">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-3">
+        <Button className="size-8 shrink-0 rounded-lg" isIconOnly size="sm" variant="ghost" aria-label={t('studio.devtools.back')} onPress={onBack}>
+          <ArrowLeft className="size-4" />
+        </Button>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/14 text-accent"><Icon className="size-4" /></span>
+        <span className="min-w-0 shrink-0 pr-2">
+          <strong className="block truncate text-xs font-semibold text-ink">{t(devToolTitleKey(tool.id))}</strong>
+          <small className="block truncate text-[9px] text-muted">{t('studio.devtools.workspace')}</small>
+        </span>
+        <span className="h-5 w-px shrink-0 bg-line" />
+        <Button className="size-8 rounded-lg" isIconOnly size="sm" variant="ghost" aria-label={t(resourceToggleKey(leftCollapsed))} onPress={toggleResources}>
+          <LayoutSideContentLeft className="size-4" />
+        </Button>
+        <Button className="size-8 rounded-lg" isIconOnly size="sm" variant="ghost" aria-label={t(aiToggleKey(rightCollapsed))} onPress={toggleAi}>
+          <LayoutSideContentRight className="size-4" />
+        </Button>
+        <span className="h-5 w-px shrink-0 bg-line" />
+        <div className="flex min-w-0 flex-1 items-center">
           {toolbar}
-        </header>
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">{children}</div>
-      </section>
-      <div className={aiPanelClass(mobilePanel, rightCollapsed)} style={{ width: rightWidth }}>
-        <button type="button" className="absolute inset-y-0 left-0 z-30 w-1 cursor-col-resize bg-transparent hover:bg-accent/40 max-[900px]:hidden" aria-label={t('studio.devtools.resize.ai')} onPointerDown={event => beginResize('right', event)} />
-        {rightPanel}
+        </div>
+      </header>
+      <div className="relative flex min-h-0 flex-1">
+        <aside className={resourcePanelClass(mobilePanel, leftCollapsed)} style={{ width: leftWidth }}>
+          <div className="min-h-0 flex-1">{sidebar}</div>
+          <button type="button" className="absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize bg-transparent hover:bg-accent/40 max-[900px]:hidden" aria-label={t('studio.devtools.resize.resources')} onPointerDown={event => beginResize('left', event)} />
+        </aside>
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">{children}</div>
+        </section>
+        <div className={aiPanelClass(mobilePanel, rightCollapsed)} style={{ width: rightWidth }}>
+          <button type="button" className="absolute inset-y-0 left-0 z-30 w-1 cursor-col-resize bg-transparent hover:bg-accent/40 max-[900px]:hidden" aria-label={t('studio.devtools.resize.ai')} onPointerDown={event => beginResize('right', event)} />
+          {rightPanel}
+        </div>
       </div>
     </div>
   )
