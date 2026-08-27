@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
@@ -15,6 +15,8 @@ const architecture = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
 const dmgPath = join(root, 'src-tauri', 'target', 'release', 'bundle', 'dmg', `${tauri.productName}_${product.version}_${architecture}.dmg`)
 const provenancePath = `${dmgPath}.provenance.json`
 const smokeEvidencePath = `${dmgPath}.smoke.json`
+const retiredSystemPlugin = '@mir3-studio/dsh-mir3-safe-files'
+const currentSystemPlugin = '@mir3-studio/dsh-mir3-core'
 
 if (process.platform !== 'darwin')
   throw new Error('smoke:mac can only run on macOS')
@@ -26,6 +28,7 @@ if (packagedVersion !== product.version)
   throw new Error(`Packaged version mismatch: expected ${product.version}, got ${packagedVersion}`)
 
 const smokeRoot = mkdtempSync(join(tmpdir(), 'mir3-studio-native-smoke-'))
+seedRetiredSystemPluginProfile(smokeRoot)
 let outputBuffer = ''
 let coreProcessId = null
 let corePort = null
@@ -73,6 +76,7 @@ try {
     .length
   if (packCount !== 33)
     throw new Error(`Expected 33 initialized domain packs, got ${packCount}`)
+  assertRetiredSystemPluginMigrated(smokeRoot)
   writeMacosSmokeEvidence({
     appVersion: packagedVersion,
     coreCanary,
@@ -89,6 +93,7 @@ try {
   process.stdout.write(`Version: ${packagedVersion}\n`)
   process.stdout.write(`Harness: http://127.0.0.1:${corePort}/\n`)
   process.stdout.write(`Domain packs: ${packCount}\n`)
+  process.stdout.write(`Legacy profile migration: passed\n`)
   process.stdout.write(`Core canary: ${coreCanary.status}; protocol v${coreCanary.protocolVersion}; ${coreCanary.checks.length} public runtime gates\n`)
   process.stdout.write(`Smoke evidence: ${smokeEvidencePath}\n`)
   process.stdout.write(`UI visibility/search acceptance: not asserted by this smoke\n`)
@@ -114,6 +119,42 @@ function hasStateFile(path) {
   }
   catch {
     return false
+  }
+}
+
+function seedRetiredSystemPluginProfile(root) {
+  const profile = join(root, 'profiles', 'web')
+  mkdirSync(profile, { recursive: true })
+  writeFileSync(join(profile, 'package.json'), `${JSON.stringify({
+    name: 'dsh-profile-web',
+    private: true,
+    dependencies: {
+      [retiredSystemPlugin]: 'file:.mir3-system-plugins/dsh-mir3-safe-files',
+    },
+    dsh: {
+      profile: {
+        bundles: [
+          '@deepseek-ai/dsh-base',
+          '@deepseek-ai/dsh-web-app',
+          retiredSystemPlugin,
+        ],
+      },
+    },
+  }, null, 2)}\n`)
+}
+
+function assertRetiredSystemPluginMigrated(root) {
+  const profilePath = join(root, 'profiles', 'web', 'package.json')
+  const manifest = JSON.parse(readFileSync(profilePath, 'utf8'))
+  const dependencies = manifest.dependencies ?? {}
+  const bundles = manifest.dsh?.profile?.bundles
+  if (Object.hasOwn(dependencies, retiredSystemPlugin)
+    || !Object.hasOwn(dependencies, currentSystemPlugin)
+    || !Array.isArray(bundles)
+    || !bundles.includes('@deepseek-ai/dsh-base')
+    || !bundles.includes('@deepseek-ai/dsh-web-app')
+    || bundles.includes(retiredSystemPlugin)) {
+    throw new Error(`Legacy system plugin profile was not migrated: ${profilePath}`)
   }
 }
 
