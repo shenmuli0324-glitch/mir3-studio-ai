@@ -1,5 +1,10 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.0.5 - 2026-08-27
+
+- 修复 macOS 原生包中 `tauri://localhost` referrer 被标准 URL API 折叠为不透明 `null` origin，导致 Core ready、Bridge 描述和兼容 canary 无法回传的问题。
+- 仅规范化带 host 的 `tauri:` 父窗口来源；HTTP(S) 继续使用标准 origin，其他不透明来源保持拒绝。
+
 ## 1.0.4 - 2026-08-27
 
 - 系统 Session 只有在归档成功后才允许打开、发送 Prompt 或接受并发控制命令，防止失败路径污染普通 Harness 工作区。

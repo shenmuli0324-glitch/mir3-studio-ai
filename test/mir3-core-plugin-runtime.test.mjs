@@ -8,6 +8,19 @@ const clientSource = readFileSync(
 )
 
 describe('mir3 Core Plugin public runtime contract', () => {
+  it('normalizes the packaged Tauri referrer without allowing opaque origins', () => {
+    const runtime = loadAdapter('tauri://localhost/workbench')
+    const opaque = loadAdapter('file:///tmp/mir3-studio.html')
+    runtime.plugin.apply(createHarnessContext({ calls: [], sessions: new Map() }))
+    opaque.plugin.apply(createHarnessContext({ calls: [], sessions: new Map() }))
+
+    expect(runtime.messages[0]).toMatchObject({
+      postedOrigin: 'tauri://localhost',
+      type: 'mir3/plugin.ready',
+    })
+    expect(opaque.messages).toHaveLength(0)
+  })
+
   it('runs ordinary, system, and global Session flows through the real adapter', async () => {
     const runtime = loadAdapter()
     const calls = []
@@ -359,7 +372,7 @@ describe('mir3 Core Plugin public runtime contract', () => {
   })
 })
 
-function loadAdapter() {
+function loadAdapter(referrer = 'https://studio.mir3.test/workbench') {
   const messages = []
   let descriptor
   let listener
@@ -393,7 +406,7 @@ function loadAdapter() {
     Set,
     String,
     URL,
-    document: { referrer: 'https://studio.mir3.test/workbench' },
+    document: { referrer },
     window,
   })
   const module = { exports: {} }

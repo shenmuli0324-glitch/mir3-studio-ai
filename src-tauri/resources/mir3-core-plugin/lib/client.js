@@ -45,7 +45,12 @@ window.__ModuleLoader__.load({
 
     function resolveParentOrigin() {
       try {
-        return new URL(document.referrer).origin
+        const referrer = new URL(document.referrer)
+        if (referrer.origin !== 'null')
+          return referrer.origin
+        if (referrer.protocol === 'tauri:' && referrer.host)
+          return `${referrer.protocol}//${referrer.host}`
+        return null
       }
       catch {
         return null

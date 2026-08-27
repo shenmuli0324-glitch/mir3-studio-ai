@@ -1,5 +1,9 @@
 # MIR3 Studio AI 更新记录
 
+## 0.9.9 - 2026-08-27
+
+- 修复 macOS 原生包中 Tauri 自定义协议父窗口的精确 origin 规范化，使 MIR3 Core Plugin 1.0.5 能回传 ready、Bridge 描述并执行完整兼容 canary；非可信不透明来源仍保持拒绝。
+
 ## 0.9.8 - 2026-08-27
 
 - 完成旧版真机 Profile 的安全迁移：移除已退役的 Safe Files bundle，同时保留 `@mir3-studio/dsh-mir3-core` 的 Profile 本地依赖与受管理 Cordis patch 挂载，避免把非 bundle 插件错误注册到 Harness bundle 层。
