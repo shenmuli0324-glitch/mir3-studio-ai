@@ -406,16 +406,16 @@ pub async fn set_active(app_handle: &AppHandle, id: &str) -> Result<HarnessCore,
         if local_core(app_handle).is_none() {
             return Err("CORE_LOCAL_NOT_FOUND: no local core detected".to_string());
         }
-        let mut setting = config::get_store_dat_setting(app_handle);
-        setting.active_core = Some(CoreSource::Local.as_str().to_string());
-        config::set_store_dat_setting(app_handle, setting);
+        config::update_setting(app_handle, |setting| {
+            setting.active_core = Some(CoreSource::Local.as_str().to_string());
+        });
     } else if id == "app" {
         if !config::get_dsh_binary_path(app_handle).exists() {
             return Err("CORE_APP_NOT_FOUND: bundled core is not installed".to_string());
         }
-        let mut setting = config::get_store_dat_setting(app_handle);
-        setting.active_core = Some(CoreSource::App.as_str().to_string());
-        config::set_store_dat_setting(app_handle, setting);
+        config::update_setting(app_handle, |setting| {
+            setting.active_core = Some(CoreSource::App.as_str().to_string());
+        });
     } else if let Some(tag) = id.strip_prefix("app-") {
         switch_app_version(app_handle, tag).await?;
     } else {
@@ -444,9 +444,9 @@ async fn switch_app_version(app_handle: &AppHandle, tag: &str) -> Result<(), Str
 
     // 激活目录已是目标版本（tag 相同）→ 仅切来源标记（如 local → app 同版本）
     if cur_tag.as_deref() == Some(tag) {
-        let mut setting = config::get_store_dat_setting(app_handle);
-        setting.active_core = Some(CoreSource::App.as_str().to_string());
-        config::set_store_dat_setting(app_handle, setting);
+        config::update_setting(app_handle, |setting| {
+            setting.active_core = Some(CoreSource::App.as_str().to_string());
+        });
         return Ok(());
     }
 
@@ -502,13 +502,13 @@ async fn switch_app_version(app_handle: &AppHandle, tag: &str) -> Result<(), Str
             None
         }
     };
-    let mut setting = config::get_store_dat_setting(app_handle);
-    setting.active_core = Some(CoreSource::App.as_str().to_string());
-    setting.dsh_pkg_tag = Some(tag.to_string());
-    if let Some(c) = commit {
-        setting.dsh_pkg_commit = Some(c);
-    }
-    config::set_store_dat_setting(app_handle, setting);
+    config::update_setting(app_handle, |setting| {
+        setting.active_core = Some(CoreSource::App.as_str().to_string());
+        setting.dsh_pkg_tag = Some(tag.to_string());
+        if let Some(commit) = commit {
+            setting.dsh_pkg_commit = Some(commit);
+        }
+    });
     Ok(())
 }
 

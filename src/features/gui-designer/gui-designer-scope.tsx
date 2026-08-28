@@ -6,7 +6,6 @@ import type {
   GuiDocumentOpenResult,
   GuiLeftPanel,
   GuiMode,
-  GuiPropertyValue,
   GuiSaveNode,
   GuiTemplateRequest,
   Mir3UiDocument,
@@ -26,6 +25,8 @@ export interface GuiWorkingFile {
   workingSource: string
   document: Mir3UiDocument
   expectedSha256?: string | null
+  diskModifiedAt?: number | null
+  diskSize?: number | null
   workingRevision: number
   history: GuiSourceTransaction[]
   future: GuiSourceTransaction[]
@@ -35,18 +36,22 @@ export interface GuiWorkingFile {
   accessedAt: number
 }
 
-export type GuiBehaviorKind = 'timeline' | 'action'
-
 interface GuiSourceTransaction {
   start: number
   before: string
   after: string
 }
 
+export interface GuiDiskConflictState {
+  path: string
+  reason: string
+}
+
 const MAX_HISTORY_ENTRIES = 200
 const MAX_HISTORY_BYTES = 32 * 1024 * 1024
 const MAX_WORKING_SOURCE_BYTES = 8 * 1024 * 1024
 const MAX_CLEAN_WORKING_FILES = 20
+const FORCE_HASH_PROBE_INTERVAL = 30
 
 let dirtyOutsideScope = false
 
@@ -54,11 +59,11 @@ export function isGuiDesignerDirty(): boolean {
   return dirtyOutsideScope
 }
 
-export const GuiDesignerScope = defineScope(() => {
+export const GuiDesignerScope = defineScope(({ active }: { active: boolean }) => {
   const { activeProject } = useMir3Projects()
   const projectId = activeProject?.id
-  const status = useGuiDesignerStatus(projectId)
-  const documentList = useGuiDocumentList(projectId)
+  const status = useGuiDesignerStatus(projectId, active)
+  const documentList = useGuiDocumentList(projectId, active)
   const actions = useGuiDocumentActions(projectId)
   const [files, setFiles] = useState<Record<string, GuiWorkingFile>>({})
   const [currentPath, setCurrentPath] = useState<string | null>(null)
@@ -71,13 +76,12 @@ export const GuiDesignerScope = defineScope(() => {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(true)
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [saveNodes, setSaveNodes] = useState<GuiSaveNode[]>([])
-  const [diskConflict, setDiskConflict] = useState<string | null>(null)
+  const [diskConflictState, setDiskConflictState] = useState<GuiDiskConflictState | null>(null)
   const [aiConflict, setAiConflict] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [parsePending, setParsePending] = useState(false)
   const parseSequenceRef = useRef(0)
   const openSequenceRef = useRef(0)
-  const probePendingRef = useRef(false)
   const filesRef = useRef(files)
   const currentPathRef = useRef(currentPath)
   const currentFile = currentPath ? files[currentPath] : undefined
@@ -87,6 +91,7 @@ export const GuiDesignerScope = defineScope(() => {
   const previewDocument = currentFile?.document
   const pathSaveNodes = currentSaveNodes(saveNodes, currentPath)
   const canRestoreSave = !dirty && Boolean(pathSaveNodes[0]?.id)
+  const diskConflict = diskConflictForPath(diskConflictState, currentPath)
 
   filesRef.current = files
   currentPathRef.current = currentPath
@@ -107,41 +112,57 @@ export const GuiDesignerScope = defineScope(() => {
   }, [dirty])
 
   useEffect(() => {
-    if (!projectId)
+    if (!active || !projectId)
       return
     let cancelled = false
     void actions.listSaveNodes().then((nodes) => {
       if (!cancelled)
-        setSaveNodes(nodes)
+        setSaveNodes(value => mergeSaveNodes(value, nodes))
     }).catch(() => {})
     return () => {
       cancelled = true
     }
   // actions 每次 render 都会更新，这里只随项目重载保存历史。
   // eslint-disable-next-line react/exhaustive-deps
-  }, [projectId])
+  }, [active, projectId])
 
   useEffect(() => {
-    if (!currentFile || currentFile.isNew)
+    if (!active || !currentFile || currentFile.isNew)
       return
     let cancelled = false
-    async function probe() {
-      if (cancelled || probePendingRef.current)
+    let probePending = false
+    let probeCount = 0
+    async function probe(forceHash: boolean) {
+      if (cancelled || probePending)
         return
-      probePendingRef.current = true
+      probePending = true
       try {
-        const result = await actions.probeDocument(currentFile!.path, currentFile!.expectedSha256)
-        if (cancelled || result.state === 'unchanged')
+        const baseline = filesRef.current[currentFile!.path]
+        if (!baseline)
           return
+        const result = await actions.probeDocument({
+          devRelativePath: currentFile!.path,
+          knownSha256: baseline.expectedSha256,
+          knownModifiedAt: baseline.diskModifiedAt,
+          knownSize: baseline.diskSize,
+          forceHash,
+        })
+        if (cancelled)
+          return
+        if (result.state === 'unchanged') {
+          rememberProbeBaseline(currentFile!.path, result.modifiedAt, result.byteLength)
+          setDiskConflictState(value => diskConflictAfterProbe(value, currentFile!.path, 'unchanged'))
+          return
+        }
         const latest = filesRef.current[currentFile!.path]
         if (!latest)
           return
         if (result.state === 'missing') {
-          setDiskConflict('GUI_FILE_MISSING')
+          setDiskConflictState(value => diskConflictAfterProbe(value, currentFile!.path, 'missing'))
           return
         }
         if (latest.isNew || latest.workingSource !== latest.originalSource) {
-          setDiskConflict('GUI_EXTERNAL_CHANGE_CONFLICT')
+          setDiskConflictState({ path: currentFile!.path, reason: 'GUI_EXTERNAL_CHANGE_CONFLICT' })
           return
         }
         const accepted = await actions.acceptExternalChange({
@@ -154,25 +175,44 @@ export const GuiDesignerScope = defineScope(() => {
         if (cancelled)
           return
         acceptPersistedFiles(accepted.files)
+        rememberProbeBaseline(currentFile!.path, result.modifiedAt, result.byteLength)
         setSaveNodes(value => prependSaveNode(value, accepted.saveNode))
-        setDiskConflict(null)
+        setDiskConflictState(value => clearDiskConflictForPath(value, currentFile!.path))
       }
       catch {
         // 轮询失败不打断编辑；显式保存仍会执行哈希冲突检查。
       }
       finally {
-        probePendingRef.current = false
+        probePending = false
       }
     }
-    void probe()
-    const timer = window.setInterval(() => void probe(), 1_000)
+    // 每次重新进入 GUI 页面都立即核对完整 SHA，覆盖离开期间时间戳和大小未变的替换。
+    void probe(true)
+    const timer = window.setInterval(() => {
+      if (probePending)
+        return
+      probeCount += 1
+      void probe(shouldForceGuiProbe(probeCount))
+    }, 1_000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
   // 只在文件或基线哈希变化时重建一秒轮询。
   // eslint-disable-next-line react/exhaustive-deps
-  }, [currentFile?.path, currentFile?.expectedSha256, currentFile?.isNew])
+  }, [active, currentFile?.path, currentFile?.expectedSha256, currentFile?.isNew])
+
+  function rememberProbeBaseline(path: string, modifiedAt: number | null | undefined, byteLength: number) {
+    setFiles((value) => {
+      const file = value[path]
+      if (!file || (file.diskModifiedAt === modifiedAt && file.diskSize === byteLength))
+        return value
+      return {
+        ...value,
+        [path]: { ...file, diskModifiedAt: modifiedAt, diskSize: byteLength },
+      }
+    })
+  }
 
   useEffect(() => {
     if (!currentFile || (currentFile.workingSource === currentFile.originalSource && currentFile.history.length === 0))
@@ -229,6 +269,8 @@ export const GuiDesignerScope = defineScope(() => {
       setFiles(value => ({ ...value, [path]: { ...value[path], accessedAt: Date.now() } }))
       setCurrentPath(path)
       setSelectedNodeId(cached.document.roots[0] ?? null)
+      setDiskConflictState(value => diskConflictAfterFileSwitch(value, path))
+      setAiConflict(null)
       return
     }
     const result = await actions.open({ devRelativePath: path })
@@ -244,7 +286,7 @@ export const GuiDesignerScope = defineScope(() => {
     setCurrentPath(path)
     setSelectedNodeId(result.document.roots[0] ?? null)
     setParsePending(false)
-    setDiskConflict(null)
+    setDiskConflictState(null)
     setAiConflict(null)
   }
 
@@ -317,27 +359,6 @@ export const GuiDesignerScope = defineScope(() => {
     })
   }
 
-  function updateNodeProperty(nodeId: string, property: 'x' | 'y' | 'width' | 'height' | 'text' | 'image', value: number | string) {
-    const file = currentFile
-    const node = editableSourceNode(file, previewDocument?.nodes[nodeId])
-    if (!file || !node)
-      return
-    const bound = boundForProperty(node, property)
-    if (bound?.writable && bound.span) {
-      const token = typeof value === 'number' ? formatNumber(value) : luaString(value)
-      updateWorkingSource(replaceSpans(file.workingSource, [{ span: bound.span, token }]))
-      return
-    }
-    if ((property === 'width' || property === 'height') && typeof value === 'number' && canInsertSizeSetter(node)) {
-      const width = property === 'width' ? value : defaultNodeSize(node).width
-      const height = property === 'height' ? value : defaultNodeSize(node).height
-      const insertion = node.binding!.safeInsertion!
-      const newline = file.document.newline === '\r\n' ? '\r\n' : file.document.newline === '\r' ? '\r' : '\n'
-      const setter = `${newline}\tGUI:setContentSize(${node.luaVariable}, ${formatNumber(width)}, ${formatNumber(height)})`
-      updateWorkingSource(replaceSpans(file.workingSource, [{ span: insertion, token: setter }]))
-    }
-  }
-
   function nodePropertyWritable(node: Mir3UiNode, property: 'x' | 'y' | 'width' | 'height' | 'text' | 'image'): boolean {
     const sourceNode = editableSourceNode(currentFile, node)
     if (!sourceNode)
@@ -346,23 +367,6 @@ export const GuiDesignerScope = defineScope(() => {
     if (bound?.writable && bound.span)
       return true
     return (property === 'width' || property === 'height') && canInsertSizeSetter(sourceNode)
-  }
-
-  function updateNodeGenericProperty(nodeId: string, property: string, value: GuiPropertyValue) {
-    const file = currentFile
-    const node = editableSourceNode(file, previewDocument?.nodes[nodeId])
-    const bound = node?.properties?.[property]
-    if (!file || !bound?.writable || !bound.span)
-      return
-    updateWorkingSource(replaceSpans(file.workingSource, [{ span: bound.span, token: luaPropertyToken(value) }]))
-  }
-
-  function nodeGenericPropertyWritable(node: Mir3UiNode, property: string): boolean {
-    const sourceNode = editableSourceNode(currentFile, node)
-    if (!sourceNode)
-      return false
-    const bound = sourceNode.properties?.[property]
-    return Boolean(bound?.writable && bound.span)
   }
 
   function updateNodePosition(nodeId: string, x: number, y: number) {
@@ -394,21 +398,6 @@ export const GuiDesignerScope = defineScope(() => {
     const source = componentSource(kind, variable, parentVariable, x - parentPosition.x, y - parentPosition.y)
     updateWorkingSource(replaceSpans(file.workingSource, [{ span: insertion, token: source }]))
     setNotice(null)
-  }
-
-  function addNodeBehavior(nodeId: string, behavior: GuiBehaviorKind) {
-    const file = currentFile
-    const node = file?.document.nodes[nodeId]
-    const insertion = node?.binding?.safeInsertion
-    if (!file || !node?.luaVariable || !insertion)
-      return
-    const newline = file.document.newline === '\r\n' ? '\r\n' : file.document.newline === '\r' ? '\r' : '\n'
-    const source = behaviorSource(behavior, node.luaVariable, newline)
-    updateWorkingSource(replaceSpans(file.workingSource, [{ span: insertion, token: source }]))
-  }
-
-  function canAddNodeBehavior(node: Mir3UiNode): boolean {
-    return Boolean(node.luaVariable && node.binding?.safeInsertion && !parsePending)
   }
 
   async function createPage(request: GuiTemplateRequest) {
@@ -454,7 +443,7 @@ export const GuiDesignerScope = defineScope(() => {
     })
     acceptPersistedFiles(result.files)
     setSaveNodes(value => prependSaveNode(value, result.saveNode))
-    setDiskConflict(null)
+    setDiskConflictState(null)
   }
 
   async function restorePreviousSave() {
@@ -467,7 +456,7 @@ export const GuiDesignerScope = defineScope(() => {
     const result = await actions.restoreSaveNode(targetId)
     acceptPersistedFiles(result.files)
     setSaveNodes(value => prependSaveNode(value, result.saveNode))
-    setDiskConflict(null)
+    setDiskConflictState(null)
     setAiConflict(null)
   }
 
@@ -615,14 +604,9 @@ export const GuiDesignerScope = defineScope(() => {
     updateWorkingSource,
     undo,
     redo,
-    updateNodeProperty,
     nodePropertyWritable,
-    updateNodeGenericProperty,
-    nodeGenericPropertyWritable,
     updateNodePosition,
     addNode,
-    addNodeBehavior,
-    canAddNodeBehavior,
     createPage,
     saveWorkingFiles,
     restorePreviousSave,
@@ -643,6 +627,51 @@ export const GuiDesignerScope = defineScope(() => {
   }
 })
 
+export function shouldForceGuiProbe(probeCount: number): boolean {
+  return probeCount > 0 && probeCount % FORCE_HASH_PROBE_INTERVAL === 0
+}
+
+export function diskConflictForPath(conflict: GuiDiskConflictState | null, path: string | null): string | null {
+  if (!conflict || conflict.path !== path)
+    return null
+  return conflict.reason
+}
+
+export function diskConflictAfterFileSwitch(conflict: GuiDiskConflictState | null, path: string): GuiDiskConflictState | null {
+  if (conflict && conflict.path !== path)
+    return null
+  return conflict
+}
+
+export function clearDiskConflictForPath(conflict: GuiDiskConflictState | null, path: string): GuiDiskConflictState | null {
+  if (conflict?.path === path)
+    return null
+  return conflict
+}
+
+export function diskConflictAfterProbe(
+  conflict: GuiDiskConflictState | null,
+  path: string,
+  state: 'unchanged' | 'missing',
+): GuiDiskConflictState | null {
+  if (state === 'missing')
+    return { path, reason: 'GUI_FILE_MISSING' }
+  return clearDiskConflictForPath(conflict, path)
+}
+
+export function mergeSaveNodes(current: GuiSaveNode[], incoming: GuiSaveNode[]): GuiSaveNode[] {
+  const nodes = new Map<string, GuiSaveNode>()
+  for (const node of current) {
+    if (node.id)
+      nodes.set(node.id, node)
+  }
+  for (const node of incoming) {
+    if (node.id)
+      nodes.set(node.id, node)
+  }
+  return [...nodes.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, 100)
+}
+
 function selectedNode(file: GuiWorkingFile, nodeId: string | null): Mir3UiNode | undefined {
   return nodeId ? file.document.nodes[nodeId] : undefined
 }
@@ -654,7 +683,7 @@ function workingFileFromOpen(path: string, result: GuiDocumentOpenResult, access
     workingSource: result.source,
     document: result.document,
     expectedSha256: result.sha256 ?? result.document.sourceSha256,
-    workingRevision: result.revision ?? 0,
+    workingRevision: 0,
     history: [],
     future: [],
     valid: !result.document.diagnostics.some(item => item.severity === 'error'),
@@ -707,15 +736,6 @@ function canInsertSizeSetter(node: Mir3UiNode): boolean {
   return node.luaVariable != null && node.luaVariable.length > 0 && node.binding?.safeInsertion != null
 }
 
-function defaultNodeSize(node: Mir3UiNode): { width: number, height: number } {
-  if (node.kind === 'Unsupported')
-    return { width: Math.max(24, node.size.width.value), height: Math.max(24, node.size.height.value) }
-  const definition = componentDefinition(node.kind)
-  const width = node.size.width.value > 0 ? node.size.width.value : definition.defaultWidth
-  const height = node.size.height.value > 0 ? node.size.height.value : definition.defaultHeight
-  return { width, height }
-}
-
 function replaceSpans(source: string, replacements: Array<{ span: SourceSpan, token: string }>): string {
   const ordered = [...replacements].sort((left, right) => right.span.startByte - left.span.startByte)
   let next = source
@@ -743,28 +763,6 @@ function stringIndexAtUtf8Byte(source: string, byteOffset: number): number {
 
 function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100)
-}
-
-function luaString(value: string): string {
-  return JSON.stringify(value)
-}
-
-function luaPropertyToken(value: GuiPropertyValue): string {
-  if (value == null)
-    return 'nil'
-  if (typeof value === 'string')
-    return luaString(value)
-  if (typeof value === 'number')
-    return formatNumber(value)
-  if (typeof value === 'boolean')
-    return value ? 'true' : 'false'
-  return value.luaLiteral
-}
-
-function behaviorSource(behavior: GuiBehaviorKind, variable: string, newline: string): string {
-  if (behavior === 'timeline')
-    return `${newline}\tGUI:Timeline_FadeIn(${variable}, 0.3, nil)`
-  return `${newline}\tGUI:runAction(${variable}, GUI:ActionFadeIn(0.3))`
 }
 
 function nextNodeIndex(document: Mir3UiDocument, kind: string): number {

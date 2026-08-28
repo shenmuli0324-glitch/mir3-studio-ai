@@ -17,16 +17,20 @@ use crate::utils::show_main_window;
 
 /// setup app
 pub fn setup(app_handle: tauri::AppHandle) {
-    // 启动前清扫上次崩溃残留的孤儿 MIR3 AI Core（端口/PID 双重确认，见
-    // workflow::sweep_orphan_core），避免新实例一路漂移端口
-    crate::service::workflow::sweep_orphan_core(&app_handle);
-
-    // 启动进程监控（tick 检测 dsh 服务状态）
-    crate::service::scheduler::start(&app_handle);
-
-    // 开机自启动：已安装且开启 auto_start 时拉起服务
+    // 清扫会调用系统进程枚举/结束命令，放入 blocking worker；完成后再启动监控与
+    // Core，保持“先清残留、后拉新实例”的原有顺序。
     let app_for_start = app_handle.clone();
     tauri::async_runtime::spawn(async move {
+        let app_for_sweep = app_for_start.clone();
+        if let Err(error) = tauri::async_runtime::spawn_blocking(move || {
+            crate::service::workflow::sweep_orphan_core(&app_for_sweep);
+        })
+        .await
+        {
+            log::error!("CORE_ORPHAN_SWEEP_FAILED: blocking worker failed: {error}");
+        }
+
+        crate::service::scheduler::start(&app_for_start);
         let setting = crate::config::get_store_dat_setting(&app_for_start);
         if !setting.auto_start {
             log::debug!("auto_start disabled, skipping startup");
@@ -236,7 +240,6 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::read_run_logs,
         crate::bridge::clear_service_logs,
         crate::bridge::set_language,
-        crate::bridge::toggle_sidebar,
         crate::bridge::get_dsh_theme,
         crate::bridge::check_desktop_update,
         crate::bridge::download_desktop_update,

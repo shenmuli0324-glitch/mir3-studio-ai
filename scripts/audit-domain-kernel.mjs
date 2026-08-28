@@ -419,6 +419,7 @@ const globalTaskRecovery = readFileSync(join(root, 'src', 'features', 'system-ai
 const rendererSource = readFileSync(join(root, 'src', 'features', 'devtools', 'domain', 'renderers', 'resource-renderer.tsx'), 'utf8')
 const pluginBridge = readFileSync(join(root, 'src-tauri', 'src', 'bridge', 'plugin.rs'), 'utf8')
 const iframeShim = readFileSync(join(root, 'src', 'hooks', 'use-iframe-shim.ts'), 'utf8')
+const ciWorkflow = readFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'utf8')
 const expectedTools = [
   'mir3_system_list',
   'mir3_system_describe',
@@ -443,9 +444,18 @@ if (!mcp.includes('.map(system_list_payload)') || !mcp.includes('MCP_RESULT_BUDG
   failures.push('MCP list output must use summaries and fail closed when the result budget is exceeded')
 if (!mcp.includes('every_writable_official_operation_compiles_into_a_scoped_draft')
   || !mcp.includes('.filter(|capability| !capability.write_systems.is_empty())')
-  || !mcp.includes('assert_capability_lifecycle_coverage(&coverage)')
-  || !mcp.includes('assert_eq!(coverage.len(), 33')
-  || !mcp.includes('assert_eq!(compiled, 155')
+  || !mcp.includes('assert_capability_lifecycle_coverage(&coverage, &catalog, &selected_systems)')
+  || !mcp.includes('operation_matrix_eight_shards_assign_all_operations_exactly_once')
+  || !mcp.includes('const OPERATION_MATRIX_SYSTEMS: usize = 33')
+  || !mcp.includes('const OPERATION_MATRIX_OPERATIONS: usize = 155')
+  || !mcp.includes('const OPERATION_MATRIX_SHARDS: usize = 8')
+  || !mcp.includes('assigned_systems.len()')
+  || !mcp.includes('assigned_operations.len()')
+  || !mcp.includes('MIR3_OPERATION_MATRIX_SHARD_INDEX')
+  || !mcp.includes('MIR3_OPERATION_MATRIX_SHARD_TOTAL')
+  || !ciWorkflow.includes('rust-operation-matrix:')
+  || !ciWorkflow.includes('shard: [0, 1, 2, 3, 4, 5, 6, 7]')
+  || !ciWorkflow.includes('--ignored --exact --test-threads=1')
   || !mcp.includes('systems without a representative Apply/restore lifecycle')) {
   failures.push('MCP tests must compile every writable operation from all 33 packs, not only shaped examples')
 }
@@ -566,7 +576,7 @@ for (const row of evidenceRows) {
 }
 const familyCoverage = Object.keys(operationFamilies).map(family => `${family}=${evidenceRows.filter(row => row.operationFamilies[family]).length}/33`).join(', ')
 process.stdout.write(`Domain delivery family coverage (reported, not inferred): ${familyCoverage}\n`)
-process.stdout.write(`Domain Kernel audit passed (33 per-pack evidence rows, ${capabilityIds.size} official capabilities, 155 writable compiler cases, 12 MCP tools, ${systemSummaryBytes}B system summary, ${cyclicComponents.length} cyclic dependency components reported)\n`)
+process.stdout.write(`Domain Kernel audit passed (33 per-pack evidence rows, ${capabilityIds.size} official capabilities, 155 writable compiler cases, 16 MCP tools, ${systemSummaryBytes}B system summary, ${cyclicComponents.length} cyclic dependency components reported)\n`)
 
 function dependencyCycleComponents(packs) {
   const dependencies = new Map(packs.map(pack => [pack.systemId, pack.dependencies || []]))

@@ -16,8 +16,8 @@ use tauri::Runtime;
 ///
 /// # 返回
 /// 成功返回文件内容 `Ok(Vec<u8>)`，失败返回错误信息
-pub async fn download_file<'a, R: Runtime>(
-    tracker: &'a ProgressTracker<'a, R>,
+pub async fn download_file<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     url: String,
 ) -> Result<Vec<u8>, String> {
     download_file_from_sources(tracker, vec![url]).await
@@ -30,8 +30,8 @@ pub async fn download_file<'a, R: Runtime>(
 /// 每个源内部仍走 `download_with_retry` 的断点续传重试；切换源时保留已下载
 /// 的字节续传（镜像透传同一文件，内容一致，且最终有 SHA-256 完整性校验兜底；
 /// 服务端不支持 Range 时 `download_attempt` 会自动清空从头下载）。
-pub async fn download_file_from_sources<'a, R: Runtime>(
-    tracker: &'a ProgressTracker<'a, R>,
+pub async fn download_file_from_sources<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     urls: Vec<String>,
 ) -> Result<Vec<u8>, String> {
     if urls.is_empty() {
@@ -68,8 +68,8 @@ pub async fn download_file_from_sources<'a, R: Runtime>(
 }
 
 /// 对单个 URL 执行断点续传重试，全部尝试失败返回中文可读错误。
-async fn download_with_retry<'a, R: Runtime>(
-    tracker: &'a ProgressTracker<'a, R>,
+async fn download_with_retry<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     url: &str,
 ) -> Result<Vec<u8>, String> {
     log::info!("Starting file download: {}", url);
@@ -147,9 +147,9 @@ async fn download_with_retry<'a, R: Runtime>(
 /// 已有部分数据时自动带 `Range: bytes=<已有>-` 续传；服务端返回 200（不支持
 /// Range）则清空从头下载。续传成功不代表整体完成——调用方必须比对摘要校验，
 /// 任何中途断流都会以 Err 返回并触发外层重试。
-async fn download_attempt<'a, R: Runtime>(
+async fn download_attempt<R: Runtime>(
     client: &reqwest::Client,
-    tracker: &'a ProgressTracker<'a, R>,
+    tracker: &ProgressTracker<R>,
     url: &str,
     attempt: usize,
     max_attempts: usize,
@@ -451,8 +451,8 @@ async fn commit_staged_install(
 ///
 /// # 返回
 /// 成功返回 `Ok(())`，失败返回错误信息
-pub async fn ensure_extract<'a, R: Runtime>(
-    tracker: &'a ProgressTracker<'a, R>,
+pub async fn ensure_extract<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     name: String,
     buffer: Vec<u8>,
     dest: PathBuf,
@@ -462,8 +462,8 @@ pub async fn ensure_extract<'a, R: Runtime>(
 
 /// 与 `ensure_extract` 相同，但在成功切换后保留旧目录，直到 MIR3 Core Plugin
 /// 发出 ready 信号。仅用于 Core 更新，首次基线安装及 Node/pnpm 不保留备份。
-pub async fn ensure_extract_with_backup_policy<'a, R: Runtime>(
-    tracker: &'a ProgressTracker<'a, R>,
+pub async fn ensure_extract_with_backup_policy<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     name: String,
     buffer: Vec<u8>,
     dest: PathBuf,
@@ -508,54 +508,58 @@ pub async fn ensure_extract_with_backup_policy<'a, R: Runtime>(
             format!("File written: {}", staging.display()),
         );
         commit_staged_install(&staging, &dest, &backup, keep_backup).await?;
+        crate::config::invalidate_runtime_inventory();
         log::info!("File write completed: {}", dest.display());
         return Ok(());
     }
 
-    fs::create_dir_all(&staging).map_err(|e| {
-        log::error!("Failed to create destination directory: {}", e);
-        e.to_string()
-    })?;
-
-    // 根据文件类型解压
-    if is_tgz {
-        log::debug!("Using tgz extractor");
-        extract_tgz(tracker, &buffer, &staging)?;
-    } else {
-        log::debug!("Using zip extractor");
-        extract_zip(tracker, &buffer, &staging)?;
-    }
-
-    // 处理解压后的"套娃"文件夹
-    log::debug!("Flattening directory structure");
-    flatten_directory(&staging).map_err(|e| {
-        log::error!("Failed to flatten directory: {}", e);
-        e.to_string()
-    })?;
-
-    // 权限修复与隔离属性移除 (仅限 Unix/macOS)
-    #[cfg(unix)]
-    {
-        use super::utils::fix_recursive_permissions;
-        // 递归赋予可执行权限 (755)
-        log::debug!("Fixing file permissions");
-        fix_recursive_permissions(&staging).map_err(|e| {
-            log::error!("Failed to fix permissions: {}", e);
-            format!("Failed to fix permissions: {}", e)
+    let worker_staging = staging.clone();
+    let worker_tracker = tracker.clone_for_worker();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        fs::create_dir_all(&worker_staging).map_err(|e| {
+            log::error!("Failed to create destination directory: {}", e);
+            e.to_string()
         })?;
 
-        // macOS 移除 quarantine 属性
-        #[cfg(target_os = "macos")]
+        if is_tgz {
+            log::debug!("Using tgz extractor");
+            extract_tgz(&worker_tracker, &buffer, &worker_staging)?;
+        } else {
+            log::debug!("Using zip extractor");
+            extract_zip(&worker_tracker, &buffer, &worker_staging)?;
+        }
+
+        log::debug!("Flattening directory structure");
+        flatten_directory(&worker_staging).map_err(|e| {
+            log::error!("Failed to flatten directory: {}", e);
+            e.to_string()
+        })?;
+
+        #[cfg(unix)]
         {
-            use std::process::Command;
-            log::debug!("Removing macOS quarantine attribute");
-            if let Some(path_str) = staging.to_str() {
-                let _ = Command::new("xattr").args(["-cr", path_str]).output();
+            use super::utils::fix_recursive_permissions;
+            log::debug!("Fixing file permissions");
+            fix_recursive_permissions(&worker_staging).map_err(|e| {
+                log::error!("Failed to fix permissions: {}", e);
+                format!("Failed to fix permissions: {}", e)
+            })?;
+
+            #[cfg(target_os = "macos")]
+            {
+                use std::process::Command;
+                log::debug!("Removing macOS quarantine attribute");
+                if let Some(path_str) = worker_staging.to_str() {
+                    let _ = Command::new("xattr").args(["-cr", path_str]).output();
+                }
             }
         }
-    }
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("INSTALL_EXTRACT_WORKER_FAILED: {error}"))??;
 
     commit_staged_install(&staging, &dest, &backup, keep_backup).await?;
+    crate::config::invalidate_runtime_inventory();
     Ok(())
 }
 

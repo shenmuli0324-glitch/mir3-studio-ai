@@ -1,9 +1,10 @@
 import type { PropsWithOverlays } from '@overlastic/react'
-import type { AlertDialogStatus } from 'node_modules/@heroui/react/dist/components/alert-dialog/alert-dialog'
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { AlertDialog, Button } from '@heroui/react'
 import { useDisclosure } from '@overlastic/react'
 import { useTranslation } from 'react-i18next'
+
+type AlertDialogStatus = NonNullable<ComponentProps<typeof AlertDialog.Icon>['status']>
 
 export interface ModalProps extends PropsWithOverlays {
   status: AlertDialogStatus

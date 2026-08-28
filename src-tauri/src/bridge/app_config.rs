@@ -21,15 +21,10 @@ pub async fn update_app_config(
     auto_start: Option<bool>,
     cli_link_enabled: Option<bool>,
 ) -> Result<config::Setting, String> {
-    let mut setting = config::get_store_dat_setting(&app_handle);
     if let Some(port) = port {
         if port == 0 {
             return Err("port must be a positive number".to_string());
         }
-        setting.port = port;
-    }
-    if let Some(auto_start) = auto_start {
-        setting.auto_start = auto_start;
     }
     // 命令行集成：先执行文件系统/PATH 操作，成功后再持久化开关，
     // 失败时配置保持不变，避免"开关已开但 shim 未生成"的不一致状态。
@@ -39,9 +34,18 @@ pub async fn update_app_config(
         } else {
             cli::remove(&app_handle)?;
         }
-        setting.cli_link_enabled = enabled;
     }
-    config::set_store_dat_setting(&app_handle, setting.clone());
+    let setting = config::update_setting(&app_handle, |setting| {
+        if let Some(port) = port {
+            setting.port = port;
+        }
+        if let Some(auto_start) = auto_start {
+            setting.auto_start = auto_start;
+        }
+        if let Some(enabled) = cli_link_enabled {
+            setting.cli_link_enabled = enabled;
+        }
+    });
     Ok(setting)
 }
 
@@ -54,19 +58,11 @@ pub fn get_cli_link_status(app_handle: AppHandle) -> Result<cli::CliLinkStatus, 
 /// 保存界面语言偏好
 #[tauri::command]
 pub fn set_language(app_handle: AppHandle, lang: String) {
-    let mut setting = config::get_store_dat_setting(&app_handle);
-    setting.language = lang.clone();
-    config::set_store_dat_setting(&app_handle, setting);
+    config::update_setting(&app_handle, |setting| setting.language = lang.clone());
     config::i18n::set_language(match lang.as_str() {
         "en" | "en-US" => config::i18n::Lang::En,
         _ => config::i18n::Lang::Zh,
     });
-}
-
-/// 切换侧边栏（布局状态保存在前端，保留该命令以对齐参考实现）
-#[tauri::command]
-pub async fn toggle_sidebar() -> Result<bool, String> {
-    Ok(true)
 }
 
 /// 当前 dsh 主题偏好（light/dark/system），用于让桌面外壳跟随内嵌页面主题

@@ -1,6 +1,8 @@
+import type { toast as heroToast } from '@heroui/react'
 import type { ToastVariants } from '@heroui/styles'
-import type { HeroUIToastOptions } from 'node_modules/@heroui/react/dist/components/toast/toast-queue'
 import { ToastQueue } from '@heroui/react'
+
+type HeroUIToastOptions = NonNullable<Parameters<typeof heroToast>[1]>
 
 export type Placement = NonNullable<ToastVariants['placement']>
 export const placements = [

@@ -15,8 +15,8 @@ pub struct ProgressPayload {
     pub progress: f64,
 }
 
-pub struct ProgressTracker<'a, R: Runtime> {
-    window: &'a WebviewWindow<R>,
+pub struct ProgressTracker<R: Runtime> {
+    window: WebviewWindow<R>,
     total_phases: usize,
     current_phase: usize,
     current_title: String,
@@ -24,15 +24,31 @@ pub struct ProgressTracker<'a, R: Runtime> {
     last_emit_time: Mutex<Option<Instant>>,
 }
 
-impl<'a, R: Runtime> ProgressTracker<'a, R> {
-    pub fn new(window: &'a WebviewWindow<R>, task_count: usize) -> Self {
+impl<R: Runtime> ProgressTracker<R> {
+    pub fn new(window: &WebviewWindow<R>, task_count: usize) -> Self {
         Self {
-            window,
+            window: window.clone(),
             total_phases: task_count,
             current_phase: 0,
             current_title: String::from("准备中..."),
             current_type: String::from(""),
             last_emit_time: Mutex::new(None),
+        }
+    }
+
+    /// 为 blocking 解压 worker 复制当前阶段快照，避免跨线程借用调用栈。
+    pub(crate) fn clone_for_worker(&self) -> Self {
+        let last_emit_time = *self
+            .last_emit_time
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        Self {
+            window: self.window.clone(),
+            total_phases: self.total_phases,
+            current_phase: self.current_phase,
+            current_title: self.current_title.clone(),
+            current_type: self.current_type.clone(),
+            last_emit_time: Mutex::new(last_emit_time),
         }
     }
 

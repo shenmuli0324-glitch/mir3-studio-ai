@@ -25,12 +25,13 @@ pub async fn install_preinstall_plugins(
     ids: Vec<String>,
 ) -> Result<(), String> {
     plugin::install(&app_handle, &ids).await?;
-    let mut setting = config::get_store_dat_setting(&app_handle);
-    setting.preinstall_done = true;
-    if let Some(hash) = plugin::current_preset_hash(&app_handle) {
-        setting.preset_hash = Some(hash);
-    }
-    config::set_store_dat_setting(&app_handle, setting);
+    let preset_hash = plugin::current_preset_hash(&app_handle);
+    config::update_setting(&app_handle, |setting| {
+        setting.preinstall_done = true;
+        if let Some(hash) = preset_hash {
+            setting.preset_hash = Some(hash);
+        }
+    });
     Ok(())
 }
 
@@ -43,12 +44,13 @@ pub async fn cancel_preinstall_plugins(app_handle: AppHandle) {
 /// 跳过预装插件引导：记录状态与预设指纹，之后不再弹出（除非清单内容变更）
 #[tauri::command]
 pub async fn skip_preinstall_plugins(app_handle: AppHandle) -> Result<(), String> {
-    let mut setting = config::get_store_dat_setting(&app_handle);
-    setting.preinstall_done = true;
-    if let Some(hash) = plugin::current_preset_hash(&app_handle) {
-        setting.preset_hash = Some(hash);
-    }
-    config::set_store_dat_setting(&app_handle, setting);
+    let preset_hash = plugin::current_preset_hash(&app_handle);
+    config::update_setting(&app_handle, |setting| {
+        setting.preinstall_done = true;
+        if let Some(hash) = preset_hash {
+            setting.preset_hash = Some(hash);
+        }
+    });
     Ok(())
 }
 

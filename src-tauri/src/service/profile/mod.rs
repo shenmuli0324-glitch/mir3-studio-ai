@@ -184,9 +184,10 @@ pub fn set_active(app_handle: &AppHandle, id: &str) -> Result<Profile, String> {
     if id != DEFAULT_PROFILE && !dir.is_dir() {
         return Err(format!("PROFILE_NOT_FOUND: profile {id} does not exist"));
     }
-    let mut setting = config::get_store_dat_setting(app_handle);
-    setting.active_profile = id.to_string();
-    config::set_store_dat_setting(app_handle, setting);
+    config::update_setting(app_handle, |setting| {
+        setting.active_profile = id.to_string();
+    });
+    crate::service::plugin::watch::force_emit(app_handle);
     list(app_handle)
         .into_iter()
         .find(|p| p.id == id)

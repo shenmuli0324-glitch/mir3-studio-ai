@@ -16,7 +16,7 @@ MIR3 Studio AI 的插件能力必须建立在 Harness 公共插件机制之上�
 - 修改 MIR3 AI Core/Harness 源码或发布包中的官方 `node_modules`。
 - 复制实现第二套 Workspace、Session、文件工具、编辑器、终端、Agent、Profile 或 MCP Client。
 - 依赖 Harness 未公开的 DOM 结构完成关键业务；界面拦截只能作为入口适配，真正的路径和权限校验必须由 Tauri/Rust 完成。
-- 在插件参数中接受未经 Studio 校验的项目根目录，或绕过 Draft、预览、确认和备份门禁直接修改正式项目。
+- 在插件参数中接受未经 Studio 校验的项目根目录，或绕过受治理的写入门禁直接修改正式项目。领域写入必须经过 Draft、预览、确认和备份；GUI 写入必须经过私有 Working Workspace、workspaceToken、SHA 冲突校验和显式保存节点。
 
 ## 版本和更新记录
 

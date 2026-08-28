@@ -70,9 +70,9 @@ describe('gui designer interaction', () => {
     expect(screen.getByLabelText('PC design resolution')).toBeTruthy()
 
     await user.click(screen.getByRole('button', { name: 'Code' }))
-    expect(screen.getByLabelText('Lua source editor')).toBeTruthy()
+    expect(await screen.findByLabelText('Lua source editor')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Split' }))
-    expect(screen.getByLabelText('Lua source editor')).toBeTruthy()
+    expect(await screen.findByLabelText('Lua source editor')).toBeTruthy()
     expect(document.querySelector('[data-gui-canvas-container]')).toBeTruthy()
   })
 
@@ -87,7 +87,7 @@ describe('gui designer interaction', () => {
     expect(screen.getAllByText('Button_close').length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Code' }))
-    const editor = screen.getByLabelText('Lua source editor') as HTMLTextAreaElement
+    const editor = await screen.findByLabelText('Lua source editor') as HTMLTextAreaElement
     fireEvent.change(editor, { target: { value: editor.value.replace(', 10,', ', 42,') } })
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_reparse', expect.anything()), { timeout: 1500 })
     await waitFor(() => expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false))
@@ -146,7 +146,7 @@ describe('gui designer interaction', () => {
 
     await openDemoFile(user)
     await user.click(screen.getByRole('button', { name: 'Code' }))
-    const editor = screen.getByLabelText('Lua source editor') as HTMLTextAreaElement
+    const editor = await screen.findByLabelText('Lua source editor') as HTMLTextAreaElement
     fireEvent.change(editor, { target: { value: editor.value.replace(', 10,', ', 77,') } })
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('gui_document_reparse', expect.anything()), { timeout: 1500 })
 
@@ -154,7 +154,7 @@ describe('gui designer interaction', () => {
     expect(screen.getByText('Another Studio menu')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Show GUI Designer' }))
     await user.click(screen.getByRole('button', { name: 'Code' }))
-    expect((screen.getByLabelText('Lua source editor') as HTMLTextAreaElement).value).toContain(', 77,')
+    expect((await screen.findByLabelText('Lua source editor') as HTMLTextAreaElement).value).toContain(', 77,')
   })
 })
 
@@ -256,20 +256,6 @@ function installInvokeFixture(): void {
       return Promise.reject(new Error('GUI_ASSET_NOT_FOUND'))
     if (command === 'gui_asset_meta')
       return Promise.reject(new Error('GUI_ASSET_NOT_FOUND'))
-    if (command === 'gui_draft_prepare')
-      return Promise.resolve({ draftId: 'draft-1', revision: 1, preview: { changes: [] } })
-    if (command === 'gui_draft_confirm') {
-      return Promise.resolve({
-        preview: {
-          draft: { id: 'draft-1' },
-          changes: [{ path: '客户端/dev/GUIExport/demo/main.lua', unifiedDiff: '@@ -1 +1 @@\n-Button_close\n+Button_close' }],
-          diffHash: 'diff-hash',
-        },
-        confirmationToken: 'confirm-once',
-      })
-    }
-    if (command === 'gui_draft_apply')
-      return Promise.resolve({ id: 'snapshot-1', files: [] })
     return Promise.reject(new Error(`UNEXPECTED_COMMAND: ${command}`))
   })
 }

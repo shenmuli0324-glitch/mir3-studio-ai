@@ -1,5 +1,6 @@
 import type { GuiAssetMeta, GuiDevTreeEntry, GuiReadonlyDocument } from './types'
 import { ChevronRight, FileCode, FolderOpen, Picture } from '@gravity-ui/icons'
+import { Button, Modal } from '@heroui/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -364,19 +365,32 @@ function InfoPreviewDialog({ entry, onClose }: { entry: GuiDevTreeEntry | null, 
 
 function PreviewDialog({ title, subtitle, children, onClose }: { title: string, subtitle: string, children: React.ReactNode, onClose: () => void }) {
   const { t } = useTranslation()
+
+  function closeDialog(open: boolean) {
+    if (!open)
+      onClose()
+  }
+
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/55 p-8" role="dialog" aria-modal="true">
-      <section className="flex max-h-[82vh] w-[min(840px,92vw)] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl">
-        <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <strong className="block text-xs font-semibold text-ink">{title}</strong>
-            <span className="block truncate text-[10px] text-muted">{subtitle}</span>
-          </div>
-          <button className="rounded-lg px-3 py-1.5 text-[10px] text-muted hover:bg-panel-hover hover:text-ink" type="button" onClick={onClose}>{t('studio.gui.dev_tree.close')}</button>
-        </header>
-        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
-      </section>
-    </div>
+    <Modal isOpen onOpenChange={closeDialog}>
+      <Modal.Backdrop>
+        <Modal.Container size="lg">
+          <Modal.Dialog className="max-h-[82vh] w-[min(840px,92vw)] overflow-hidden">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <div className="min-w-0 flex-1">
+                <Modal.Heading>{title}</Modal.Heading>
+                <span className="mt-1 block truncate text-[10px] text-muted">{subtitle}</span>
+              </div>
+            </Modal.Header>
+            <Modal.Body className="min-h-0 overflow-auto p-0">{children}</Modal.Body>
+            <Modal.Footer>
+              <Button variant="ghost" onPress={onClose}>{t('studio.gui.dev_tree.close')}</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   )
 }
 

@@ -6,10 +6,6 @@ import type {
   GuiDocumentEntry,
   GuiDocumentOpenResult,
   GuiDocumentProbeResult,
-  GuiDraftApplyResult,
-  GuiDraftChangeSet,
-  GuiDraftConfirmation,
-  GuiDraftPrepareResult,
   GuiGameProcessStatus,
   GuiReadonlyDocument,
   GuiSaveNode,
@@ -36,11 +32,11 @@ export function setGuiAssetDecodingPaused(paused: boolean): void {
   assetDecodeWaiters.clear()
 }
 
-export function useGuiDesignerStatus(projectId?: string) {
+export function useGuiDesignerStatus(projectId?: string, active = true) {
   return useQuery({
     queryKey: ['gui-designer-status', projectId],
     queryFn: () => invoke<GuiDesignerStatus>('gui_designer_status', { projectId }),
-    enabled: projectId != null,
+    enabled: active && projectId != null,
   })
 }
 
@@ -68,11 +64,11 @@ export function guiAssetMetaQueryOptions(projectId: string, logicalPath: string)
   })
 }
 
-export function useGuiDocumentList(projectId?: string) {
+export function useGuiDocumentList(projectId?: string, active = true) {
   return useQuery({
     queryKey: ['gui-document-list', projectId],
     queryFn: () => invoke<unknown>('gui_document_list', { projectId }).then(normalizeDocumentList),
-    enabled: projectId != null,
+    enabled: active && projectId != null,
   })
 }
 
@@ -112,10 +108,10 @@ export async function normalizeGuiAssetPayload(payload: unknown, logicalPath: st
 export function useGuiDocumentActions(projectId?: string) {
   const queryClient = useQueryClient()
   const open = useMutation({
-    mutationFn: ({ devRelativePath, draftId }: { devRelativePath: string, draftId?: string }) => {
+    mutationFn: ({ devRelativePath }: { devRelativePath: string }) => {
       if (!projectId)
         throw new Error('GUI_PROJECT_REQUIRED')
-      return invoke<unknown>('gui_document_open', { projectId, devRelativePath, draftId }).then(normalizeOpenResult)
+      return invoke<unknown>('gui_document_open', { projectId, devRelativePath }).then(normalizeOpenResult)
     },
   })
   const reparse = useMutation({
@@ -131,30 +127,6 @@ export function useGuiDocumentActions(projectId?: string) {
         throw new Error('GUI_PROJECT_REQUIRED')
       const wireRequest = { path: request.relativePath, platform: request.targets, pcResolution: request.pcResolution }
       return invoke<unknown>('gui_document_template', { projectId, request: wireRequest }).then(normalizeTemplateResult)
-    },
-  })
-  const prepare = useMutation({
-    mutationFn: (changeSet: GuiDraftChangeSet) => {
-      if (!projectId)
-        throw new Error('GUI_PROJECT_REQUIRED')
-      return invoke<GuiDraftPrepareResult>('gui_draft_prepare', { projectId, changeSet })
-    },
-  })
-  const confirm = useMutation({
-    mutationFn: (draftId: string) => {
-      if (!projectId)
-        throw new Error('GUI_PROJECT_REQUIRED')
-      return invoke<unknown>('gui_draft_confirm', { projectId, draftId }).then(normalizeDraftConfirmation)
-    },
-  })
-  const apply = useMutation({
-    mutationFn: ({ draftId, token }: { draftId: string, token: string }) => {
-      if (!projectId)
-        throw new Error('GUI_PROJECT_REQUIRED')
-      return invoke<GuiDraftApplyResult>('gui_draft_apply', { projectId, draftId, confirmationToken: token })
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gui-document-list', projectId] })
     },
   })
   const save = useMutation({
@@ -197,10 +169,16 @@ export function useGuiDocumentActions(projectId?: string) {
     return invoke<unknown>('gui_save_node_list', { projectId, limit }).then(normalizeSaveNodes)
   }
 
-  function probeDocument(devRelativePath: string, knownSha256?: string | null): Promise<GuiDocumentProbeResult> {
+  function probeDocument(request: {
+    devRelativePath: string
+    knownSha256?: string | null
+    knownModifiedAt?: number | null
+    knownSize?: number | null
+    forceHash?: boolean
+  }): Promise<GuiDocumentProbeResult> {
     if (!projectId)
       return Promise.reject(new Error('GUI_PROJECT_REQUIRED'))
-    return invoke<unknown>('gui_document_probe', { projectId, devRelativePath, knownSha256 }).then(normalizeDocumentProbe)
+    return invoke<unknown>('gui_document_probe', { projectId, ...request }).then(normalizeDocumentProbe)
   }
 
   function syncAiWorkspace(context: {
@@ -232,9 +210,6 @@ export function useGuiDocumentActions(projectId?: string) {
     open: open.mutateAsync,
     reparse: reparse.mutateAsync,
     createTemplate: template.mutateAsync,
-    prepareDraft: prepare.mutateAsync,
-    confirmDraft: confirm.mutateAsync,
-    applyDraft: apply.mutateAsync,
     saveWorking: save.mutateAsync,
     restoreSaveNode: restore.mutateAsync,
     acceptExternalChange: acceptExternal.mutateAsync,
@@ -243,8 +218,8 @@ export function useGuiDocumentActions(projectId?: string) {
     syncAiWorkspace,
     getAiWorkspace,
     gameProcessStatus,
-    busy: open.isPending || reparse.isPending || template.isPending || prepare.isPending || confirm.isPending || apply.isPending || save.isPending || restore.isPending || acceptExternal.isPending,
-    error: open.error || reparse.error || template.error || prepare.error || confirm.error || apply.error || save.error || restore.error || acceptExternal.error,
+    busy: open.isPending || reparse.isPending || template.isPending || save.isPending || restore.isPending || acceptExternal.isPending,
+    error: open.error || reparse.error || template.error || save.error || restore.error || acceptExternal.error,
   }
 }
 
@@ -293,7 +268,12 @@ function normalizeDocumentProbe(input: unknown): GuiDocumentProbeResult {
   const fallbackState = wire.exists === false ? 'missing' : wire.changed === true ? 'changed' : 'unchanged'
   const rawState = String(wire.state ?? wire.status ?? fallbackState)
   const state = rawState === 'changed' || rawState === 'missing' ? rawState : 'unchanged'
-  return { state, sha256: stringValue(wire.sha256) }
+  return {
+    state,
+    sha256: stringValue(wire.sha256),
+    byteLength: numberValue(wire.byteLength ?? wire.byte_length) ?? 0,
+    modifiedAt: numberValue(wire.modifiedAt ?? wire.modified_at),
+  }
 }
 
 function normalizeAiWorkspace(input: unknown): GuiAiWorkspace {
@@ -361,8 +341,6 @@ function normalizeOpenResult(input: unknown): GuiDocumentOpenResult {
     sha256: stringValue(wire.sha256) ?? document.sourceSha256,
     encoding: stringValue(wire.encoding) ?? document.encoding,
     newline: stringValue(wire.newline) ?? document.newline,
-    draftId: stringValue(wire.draftId),
-    revision: numberValue(wire.revision),
   }
 }
 
@@ -393,22 +371,6 @@ function normalizeTemplateResult(input: unknown): GuiTemplateResult {
   }
   const result = normalizeOpenResult(input)
   return { documents: [{ path: result.document.devRelativePath, source: result.source, document: result.document }] }
-}
-
-function normalizeDraftConfirmation(input: unknown): GuiDraftConfirmation {
-  const wire = input as Record<string, unknown>
-  const preview = wire.preview as Record<string, unknown> | undefined
-  const draft = preview?.draft as Record<string, unknown> | undefined
-  const changes = Array.isArray(preview?.changes) ? preview.changes : []
-  return {
-    draftId: String(draft?.id ?? wire.draftId ?? ''),
-    confirmationToken: String(wire.confirmationToken ?? ''),
-    diff: changes.map((change) => {
-      const value = change as Record<string, unknown>
-      return String(value.unifiedDiff ?? '')
-    }).filter(Boolean).join('\n'),
-    diffHash: stringValue(preview?.diffHash ?? wire.diffHash),
-  }
 }
 
 export function normalizeDocument(wire: WireDocument): Mir3UiDocument {

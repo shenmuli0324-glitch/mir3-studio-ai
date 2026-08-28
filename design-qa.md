@@ -3,8 +3,8 @@
 ## Evidence
 
 - Source visual truth:
-  - `/Users/sml/Desktop/截屏2026-08-24 18.16.45.png` — development-tool catalog reference.
-  - `/Users/sml/Desktop/截屏2026-08-24 18.21.07.png` — map-workspace reference.
+  - User-provided development-tool catalog reference captured on 2026-08-24.
+  - User-provided map-workspace reference captured on 2026-08-24.
 - Browser-rendered implementation:
   - `docs/design-qa/devtools/catalog-implementation.png`
   - `docs/design-qa/devtools/map-implementation.png`

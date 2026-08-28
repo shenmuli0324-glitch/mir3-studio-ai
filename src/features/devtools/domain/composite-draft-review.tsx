@@ -1,8 +1,10 @@
 import type { CompositeDraftApplyResult, CompositeDraftReview, CompositeDraftReviewItem } from './types'
 import { Button, Modal, Spinner } from '@heroui/react'
+import { useOverlay } from '@overlastic/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
+import { Modal as ConfirmationModal } from '@/components/modal'
 import { toast } from '@/utils'
 import { applyCompositeDrafts, previewCompositeDrafts } from './api'
 
@@ -20,6 +22,7 @@ export function CompositeDraftReviewDialog({ request, onClose, onApplied }: {
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [confirmationHolder, openConfirmation] = useOverlay(ConfirmationModal, { type: 'holder' })
   const review = useQuery({
     queryKey: ['composite-draft-review', request.projectId, request.compositeId],
     queryFn: () => previewCompositeDrafts(request.projectId, request.compositeId),
@@ -47,12 +50,20 @@ export function CompositeDraftReviewDialog({ request, onClose, onApplied }: {
     },
   })
 
-  function confirmApply() {
+  async function confirmApply() {
     if (!review.data || !reviewCanApply(review.data))
       return
-    // eslint-disable-next-line no-alert
-    if (window.confirm(t('studio.composite_review.apply_confirm', { count: review.data.drafts.length })))
+    try {
+      await openConfirmation({
+        status: 'warning',
+        title: t('studio.composite_review.apply'),
+        description: <p>{t('studio.composite_review.apply_confirm', { count: review.data.drafts.length })}</p>,
+      })
       apply.mutate(review.data)
+    }
+    catch {
+      // 用户取消后保留复核内容。
+    }
   }
 
   function closeDialog(open: boolean) {
@@ -72,43 +83,46 @@ export function CompositeDraftReviewDialog({ request, onClose, onApplied }: {
 
   const validCount = review.data?.drafts.filter(draft => draft.validation.valid).length ?? 0
   return (
-    <Modal isOpen onOpenChange={closeDialog}>
-      <Modal.Backdrop>
-        <Modal.Container size="lg">
-          <Modal.Dialog className="max-h-[min(820px,calc(100vh-48px))] w-[960px] max-w-[calc(100vw-48px)]">
-            <Modal.CloseTrigger isDisabled={apply.isPending} />
-            <Modal.Header>
-              <Modal.Heading>{t('studio.composite_review.title')}</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body className="min-h-0 overflow-y-auto">
-              <p className="mb-4 text-xs leading-5 text-muted">
-                {t('studio.composite_review.description', { compositeId: request.compositeId })}
-              </p>
-              {body()}
-            </Modal.Body>
-            <Modal.Footer className="items-center justify-between gap-3">
-              <span className="text-[10px] text-muted">
-                {t('studio.composite_review.validation_summary', {
-                  valid: validCount,
-                  total: review.data?.drafts.length ?? 0,
-                })}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="ghost" isDisabled={apply.isPending} onPress={onClose}>{t('studio.composite_review.close')}</Button>
-                <Button
-                  className="bg-accent text-white"
-                  isDisabled={!review.data || !reviewCanApply(review.data)}
-                  isPending={apply.isPending}
-                  onPress={confirmApply}
-                >
-                  {t('studio.composite_review.apply')}
-                </Button>
-              </div>
-            </Modal.Footer>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <>
+      <Modal isOpen onOpenChange={closeDialog}>
+        <Modal.Backdrop>
+          <Modal.Container size="lg">
+            <Modal.Dialog className="max-h-[min(820px,calc(100vh-48px))] w-[960px] max-w-[calc(100vw-48px)]">
+              <Modal.CloseTrigger isDisabled={apply.isPending} />
+              <Modal.Header>
+                <Modal.Heading>{t('studio.composite_review.title')}</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="min-h-0 overflow-y-auto">
+                <p className="mb-4 text-xs leading-5 text-muted">
+                  {t('studio.composite_review.description', { compositeId: request.compositeId })}
+                </p>
+                {body()}
+              </Modal.Body>
+              <Modal.Footer className="items-center justify-between gap-3">
+                <span className="text-[10px] text-muted">
+                  {t('studio.composite_review.validation_summary', {
+                    valid: validCount,
+                    total: review.data?.drafts.length ?? 0,
+                  })}
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="ghost" isDisabled={apply.isPending} onPress={onClose}>{t('studio.composite_review.close')}</Button>
+                  <Button
+                    className="bg-accent text-white"
+                    isDisabled={!review.data || !reviewCanApply(review.data)}
+                    isPending={apply.isPending}
+                    onPress={() => void confirmApply()}
+                  >
+                    {t('studio.composite_review.apply')}
+                  </Button>
+                </div>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+      {confirmationHolder}
+    </>
   )
 }
 

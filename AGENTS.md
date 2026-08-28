@@ -1,6 +1,6 @@
 # Development Specification Document
 
-MIR3 Studio AI (Tauri 2 + React 18), embeds the Harness UI served at `http://127.0.0.1:3080`.
+MIR3 Studio AI (Tauri 2 + React 19), embeds the Harness UI served at `http://127.0.0.1:3080`.
 
 - **端口隔离**：release 默认 `3080`，debug（`pnpm tauri dev` / `cargo build`）默认 `3081`，由 `config::setting::default_port()` 用 `cfg!(debug_assertions)` 区分，避免开发时与已运行的桌面端争用端口。
 - **数据隔离（核心共用、数据不共用）**：node/`dependencies/dsh`/`dependencies/pnpm` 为共用核心（AppData）；debug 构建的 `$MIR3_STUDIO_HOME` 默认为 `~/.mir3-studio-ai.dev`（`config::runtime::get_dsh_data_path` 用 `cfg!(debug_assertions)` 区分）且 store 用独立文件 `.store.dev.dat`（`config::setting::store_dat_file_name`），避免开发版与生产版会话/档案/端口状态互相污染。新产品不迁移旧数据；debug 不注册/注销用户 PATH，插件 pnpm shim 只写应用私有目录。
@@ -10,13 +10,13 @@ MIR3 Studio AI (Tauri 2 + React 18), embeds the Harness UI served at `http://127
 - This will help minimize the need for writing custom classes.
 - If you write new content, you need to handle i18n en keys
 - i18n keys must be flat (no nesting), use dot-notation flat keys only
-- No hardcoded strings; sync `src/i18n/zh.ts`, `en.ts` and `types.ts`
+- No hardcoded strings; keep `src/i18n/locales/zh-CN.json` and `en-US.json` synchronized
 - If the component you write/modify is too complex, you need to split it into multiple components
 - Repeated logic should be encapsulated into methods/components
 
 ## Tech Stack
 
-- **Frontend**: React 18 + TS + Tailwind 4 (no plain CSS), Vite (`src/`)
+- **Frontend**: React 19 + TS + Tailwind 4 (no plain CSS), Vite (`src/`)
 - **Backend**: Rust / Tauri 2 (`src-tauri/src/`)
   - `bridge/cmd.rs`: Tauri commands (register in `lib.rs` `generate_handler!`)
   - `config/`: constants, paths (`runtime.rs`), settings (`setting.rs`), i18n & theme
@@ -48,7 +48,7 @@ cargo check && cargo test   # Rust check & unit tests (run in src-tauri)
 
 ## Basics
 
-- No `useCallback` / `useMemo` — project has `react-compiler` built in
+- React Compiler is not enabled. Avoid speculative `useCallback` / `useMemo`; use them only when referential stability is required by an API or profiling demonstrates a benefit.
 - Component functions use `function` declaration; inline events/callbacks use arrow functions
 
 ## Function Declaration Specification

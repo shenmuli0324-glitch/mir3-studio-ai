@@ -1,13 +1,17 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { defineDomainFixtures, defineDomainManifest } from '../src-tauri/resources/mir3-domain-sdk/index.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const outputRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-packs')
+const sdkExampleOutputRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-sdk', 'fixtures', 'example-pack')
+const ownershipFileName = '.generated-ownership.json'
+const generatorId = 'scripts/generate-domain-packs.mjs'
 
 const packDefinitions = [
-  pack('map', 'resources', 5, 'map-canvas-v1', ['mapinfo', '/map/', '.map', '地图'], ['npc', 'monster', 'quest', 'manor', 'sabac'], ['inspect-map', 'clone-map', 'edit-map-config', 'edit-map-region']),
+  pack('map', 'resources', 5, 'map-canvas-v1', ['mapinfo', '/map/', '.map'], ['npc', 'monster', 'quest', 'manor', 'sabac'], ['inspect-map', 'clone-map', 'edit-map-config', 'edit-map-region'], '1.3.2'),
   pack('npc', 'resources', 3, 'flow-v1', ['npc', 'market_def', 'merchant', '商人'], ['map', 'quest', 'shop', 'item'], ['inspect-npc', 'move-npc', 'edit-dialogue', 'replace-npc-reference']),
   pack('monster', 'resources', 2, 'graph-v1', ['monster', 'mongen', 'monitems', '怪物'], ['map', 'item', 'quest'], ['inspect-monster', 'clone-monster', 'tune-monster', 'edit-drop-table']),
   pack('equipment', 'resources', 2, 'table-v1', ['equipment', 'equip', '装备'], ['item', 'enhance', 'gem', 'refine', 'skill', 'buff'], ['inspect-equipment', 'clone-equipment', 'batch-tune-equipment', 'replace-equipment-reference']),
@@ -91,6 +95,7 @@ function domain(resourceType, fields, runtimeRule, consistencyFields) {
 }
 
 const compoundUniqueKeys = {
+  map: ['mapId', 'recordId'],
   skill: ['skillId', 'skillLevel'],
   enhance: ['enhanceTier', 'equipmentClass'],
   gem: ['gemId', 'gemTier'],
@@ -117,6 +122,9 @@ function createPack(definition) {
   const references = spec.fields
     .filter(field => field.referenceSystem)
     .map(field => ({ field: field.name, systemId: field.referenceSystem, required: true }))
+  const dependencyEdges = references.map(reference => id === 'map'
+    ? { ...reference, required: false }
+    : reference)
   const completeDependencies = [...new Set([
     ...dependencies,
     ...references.map(reference => reference.systemId),
@@ -146,10 +154,12 @@ function createPack(definition) {
     requiredKernelPrimitives: ['resource-index-v1', 'draft-v1', 'diff-v1', 'validation-v1', 'capability-v1'],
     fileProjection: {
       keywords,
-      ownedSelectors: [...new Set([id, ...keywords])],
+      ownedSelectors: id === 'map' ? keywords : [...new Set([id, ...keywords])],
       dependencySelectors: completeDependencies.map(systemId => ({ systemId })),
       excludes: ['**/.git/**', '**/node_modules/**', '**/.mir3-studio/**'],
-      contentFingerprints: keywords.map(value => ({ contains: value, caseSensitive: false })),
+      contentFingerprints: id === 'map'
+        ? [{ contains: 'mapId=', caseSensitive: false }]
+        : keywords.map(value => ({ contains: value, caseSensitive: false })),
       pathAliases: [{ from: 'client', to: '客户端' }, { from: 'engine', to: '引擎' }],
       roles: ['client', 'engine', 'shared', 'generated', 'readonly'],
       editableExtensions: id === 'map' ? ['txt', 'lua', 'map'] : ['txt', 'lua'],
@@ -162,12 +172,17 @@ function createPack(definition) {
       schema: 'schemas/resource.schema.json',
       stableResourceId: `sha256(${id}:${spec.fields[0].name}:normalizedRelativePath)`,
       mappings: ['file-projection', `${id}.field-mapping-v1`],
-      fieldMappings: spec.fields.map(field => ({
+      fieldMappings: [
+        ...(id === 'map' ? [{ name: 'recordId', type: 'string', aliases: ['///idx', 'idx'] }] : []),
+        ...spec.fields,
+      ].map(field => ({
         field: field.name,
-        aliases: fieldAliases(field.name, field.aliases),
+        aliases: id === 'map' && field.name === 'recordId'
+          ? [field.name, ...field.aliases]
+          : fieldAliases(field.name, field.aliases),
         valueType: field.type,
       })),
-      dependencyEdges: references,
+      dependencyEdges,
       uniqueKey,
     },
     presentation: {
@@ -262,14 +277,17 @@ function fieldAliases(fieldName, declaredAliases = []) {
 
 function resourceSchema(systemId, spec) {
   const uniqueKey = compoundUniqueKeys[systemId] || [spec.fields[0].name]
+  const schemaFields = systemId === 'map'
+    ? [spec.fields[0], { name: 'recordId', type: 'string', minLength: 1 }, ...spec.fields.slice(1)]
+    : spec.fields
   return {
     '$schema': 'https://json-schema.org/draft/2020-12/schema',
     '$id': `mir3://domain/${systemId}/resource.schema.json`,
     'title': `${systemId}.${spec.resourceType}`,
     'type': 'object',
     'additionalProperties': false,
-    'properties': Object.fromEntries(spec.fields.map(field => [field.name, fieldSchema(field)])),
-    'required': spec.fields.map(field => field.name),
+    'properties': Object.fromEntries(schemaFields.map(field => [field.name, fieldSchema(field)])),
+    'required': schemaFields.map(field => field.name),
     'x-mir3': {
       uniqueKey,
       clientEngineConsistency: { matchBy: spec.fields[0].name, compareFields: spec.consistencyFields },
@@ -307,11 +325,14 @@ function operationSchema(capabilityId, spec, readonly) {
     minProperties: 1,
     properties: Object.fromEntries(spec.fields.slice(1).map(field => [field.name, fieldSchema(field)])),
   }
+  const recordFields = spec.resourceType === 'map-record'
+    ? [{ name: 'recordId', type: 'string', minLength: 1 }, ...spec.fields]
+    : spec.fields
   const record = {
     type: 'object',
     additionalProperties: false,
-    properties: Object.fromEntries(spec.fields.map(field => [field.name, fieldSchema(field)])),
-    required: spec.fields.map(field => field.name),
+    properties: Object.fromEntries(recordFields.map(field => [field.name, fieldSchema(field)])),
+    required: recordFields.map(field => field.name),
   }
   const properties = { operation: { const: capabilityId } }
   const required = ['operation']
@@ -457,7 +478,12 @@ function validValue(systemId, field, ordinal) {
 
 function fixtures(systemId, spec) {
   const uniqueKey = compoundUniqueKeys[systemId] || [spec.fields[0].name]
-  const records = [1, 2].map(ordinal => Object.fromEntries(spec.fields.map(field => [field.name, validValue(systemId, field, ordinal)])))
+  const records = [1, 2].map((ordinal) => {
+    const entries = spec.fields.map(field => [field.name, validValue(systemId, field, ordinal)])
+    if (systemId === 'map')
+      entries.unshift(['recordId', `record-${ordinal}`])
+    return Object.fromEntries(entries)
+  })
   if (systemId === 'crafting') {
     for (const [index, record] of records.entries())
       record.materialItemId = `item:material-${index + 1}`
@@ -476,7 +502,7 @@ function fixtures(systemId, spec) {
     invalidRecords[1][field] = invalidRecords[0][field]
   invalidateRuntimeFixture(systemId, invalidRecords)
   const expectedDiagnostics = [
-    { code: `${systemId}.unique`, severity: 'error', field: uniqueKey.join(',') },
+    { code: `${systemId}.unique`, severity: 'error', field: systemId === 'map' ? uniqueKey[0] : uniqueKey.join(',') },
     { code: ranged ? `${systemId}.range` : `${systemId}.schema`, severity: 'error', field: (ranged || patterned).name },
     { code: `${systemId}.reference`, severity: 'error', field: referenced.name },
     { code: `${systemId}.runtime`, severity: 'error', rule: spec.runtimeRule },
@@ -566,78 +592,235 @@ function invalidateRuntimeFixture(systemId, records) {
   invalidate()
 }
 
-const packs = packDefinitions.map(definition => defineDomainManifest(createPack(definition)))
+export function createGeneratedDomainPackGroups() {
+  const packs = packDefinitions.map(definition => defineDomainManifest(createPack(definition)))
+  const packFiles = new Map()
+  packFiles.set('registry.json', jsonContent({ schemaVersion: 1, packs }))
 
-mkdirSync(outputRoot, { recursive: true })
-writeFileSync(join(outputRoot, 'registry.json'), `${JSON.stringify({ schemaVersion: 1, packs }, null, 2)}\n`)
+  for (const entry of packs) {
+    const spec = domainSpecs[entry.systemId]
+    const examples = defineDomainFixtures(fixtures(entry.systemId, spec))
+    const manifest = {
+      name: `@mir3-studio/domain-${entry.systemId}`,
+      kind: 'domain',
+      version: entry.version,
+      private: true,
+      files: ['CHANGELOG.md', 'README.md', 'domain.json', 'fixtures/', 'schemas/'],
+      mir3Domain: {
+        kind: entry.kind,
+        systemId: entry.systemId,
+        kernelApiRange: entry.kernelApiRange,
+        supportedEngineRange: entry.supportedEngineRange,
+        engineCompatibility: entry.engineCompatibility,
+        resourceSchema: 'schemas/resource.schema.json',
+        fixtures: entry.fixtures,
+        changelog: 'CHANGELOG.md',
+      },
+    }
+    const fieldList = spec.fields.map(field => `- \`${field.name}\`: ${field.type}${field.referenceSystem ? ` → ${field.referenceSystem}` : ''}`).join('\n')
+    const capabilityList = entry.capabilities.map(capability => `- \`${capability.id}\` via \`${capability.steps[0].primitive}\``).join('\n')
+    const prefix = `${entry.systemId}/`
+    packFiles.set(`${prefix}package.json`, jsonContent(manifest))
+    packFiles.set(`${prefix}domain.json`, jsonContent(entry))
+    packFiles.set(`${prefix}schemas/resource.schema.json`, jsonContent(resourceSchema(entry.systemId, spec)))
+    packFiles.set(`${prefix}fixtures/valid.json`, jsonContent(examples.valid))
+    packFiles.set(`${prefix}fixtures/invalid.json`, jsonContent(examples.invalid))
+    packFiles.set(`${prefix}fixtures/expected-diagnostics.json`, jsonContent(examples.expectedDiagnostics))
+    const compatibility = `Pack version: \`${entry.version}\`; compiler compatibility: MIR3 System Kernel \`${entry.kernelApiRange}\`; engine range: \`${entry.supportedEngineRange}\`.`
+    packFiles.set(`${prefix}README.md`, `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. ${compatibility} Engine versions are normalized only from SemVer, v-prefixed SemVer, or major.minor aliases. Write access additionally requires the real project layout, an owned selector or content fingerprint, and resource-schema validation; unknown/incompatible engines and unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
+    const mapChangelog = entry.systemId === 'map'
+      ? `## 1.3.2\n\n- Added real 1.8 \`cfg_mapinfo.xls\` header discovery, comment-row filtering, and stable transition identities.\n- Tightened map ownership to real map directories, map files, and map-info sources so unrelated scripts are no longer claimed by the map domain.\n\n`
+      : ''
+    const mapLegacyChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
+    packFiles.set(`${prefix}CHANGELOG.md`, `# Changelog\n\n${mapChangelog}## 1.3.1\n\n- Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.\n- Confirmed at least one safe operation for this system completes validation, Draft Diff, governed Apply, byte change, and Snapshot restore.\n\n## 1.3.0\n\n- Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.\n- Resource projection now preserves canonical fields for validation, cross-system references, and structured operations.\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapLegacyChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+  }
 
-for (const entry of packs) {
-  const directory = join(outputRoot, entry.systemId)
-  const schemaDirectory = join(directory, 'schemas')
-  const fixtureDirectory = join(directory, 'fixtures')
-  mkdirSync(schemaDirectory, { recursive: true })
-  mkdirSync(fixtureDirectory, { recursive: true })
-  const spec = domainSpecs[entry.systemId]
-  const examples = defineDomainFixtures(fixtures(entry.systemId, spec))
-  const manifest = {
-    name: `@mir3-studio/domain-${entry.systemId}`,
+  const sdkExample = packs.find(entry => entry.systemId === 'level')
+  const sdkExampleSpec = domainSpecs.level
+  const sdkExampleFixtures = defineDomainFixtures(fixtures('level', sdkExampleSpec))
+  const sdkFiles = new Map()
+  sdkFiles.set('domain.json', jsonContent(sdkExample))
+  sdkFiles.set('schemas/resource.schema.json', jsonContent(resourceSchema('level', sdkExampleSpec)))
+  sdkFiles.set('fixtures/valid.json', jsonContent(sdkExampleFixtures.valid))
+  sdkFiles.set('fixtures/invalid.json', jsonContent(sdkExampleFixtures.invalid))
+  sdkFiles.set('fixtures/expected-diagnostics.json', jsonContent(sdkExampleFixtures.expectedDiagnostics))
+  sdkFiles.set('package.json', jsonContent({
+    name: '@mir3-studio/domain-sdk-example-level',
     kind: 'domain',
-    version: entry.version,
+    version: sdkExample.version,
     private: true,
     files: ['CHANGELOG.md', 'README.md', 'domain.json', 'fixtures/', 'schemas/'],
     mir3Domain: {
-      kind: entry.kind,
-      systemId: entry.systemId,
-      kernelApiRange: entry.kernelApiRange,
-      supportedEngineRange: entry.supportedEngineRange,
-      engineCompatibility: entry.engineCompatibility,
+      kind: 'domain',
+      systemId: 'level',
+      kernelApiRange: sdkExample.kernelApiRange,
+      supportedEngineRange: sdkExample.supportedEngineRange,
+      engineCompatibility: sdkExample.engineCompatibility,
       resourceSchema: 'schemas/resource.schema.json',
-      fixtures: entry.fixtures,
+      fixtures: sdkExample.fixtures,
       changelog: 'CHANGELOG.md',
     },
-  }
-  const fieldList = spec.fields.map(field => `- \`${field.name}\`: ${field.type}${field.referenceSystem ? ` → ${field.referenceSystem}` : ''}`).join('\n')
-  const capabilityList = entry.capabilities.map(capability => `- \`${capability.id}\` via \`${capability.steps[0].primitive}\``).join('\n')
-  writeFileSync(join(directory, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-  writeFileSync(join(directory, 'domain.json'), `${JSON.stringify(entry, null, 2)}\n`)
-  writeFileSync(join(schemaDirectory, 'resource.schema.json'), `${JSON.stringify(resourceSchema(entry.systemId, spec), null, 2)}\n`)
-  writeFileSync(join(fixtureDirectory, 'valid.json'), `${JSON.stringify(examples.valid, null, 2)}\n`)
-  writeFileSync(join(fixtureDirectory, 'invalid.json'), `${JSON.stringify(examples.invalid, null, 2)}\n`)
-  writeFileSync(join(fixtureDirectory, 'expected-diagnostics.json'), `${JSON.stringify(examples.expectedDiagnostics, null, 2)}\n`)
-  const compatibility = `Pack version: \`${entry.version}\`; compiler compatibility: MIR3 System Kernel \`${entry.kernelApiRange}\`; engine range: \`${entry.supportedEngineRange}\`.`
-  writeFileSync(join(directory, 'README.md'), `# ${entry.systemId}\n\nMIR3 Studio ${entry.systemId} domain pack for MIR3 System Kernel v1. ${compatibility} Engine versions are normalized only from SemVer, v-prefixed SemVer, or major.minor aliases. Write access additionally requires the real project layout, an owned selector or content fingerprint, and resource-schema validation; unknown/incompatible engines and unknown formats are always read-only. Mutations use registered safe primitives and external drafts.\n\n## Resource schema\n\n${fieldList}\n\nUnique key: \`${entry.resources.uniqueKey.join(' + ')}\`. Runtime rule: \`${spec.runtimeRule}\`.\n\n## Capabilities\n\n${capabilityList}\n\n## Contract fixtures\n\nThe \`fixtures/valid.json\` and \`fixtures/invalid.json\` corpora are checked against \`schemas/resource.schema.json\`; expected validator output is in \`fixtures/expected-diagnostics.json\`.\n`)
-  const mapChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
-  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## 1.3.1\n\n- Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.\n- Confirmed at least one safe operation for this system completes validation, Draft Diff, governed Apply, byte change, and Snapshot restore.\n\n## 1.3.0\n\n- Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.\n- Resource projection now preserves canonical fields for validation, cross-system references, and structured operations.\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+  }))
+  sdkFiles.set('CHANGELOG.md', '# Changelog\n\n## 1.3.1 - 2026-08-27\n\n- Revalidated dependency closure and the complete governed lifecycle contract.\n\n## 1.3.0 - 2026-08-27\n\n- Added executable schema-backed field mappings to the runtime-installable example.\n')
+
+  return [
+    { name: 'domain-packs', root: outputRoot, files: packFiles },
+    { name: 'sdk-example-pack', root: sdkExampleOutputRoot, files: sdkFiles },
+  ]
 }
 
-const sdkExample = packs.find(entry => entry.systemId === 'level')
-const sdkExampleRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-sdk', 'fixtures', 'example-pack')
-const sdkExampleSpec = domainSpecs.level
-const sdkExampleFixtures = defineDomainFixtures(fixtures('level', sdkExampleSpec))
-mkdirSync(join(sdkExampleRoot, 'schemas'), { recursive: true })
-mkdirSync(join(sdkExampleRoot, 'fixtures'), { recursive: true })
-writeFileSync(join(sdkExampleRoot, 'domain.json'), `${JSON.stringify(sdkExample, null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'schemas', 'resource.schema.json'), `${JSON.stringify(resourceSchema('level', sdkExampleSpec), null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'fixtures', 'valid.json'), `${JSON.stringify(sdkExampleFixtures.valid, null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'fixtures', 'invalid.json'), `${JSON.stringify(sdkExampleFixtures.invalid, null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'fixtures', 'expected-diagnostics.json'), `${JSON.stringify(sdkExampleFixtures.expectedDiagnostics, null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'package.json'), `${JSON.stringify({
-  name: '@mir3-studio/domain-sdk-example-level',
-  kind: 'domain',
-  version: sdkExample.version,
-  private: true,
-  files: ['CHANGELOG.md', 'README.md', 'domain.json', 'fixtures/', 'schemas/'],
-  mir3Domain: {
-    kind: 'domain',
-    systemId: 'level',
-    kernelApiRange: sdkExample.kernelApiRange,
-    supportedEngineRange: sdkExample.supportedEngineRange,
-    engineCompatibility: sdkExample.engineCompatibility,
-    resourceSchema: 'schemas/resource.schema.json',
-    fixtures: sdkExample.fixtures,
-    changelog: 'CHANGELOG.md',
-  },
-}, null, 2)}\n`)
-writeFileSync(join(sdkExampleRoot, 'CHANGELOG.md'), '# Changelog\n\n## 1.3.1 - 2026-08-27\n\n- Revalidated dependency closure and the complete governed lifecycle contract.\n\n## 1.3.0 - 2026-08-27\n\n- Added executable schema-backed field mappings to the runtime-installable example.\n')
+export function writeGeneratedDomainPacks(options = {}) {
+  const groups = generatedGroupsAt(options)
+  for (const group of groups)
+    writeGeneratedGroup(group)
+  return generatedFileCount(groups)
+}
 
-process.stdout.write(`Generated ${packs.length} MIR3 domain packs with schemas and contract fixtures.\n`)
+export function checkGeneratedDomainPacks(options = {}) {
+  const first = generatedGroupsAt(options)
+  const second = generatedGroupsAt(options)
+  assertDeterministicGeneration(first, second)
+  const failures = first.flatMap(checkGeneratedGroup)
+  if (failures.length > 0)
+    throw new Error(`DOMAIN_PACK_GENERATED_DRIFT:\n${failures.map(failure => `- ${failure}`).join('\n')}`)
+  return generatedFileCount(first)
+}
+
+function generatedGroupsAt(options) {
+  return createGeneratedDomainPackGroups().map((group) => {
+    const targetRoot = group.name === 'domain-packs'
+      ? options.packRoot ?? group.root
+      : options.sdkExampleRoot ?? group.root
+    return { ...group, root: resolve(targetRoot) }
+  })
+}
+
+function jsonContent(value) {
+  return `${JSON.stringify(value, null, 2)}\n`
+}
+
+function ownershipContent(files) {
+  return jsonContent({
+    schemaVersion: 1,
+    owner: generatorId,
+    notice: 'Only listed files are generated. Unlisted files are manually owned and must not be overwritten.',
+    files: [...files.keys()].sort(),
+  })
+}
+
+function readOwnership(group) {
+  const path = join(group.root, ownershipFileName)
+  if (!existsSync(path))
+    return null
+  let value
+  try {
+    value = JSON.parse(readFileSync(path, 'utf8'))
+  }
+  catch (error) {
+    throw new Error(`GENERATED_OWNERSHIP_INVALID: ${path}: ${error.message}`)
+  }
+  if (value.schemaVersion !== 1 || value.owner !== generatorId || !Array.isArray(value.files))
+    throw new Error(`GENERATED_OWNERSHIP_INVALID: ${path}`)
+  const files = new Set(value.files)
+  if (files.size !== value.files.length || value.files.some(file => !isSafeManagedPath(file)))
+    throw new Error(`GENERATED_OWNERSHIP_INVALID: ${path}`)
+  return { path, files, content: value }
+}
+
+function writeGeneratedGroup(group) {
+  const ownership = readOwnership(group)
+  for (const [relativePath, content] of group.files) {
+    if (!isSafeManagedPath(relativePath))
+      throw new Error(`GENERATED_PATH_INVALID: ${relativePath}`)
+    const target = join(group.root, relativePath)
+    if (existsSync(target) && !ownership?.files.has(relativePath)) {
+      const adoptable = ownership == null
+        && normalizeGeneratedContent(readFileSync(target, 'utf8')) === normalizeGeneratedContent(content)
+      if (!adoptable)
+        throw new Error(`GENERATED_FILE_UNMANAGED: refusing to overwrite ${target}`)
+    }
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, content)
+  }
+  mkdirSync(group.root, { recursive: true })
+  writeFileSync(join(group.root, ownershipFileName), ownershipContent(group.files))
+}
+
+function checkGeneratedGroup(group) {
+  const failures = []
+  let ownership
+  try {
+    ownership = readOwnership(group)
+  }
+  catch (error) {
+    return [error.message]
+  }
+  if (!ownership)
+    return [`${group.name}: missing ${ownershipFileName}`]
+  const expectedPaths = [...group.files.keys()].sort()
+  const ownedPaths = [...ownership.files].sort()
+  if (JSON.stringify(ownedPaths) !== JSON.stringify(expectedPaths))
+    failures.push(`${group.name}: ownership file list differs from generator output`)
+  if (normalizeGeneratedContent(readFileSync(ownership.path, 'utf8')) !== normalizeGeneratedContent(ownershipContent(group.files)))
+    failures.push(`${group.name}: ${ownershipFileName} is not canonical`)
+  for (const [relativePath, expected] of group.files) {
+    const target = join(group.root, relativePath)
+    if (!existsSync(target)) {
+      failures.push(`${group.name}: missing ${relativePath}`)
+      continue
+    }
+    const current = readFileSync(target, 'utf8')
+    if (normalizeGeneratedContent(current) !== normalizeGeneratedContent(expected))
+      failures.push(`${group.name}: generated content drifted at ${relativePath}`)
+  }
+  return failures
+}
+
+function assertDeterministicGeneration(first, second) {
+  if (serializeGeneratedGroups(first) !== serializeGeneratedGroups(second))
+    throw new Error('DOMAIN_PACK_GENERATION_NONDETERMINISTIC')
+}
+
+function serializeGeneratedGroups(groups) {
+  return JSON.stringify(groups.map(group => ({
+    name: group.name,
+    files: [...group.files.entries()],
+    ownership: ownershipContent(group.files),
+  })))
+}
+
+function isSafeManagedPath(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && !value.startsWith('/')
+    && !value.startsWith('\\')
+    && !value.split(/[\\/]/).includes('..')
+}
+
+function normalizeGeneratedContent(value) {
+  return value.replace(/\r\n?/g, '\n')
+}
+
+function generatedFileCount(groups) {
+  return groups.reduce((count, group) => count + group.files.size, groups.length)
+}
+
+function main() {
+  const args = process.argv.slice(2)
+  if (args.some(arg => arg !== '--check'))
+    throw new Error(`Unknown argument: ${args.find(arg => arg !== '--check')}`)
+  const check = args.includes('--check')
+  const count = check ? checkGeneratedDomainPacks() : writeGeneratedDomainPacks()
+  const verb = check ? 'Verified' : 'Generated'
+  process.stdout.write(`${verb} ${count} managed MIR3 domain pack files with deterministic ownership.\n`)
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main()
+  }
+  catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  }
+}

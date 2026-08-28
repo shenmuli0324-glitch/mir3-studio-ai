@@ -1,7 +1,11 @@
 use serde::Serialize;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::constants::*;
@@ -203,6 +207,11 @@ pub fn get_node_binary_path(app_handle: &tauri::AppHandle) -> PathBuf {
         return local_node;
     }
 
+    bundled_node_binary_path(app_handle)
+}
+
+/// 捆绑 Node.js 路径；不探测 PATH，供一次性运行时清单避免重复执行版本命令。
+fn bundled_node_binary_path(app_handle: &tauri::AppHandle) -> PathBuf {
     let runtime_dir = get_node_install_path(app_handle);
     // 使用 cfg 宏在编译时确定文件名
     let (rel_path, bin_name) = if cfg!(windows) {
@@ -217,6 +226,164 @@ pub fn get_node_binary_path(app_handle: &tauri::AppHandle) -> PathBuf {
         // 只有在直接路径不存在时才进行开销较大的递归搜索
         search_node_binary(&runtime_dir, bin_name).unwrap_or(direct_path)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeFileStamp {
+    path: Option<PathBuf>,
+    exists: bool,
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+impl RuntimeFileStamp {
+    fn new(path: Option<PathBuf>) -> Self {
+        let metadata = path.as_ref().and_then(|value| fs::metadata(value).ok());
+        Self {
+            exists: metadata.is_some(),
+            len: metadata.as_ref().map_or(0, fs::Metadata::len),
+            modified: metadata.and_then(|value| value.modified().ok()),
+            path,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeInventoryKey {
+    path_env: OsString,
+    local_node: RuntimeFileStamp,
+    bundled_node: RuntimeFileStamp,
+    dsh: RuntimeFileStamp,
+    user_pnpm: RuntimeFileStamp,
+    bundled_pnpm: RuntimeFileStamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeInventory {
+    pub node_ready: bool,
+    pub dsh_ready: bool,
+    pub pnpm_ready: bool,
+    pub node_path: Option<PathBuf>,
+    pub node_version: Option<String>,
+}
+
+impl RuntimeInventory {
+    pub fn ready(&self) -> bool {
+        self.node_ready && self.dsh_ready && self.pnpm_ready
+    }
+}
+
+#[derive(Clone)]
+struct CachedRuntimeInventory {
+    key: RuntimeInventoryKey,
+    inventory: RuntimeInventory,
+    created_at: Instant,
+}
+
+static RUNTIME_INVENTORY_CACHE: OnceLock<Mutex<Option<CachedRuntimeInventory>>> = OnceLock::new();
+static RUNTIME_INVENTORY_GENERATION: AtomicU64 = AtomicU64::new(0);
+const NEGATIVE_RUNTIME_INVENTORY_TTL: Duration = Duration::from_secs(2);
+
+fn runtime_inventory_cache() -> &'static Mutex<Option<CachedRuntimeInventory>> {
+    RUNTIME_INVENTORY_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// 安装或外部调用确认运行时发生变化后，可主动清空清单；常规调用也会比较路径元数据。
+pub fn invalidate_runtime_inventory() {
+    RUNTIME_INVENTORY_GENERATION.fetch_add(1, Ordering::SeqCst);
+    *runtime_inventory_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = None;
+}
+
+fn cached_runtime_inventory_is_fresh(
+    cached: &CachedRuntimeInventory,
+    key: &RuntimeInventoryKey,
+) -> bool {
+    cached.key == *key
+        && runtime_inventory_cache_ttl(&cached.inventory)
+            .is_none_or(|ttl| cached.created_at.elapsed() < ttl)
+}
+
+fn runtime_inventory_cache_ttl(inventory: &RuntimeInventory) -> Option<Duration> {
+    (!inventory.ready()).then_some(NEGATIVE_RUNTIME_INVENTORY_TTL)
+}
+
+fn select_compatible_node<F>(
+    local: Option<PathBuf>,
+    bundled: Option<PathBuf>,
+    mut version_of: F,
+) -> (Option<PathBuf>, Option<String>)
+where
+    F: FnMut(&Path) -> Option<String>,
+{
+    if let Some(path) = local {
+        if let Some(version) = version_of(&path) {
+            if is_supported_node_version(&version) {
+                return (Some(path), Some(version));
+            }
+        }
+        if bundled.as_ref() == Some(&path) {
+            return (None, None);
+        }
+    }
+    if let Some(path) = bundled {
+        if let Some(version) = version_of(&path) {
+            if is_supported_node_version(&version) {
+                return (Some(path), Some(version));
+            }
+        }
+    }
+    (None, None)
+}
+
+/// 一次收集 Node/Core/pnpm 就绪状态；同一候选在一次收集中最多执行一次 `--version`。
+pub fn runtime_inventory(app_handle: &tauri::AppHandle) -> RuntimeInventory {
+    let generation = RUNTIME_INVENTORY_GENERATION.load(Ordering::SeqCst);
+    let local_node = find_local_node_binary();
+    let bundled_node = bundled_node_binary_path(app_handle);
+    let dsh = get_dsh_binary_path(app_handle);
+    let user_pnpm = crate::service::cli::find_user_pnpm(app_handle);
+    let bundled_pnpm = get_pnpm_binary_path(app_handle);
+    let key = RuntimeInventoryKey {
+        path_env: env::var_os("PATH").unwrap_or_default(),
+        local_node: RuntimeFileStamp::new(local_node.clone()),
+        bundled_node: RuntimeFileStamp::new(Some(bundled_node.clone())),
+        dsh: RuntimeFileStamp::new(Some(dsh.clone())),
+        user_pnpm: RuntimeFileStamp::new(user_pnpm.clone()),
+        bundled_pnpm: RuntimeFileStamp::new(Some(bundled_pnpm.clone())),
+    };
+
+    if let Some(cached) = runtime_inventory_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_ref()
+        .filter(|cached| cached_runtime_inventory_is_fresh(cached, &key))
+    {
+        return cached.inventory.clone();
+    }
+
+    let bundled_candidate = bundled_node.exists().then_some(bundled_node);
+    let (node_path, node_version) =
+        select_compatible_node(local_node, bundled_candidate, get_node_version_of);
+    let inventory = RuntimeInventory {
+        node_ready: node_path.is_some(),
+        dsh_ready: dsh.is_file(),
+        pnpm_ready: user_pnpm.is_some() || bundled_pnpm.is_file(),
+        node_path,
+        node_version,
+    };
+    let mut cache = runtime_inventory_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if RUNTIME_INVENTORY_GENERATION.load(Ordering::SeqCst) == generation {
+        *cache = Some(CachedRuntimeInventory {
+            key,
+            inventory: inventory.clone(),
+            created_at: Instant::now(),
+        });
+    }
+    inventory
 }
 
 pub fn get_node_install_path(app_handle: &tauri::AppHandle) -> PathBuf {
@@ -473,5 +640,53 @@ mod tests {
         let dsh = get_dsh_download_url().expect("dsh url");
         assert!(dsh.starts_with("https://"));
         assert!(dsh.ends_with(".zip"));
+    }
+
+    #[test]
+    fn runtime_inventory_probes_each_node_candidate_once() {
+        let local = PathBuf::from("local-node");
+        let bundled = PathBuf::from("bundled-node");
+        let mut calls = Vec::new();
+        let (selected, version) =
+            select_compatible_node(Some(local.clone()), Some(bundled.clone()), |path| {
+                calls.push(path.to_path_buf());
+                if path == local {
+                    Some("20.0.0".to_string())
+                } else {
+                    Some("22.15.0".to_string())
+                }
+            });
+        assert_eq!(selected, Some(bundled));
+        assert_eq!(version.as_deref(), Some("22.15.0"));
+        assert_eq!(calls, vec![local, PathBuf::from("bundled-node")]);
+    }
+
+    #[test]
+    fn identical_node_candidate_is_not_probed_twice() {
+        let path = PathBuf::from("same-node");
+        let mut calls = 0;
+        let selected = select_compatible_node(Some(path.clone()), Some(path), |_| {
+            calls += 1;
+            Some("20.0.0".to_string())
+        });
+        assert_eq!(selected, (None, None));
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn only_negative_runtime_inventory_uses_a_short_ttl() {
+        let mut inventory = RuntimeInventory {
+            node_ready: true,
+            dsh_ready: true,
+            pnpm_ready: true,
+            node_path: Some(PathBuf::from("node")),
+            node_version: Some("22.15.0".to_string()),
+        };
+        assert_eq!(runtime_inventory_cache_ttl(&inventory), None);
+        inventory.pnpm_ready = false;
+        assert_eq!(
+            runtime_inventory_cache_ttl(&inventory),
+            Some(Duration::from_secs(2))
+        );
     }
 }

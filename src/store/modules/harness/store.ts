@@ -533,19 +533,6 @@ export const harness = defineStore({
       this.dismissedRecoveryIds = []
     },
 
-    /** 服务未运行时点击"重试"：重新拉起服务并等待健康检查 */
-    async start() {
-      if (this.busyAction)
-        return
-      this.busyAction = 'start'
-      try {
-        await this.boot()
-      }
-      finally {
-        this.busyAction = null
-      }
-    },
-
     /** 在系统浏览器中打开服务地址 */
     async openBrowser() {
       if (this.busyAction)

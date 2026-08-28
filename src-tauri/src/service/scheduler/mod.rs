@@ -4,12 +4,19 @@ use tokio::time;
 
 const DOMAIN_UPDATE_INITIAL_DELAY: Duration = Duration::from_secs(60);
 const DOMAIN_UPDATE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const CORE_STARTING_INTERVAL: Duration = Duration::from_secs(1);
+const CORE_STEADY_INTERVAL: Duration = Duration::from_secs(5);
+const EXTERNAL_STATE_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn start(app_handle: &AppHandle) {
     log::info!("Starting dsh process monitor");
     let app_handle_clone = app_handle.clone();
     tauri::async_runtime::spawn(async move {
-        scheduler_permanent_loop(app_handle_clone).await;
+        core_monitor_loop(app_handle_clone).await;
+    });
+    let app_handle_clone = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        external_state_loop(app_handle_clone).await;
     });
     let app_handle_clone = app_handle.clone();
     tauri::async_runtime::spawn(async move {
@@ -77,16 +84,47 @@ async fn check_and_stage_domain_candidates(app_handle: &AppHandle) -> Result<(),
     Ok(())
 }
 
-async fn scheduler_permanent_loop(app_handle: AppHandle) {
-    let mut interval = time::interval(Duration::from_secs(1));
-
+async fn core_monitor_loop(app_handle: AppHandle) {
     loop {
         if let Err(e) = crate::task::tick_check_dsh_process::trigger(app_handle.clone()).await {
             log::warn!("tick_check_dsh_process failed: {e}");
         }
-        crate::config::check_and_emit_theme(&app_handle);
-        // 已安装插件文件监控：指纹变化（防抖后）推送 `dsh-plugins-updated`
-        crate::service::plugin::watch::check_and_emit(&app_handle);
+        time::sleep(core_poll_interval(
+            crate::service::workflow::status::get_status(),
+        ))
+        .await;
+    }
+}
+
+/// Core 启动期间需要尽快确认 ready；稳定运行后降低 HTTP 探测频率。
+fn core_poll_interval(status: crate::service::workflow::status::Status) -> Duration {
+    if status == crate::service::workflow::status::Status::Starting {
+        CORE_STARTING_INTERVAL
+    } else {
+        CORE_STEADY_INTERVAL
+    }
+}
+
+/// 主题与插件也可能被外部进程修改，因此保留低频元数据兜底轮询。
+async fn external_state_loop(app_handle: AppHandle) {
+    let mut interval = time::interval(EXTERNAL_STATE_INTERVAL);
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+    loop {
         interval.tick().await;
+        crate::config::check_and_emit_theme(&app_handle);
+        crate::service::plugin::watch::check_and_emit(&app_handle);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::service::workflow::status::Status;
+
+    #[test]
+    fn core_polling_is_fast_only_while_starting() {
+        assert_eq!(core_poll_interval(Status::Starting), Duration::from_secs(1));
+        assert_eq!(core_poll_interval(Status::Running), Duration::from_secs(5));
+        assert_eq!(core_poll_interval(Status::Stopped), Duration::from_secs(5));
     }
 }

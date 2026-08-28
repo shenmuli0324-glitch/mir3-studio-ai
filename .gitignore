@@ -17,3 +17,4 @@ src-tauri/resources/build-provenance.json
 .tmp
 skills
 .serena
+/artifacts/

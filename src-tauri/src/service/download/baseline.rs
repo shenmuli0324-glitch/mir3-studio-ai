@@ -174,12 +174,12 @@ impl BaselineBundle {
     }
 
     pub fn record_core_install(&self, app: &AppHandle) {
-        let mut setting = config::get_store_dat_setting(app);
-        setting.runtime_baseline_id = Some(self.manifest.baseline_id.clone());
-        setting.dsh_pkg_tag = Some(self.manifest.core.tag.clone());
-        setting.dsh_pkg_commit = Some(self.manifest.core.commit.clone());
-        setting.active_core = Some("app".to_string());
-        config::set_store_dat_setting(app, setting);
+        config::update_setting(app, |setting| {
+            setting.runtime_baseline_id = Some(self.manifest.baseline_id.clone());
+            setting.dsh_pkg_tag = Some(self.manifest.core.tag.clone());
+            setting.dsh_pkg_commit = Some(self.manifest.core.commit.clone());
+            setting.active_core = Some("app".to_string());
+        });
     }
 }
 

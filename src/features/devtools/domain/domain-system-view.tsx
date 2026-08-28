@@ -4,10 +4,12 @@ import type { Mir3Project } from '@/features/projects/types'
 import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { CircleCheck, CircleExclamation, File, Folder, Magnifier } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
+import { useOverlay } from '@overlastic/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
+import { Modal as ConfirmationModal } from '@/components/modal'
 import { SystemAiPanel } from '@/features/system-ai/system-ai-panel'
 import { toast } from '@/utils'
 import { DevToolWorkspace } from '../shell/devtool-workspace'
@@ -46,6 +48,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [confirmationHolder, openConfirmation] = useOverlay(ConfirmationModal, { type: 'holder' })
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [selectedFile, setSelectedFile] = useState<DomainFileRecord | null>(null)
@@ -186,74 +189,85 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     validateDraft.mutate(draftPreview.preview.draft.id)
   }
 
-  function applyActiveDraft() {
+  async function applyActiveDraft() {
     if (!draftPreview)
       return
-    // eslint-disable-next-line no-alert
-    if (window.confirm(t('studio.devtools.diff.apply_confirm')))
+    if (await confirmDraftAction('warning', t('studio.devtools.diff.apply'), t('studio.devtools.diff.apply_confirm')))
       applyDraft.mutate(draftPreview)
   }
 
-  function discardActiveDraft() {
+  async function discardActiveDraft() {
     if (!draftPreview)
       return
-    // eslint-disable-next-line no-alert
-    if (window.confirm(t('studio.devtools.draft.discard_confirm')))
+    if (await confirmDraftAction('danger', t('studio.devtools.draft.discard'), t('studio.devtools.draft.discard_confirm')))
       discardDraft.mutate(draftPreview.preview.draft.id)
   }
 
+  async function confirmDraftAction(status: 'warning' | 'danger', title: string, description: string): Promise<boolean> {
+    try {
+      await openConfirmation({ status, title, description: <p>{description}</p> })
+      return true
+    }
+    catch {
+      return false
+    }
+  }
+
   return (
-    <DevToolWorkspace
-      tool={tool}
-      onBack={onBack}
-      sidebar={(
-        <DomainFileSidebar
-          files={projectedFiles}
-          loading={files.isLoading}
-          search={search}
-          selectedPath={selectedFile?.path}
-          onSearch={setSearch}
-          onSelect={selectFile}
-        />
-      )}
-      toolbar={<FileWorkspaceToolbar manifest={manifest} project={project} selectedPath={selectedFile?.path} />}
-      rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedFile?.resourceId, activeDraftId ?? undefined, handleAiDraftHandoff)}
-    >
-      <If cond={project != null} else={<NoProject />}>
-        <div className="flex h-full min-h-0 flex-col">
-          <If cond={draftPreview != null}>
-            <CompactDraftBar
-              preview={draftPreview}
-              validation={validation}
-              validating={validateDraft.isPending}
-              applying={applyDraft.isPending}
-              discarding={discardDraft.isPending}
-              onValidate={() => void validateActiveDraft()}
-              onApply={applyActiveDraft}
-              onDiscard={discardActiveDraft}
-            />
-          </If>
-          <FileSourceWorkspace
-            selectedFile={selectedFile}
-            openedFile={openedFile.data}
-            sourceLoading={openedFile.isLoading}
-            sourceError={openedFile.error}
-            editedContent={editedContent}
-            onEditedContent={setEditedContent}
-            onSaveSource={saveSource}
-            saving={patch.isPending}
-            workbook={workbook.data}
-            workbookLoading={workbook.isLoading}
-            workbookError={workbook.error}
-            sheetName={sheetName}
-            sheet={sheet.data}
-            sheetLoading={sheet.isLoading}
-            sheetError={sheet.error}
-            onSheet={setSelectedSheet}
+    <>
+      <DevToolWorkspace
+        tool={tool}
+        onBack={onBack}
+        sidebar={(
+          <DomainFileSidebar
+            files={projectedFiles}
+            loading={files.isLoading}
+            search={search}
+            selectedPath={selectedFile?.path}
+            onSearch={setSearch}
+            onSelect={selectFile}
           />
-        </div>
-      </If>
-    </DevToolWorkspace>
+        )}
+        toolbar={<FileWorkspaceToolbar manifest={manifest} project={project} selectedPath={selectedFile?.path} />}
+        rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedFile?.resourceId, activeDraftId ?? undefined, handleAiDraftHandoff)}
+      >
+        <If cond={project != null} else={<NoProject />}>
+          <div className="flex h-full min-h-0 flex-col">
+            <If cond={draftPreview != null}>
+              <CompactDraftBar
+                preview={draftPreview}
+                validation={validation}
+                validating={validateDraft.isPending}
+                applying={applyDraft.isPending}
+                discarding={discardDraft.isPending}
+                onValidate={() => void validateActiveDraft()}
+                onApply={() => void applyActiveDraft()}
+                onDiscard={() => void discardActiveDraft()}
+              />
+            </If>
+            <FileSourceWorkspace
+              selectedFile={selectedFile}
+              openedFile={openedFile.data}
+              sourceLoading={openedFile.isLoading}
+              sourceError={openedFile.error}
+              editedContent={editedContent}
+              onEditedContent={setEditedContent}
+              onSaveSource={saveSource}
+              saving={patch.isPending}
+              workbook={workbook.data}
+              workbookLoading={workbook.isLoading}
+              workbookError={workbook.error}
+              sheetName={sheetName}
+              sheet={sheet.data}
+              sheetLoading={sheet.isLoading}
+              sheetError={sheet.error}
+              onSheet={setSelectedSheet}
+            />
+          </div>
+        </If>
+      </DevToolWorkspace>
+      {confirmationHolder}
+    </>
   )
 }
 

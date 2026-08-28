@@ -1,6 +1,6 @@
 # 质量报告：MIR3 Studio AI
 
-> 测试对象：MIR3 Studio AI（Tauri 2 + React 18 + Rust）
+> 测试对象：MIR3 Studio AI（Tauri 2 + React 19 + Rust）
 > 生成方式：testcase-generator（等价类划分 + 边界值分析）+ ISTQB / ISO 25010 框架
 > 生成时间：本会话
 > 校验工具：`testcase-generator/scripts/validate.py`（文本协议 v0.2）

@@ -1,27 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import process from 'node:process'
+import { readProductVersions } from './lib/product-version.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-
-function json(path) {
-  return JSON.parse(readFileSync(join(root, path), 'utf8'))
-}
-
-function cargoVersion(content) {
-  const match = /\[package\][\s\S]*?\nversion = "([^"]+)"/.exec(content)
-  return match?.[1]
-}
-
-function lockedCargoVersion(content) {
-  const match = /\[\[package\]\]\r?\nname = "mir3-studio-ai"\r?\nversion = "([^"]+)"/.exec(content)
-  return match?.[1]
-}
-
-function matchVersion(content, pattern) {
-  return pattern.exec(content)?.[1]
-}
 
 function readGit(path, revision) {
   return execFileSync('git', ['show', `${revision}:${path}`], { cwd: root, encoding: 'utf8' })
@@ -46,16 +28,8 @@ function isFunctional(path) {
   ].some(prefix => path === prefix || path.startsWith(prefix))
 }
 
-const pkg = json('package.json')
-const expected = pkg.version
-const values = new Map([
-  ['src/brand.config.json', json('src/brand.config.json').version],
-  ['src-tauri/tauri.conf.json', json('src-tauri/tauri.conf.json').version],
-  ['src-tauri/Cargo.toml', cargoVersion(readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8'))],
-  ['src-tauri/Cargo.lock', lockedCargoVersion(readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8'))],
-  ['README.md', matchVersion(readFileSync(join(root, 'README.md'), 'utf8'), /当前版本为 `([^`]+)`/)],
-  ['README.en.md', matchVersion(readFileSync(join(root, 'README.en.md'), 'utf8'), /Version `([^`]+)`/)],
-])
+const values = readProductVersions(root)
+const expected = values.get('package.json')
 const mismatches = [...values].filter(([, version]) => version !== expected)
 if (mismatches.length) {
   for (const [path, version] of mismatches)

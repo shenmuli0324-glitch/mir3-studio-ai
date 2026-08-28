@@ -2,10 +2,8 @@
 //! 各直接依赖清单），内容变化时解析为结构化列表并通过 `dsh-plugins-updated`
 //! 事件实时推送给前端（`use-dsh-plugins` hook 消费）。
 //!
-//! 采用与主题轮询（`config/theme.rs`）一致的「秒级 tick + 指纹比对」方案，
-//! 不引入 notify 等文件监听依赖：插件数量少（个位数到十几个），每次读取的
-//! 都是小 JSON 文件，开销可忽略；pnpm add/remove/install 期间的连续写盘由
-//! 2s 防抖合并，避免事件风暴。
+//! 采用与主题轮询（`config/theme.rs`）一致的低频元数据兜底：mtime/大小未变
+//! 时不读取 JSON；pnpm add/remove/install 期间的连续写盘由 2s 防抖合并。
 //!
 //! 模块划分参考 [`super::installed`]（预装插件检测）：installed 聚焦预设清单
 //! 的勾选态，这里解析「实际已安装」的插件元信息（名称/版本/描述/仓库地址/
@@ -28,6 +26,7 @@ pub(crate) const PLUGINS_UPDATED_EVENT: &str = "dsh-plugins-updated";
 /// 防抖窗口：pnpm 安装/卸载会在数秒内连续写盘，窗口内只保留最新指纹，
 /// 避免每个 tick 都推送一次中间态
 const DEBOUNCE: Duration = Duration::from_secs(2);
+const FULL_CONTENT_CHECK_TICKS: u16 = 30;
 
 /// 已安装插件（序列化为 camelCase 给前端）
 #[derive(Debug, Clone, Serialize)]
@@ -209,19 +208,29 @@ pub fn list(app_handle: &AppHandle) -> Vec<DshPlugin> {
 ///
 /// 同时把监控指纹同步到当前状态，避免紧接着的下一次轮询重复推送同一列表。
 pub fn force_emit(app_handle: &AppHandle) {
-    let fp = fingerprint(app_handle);
+    let snapshot = fingerprint_snapshot(app_handle);
     let mut state = STATE
         .get_or_init(|| {
             Mutex::new(WatchState {
                 last_fp: None,
                 last_emit: None,
                 pending_fp: None,
+                initialized: false,
+                profile: None,
+                paths: Vec::new(),
+                stamps: Vec::new(),
+                unchanged_ticks: 0,
             })
         })
         .lock()
-        .unwrap();
+        .unwrap_or_else(|error| error.into_inner());
     state.pending_fp = None;
-    state.last_fp = fp;
+    state.last_fp = snapshot.fingerprint;
+    state.paths = snapshot.paths;
+    state.stamps = path_stamps(&state.paths);
+    state.profile = Some(profile_dir(app_handle));
+    state.initialized = true;
+    state.unchanged_ticks = 0;
     drop(state);
     emit(app_handle);
 }
@@ -230,20 +239,74 @@ pub fn force_emit(app_handle: &AppHandle) {
 ///
 /// pnpm add/remove/install 会重写 profile 清单（依赖与 bundles）并落盘插件包，
 /// 任一变化都会改变指纹；profile 未初始化（首次运行）时返回 None。
-fn fingerprint(app_handle: &AppHandle) -> Option<String> {
+struct FingerprintSnapshot {
+    fingerprint: Option<String>,
+    paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PathStamp {
+    path: PathBuf,
+    exists: bool,
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+fn path_stamps(paths: &[PathBuf]) -> Vec<PathStamp> {
+    paths
+        .iter()
+        .map(|path| match std::fs::metadata(path) {
+            Ok(metadata) => PathStamp {
+                path: path.clone(),
+                exists: true,
+                len: metadata.len(),
+                modified: metadata.modified().ok(),
+            },
+            Err(_) => PathStamp {
+                path: path.clone(),
+                exists: false,
+                len: 0,
+                modified: None,
+            },
+        })
+        .collect()
+}
+
+fn profile_has_changed(previous: Option<&Path>, current: &Path) -> bool {
+    previous != Some(current)
+}
+
+fn fingerprint_snapshot(app_handle: &AppHandle) -> FingerprintSnapshot {
     let dir = profile_dir(app_handle);
-    let manifest = std::fs::read_to_string(dir.join("package.json")).ok()?;
-    let parsed = serde_json::from_str::<ProfilePackageJson>(&manifest).ok()?;
+    let manifest_path = dir.join("package.json");
+    let mut paths = vec![manifest_path.clone()];
+    let Ok(manifest) = std::fs::read_to_string(&manifest_path) else {
+        return FingerprintSnapshot {
+            fingerprint: None,
+            paths,
+        };
+    };
+    let Ok(parsed) = serde_json::from_str::<ProfilePackageJson>(&manifest) else {
+        return FingerprintSnapshot {
+            fingerprint: None,
+            paths,
+        };
+    };
     let mut dep_ids: Vec<&String> = parsed.dependencies.keys().collect();
     dep_ids.sort();
 
     let mut parts = vec![manifest];
     for id in dep_ids {
-        if let Ok(content) = std::fs::read_to_string(plugin_dir(&dir, id).join("package.json")) {
+        let path = plugin_dir(&dir, id).join("package.json");
+        paths.push(path.clone());
+        if let Ok(content) = std::fs::read_to_string(path) {
             parts.push(content);
         }
     }
-    Some(parts.join("\n---\n"))
+    FingerprintSnapshot {
+        fingerprint: Some(parts.join("\n---\n")),
+        paths,
+    }
 }
 
 /// 监控状态：指纹 + 防抖窗口（仅 check_and_emit 单线程轮询访问）
@@ -253,32 +316,78 @@ struct WatchState {
     /// 上次推送时间（用于防抖合并）
     last_emit: Option<Instant>,
     /// 防抖窗口内待推送的最新指纹
-    pending_fp: Option<String>,
+    pending_fp: Option<Option<String>>,
+    /// 当前监控的活动 profile；切换后必须立刻重建路径与指纹。
+    profile: Option<PathBuf>,
+    /// 上次完整解析后需要观察的清单路径及其元数据。
+    paths: Vec<PathBuf>,
+    stamps: Vec<PathStamp>,
+    initialized: bool,
+    unchanged_ticks: u16,
 }
 
 static STATE: OnceLock<Mutex<WatchState>> = OnceLock::new();
 
-/// 秒级轮询入口（由 scheduler 永久循环调用）：指纹变化且超过防抖窗口时，
-/// 重新解析插件列表并推送 `dsh-plugins-updated` 事件。
+/// 低频兜底轮询入口：先比较文件元数据，只有变化时才重读清单与计算指纹。
 pub fn check_and_emit(app_handle: &AppHandle) {
-    let fp = fingerprint(app_handle);
     let mut state = STATE
         .get_or_init(|| {
             Mutex::new(WatchState {
                 last_fp: None,
                 last_emit: None,
                 pending_fp: None,
+                initialized: false,
+                profile: None,
+                paths: Vec::new(),
+                stamps: Vec::new(),
+                unchanged_ticks: 0,
             })
         })
         .lock()
-        .unwrap();
+        .unwrap_or_else(|error| error.into_inner());
+
+    // 防抖窗口内已有变化时，即使文件不再变化也要在窗口结束后补推。
+    if state.pending_fp.is_some()
+        && state
+            .last_emit
+            .is_none_or(|last| last.elapsed() >= DEBOUNCE)
+    {
+        state.last_emit = Some(Instant::now());
+        state.last_fp = state.pending_fp.take().unwrap_or(None);
+        drop(state);
+        emit(app_handle);
+        return;
+    }
+
+    let current_profile = profile_dir(app_handle);
+    let profile_changed = profile_has_changed(state.profile.as_deref(), &current_profile);
+    let paths = if profile_changed || state.paths.is_empty() {
+        vec![current_profile.join("package.json")]
+    } else {
+        state.paths.clone()
+    };
+    let stamps = path_stamps(&paths);
+    if state.initialized && !profile_changed && state.stamps == stamps {
+        state.unchanged_ticks = state.unchanged_ticks.saturating_add(1);
+        if state.unchanged_ticks < FULL_CONTENT_CHECK_TICKS {
+            return;
+        }
+    }
+
+    let snapshot = fingerprint_snapshot(app_handle);
+    state.profile = Some(current_profile);
+    state.paths = snapshot.paths;
+    state.stamps = path_stamps(&state.paths);
+    state.initialized = true;
+    state.unchanged_ticks = 0;
+    let fp = snapshot.fingerprint;
 
     if state.last_fp.as_deref() == fp.as_deref() {
         return;
     }
     // 指纹变化：先记下待推送值，再判断是否已过防抖窗口（安装过程中连续
     // 变化时合并为一次推送，窗口结束前的变化会在后续 tick 补推）
-    state.pending_fp = fp;
+    state.pending_fp = Some(fp);
     let can_emit = state
         .last_emit
         .is_none_or(|last| last.elapsed() >= DEBOUNCE);
@@ -286,7 +395,8 @@ pub fn check_and_emit(app_handle: &AppHandle) {
         return;
     }
     state.last_emit = Some(Instant::now());
-    state.last_fp = state.pending_fp.take();
+    state.last_fp = state.pending_fp.take().unwrap_or(None);
+    drop(state);
     emit(app_handle);
 }
 
@@ -440,5 +550,31 @@ mod tests {
         assert!(plugins[0].system);
         assert_eq!(plugins[0].changelog.as_deref(), Some(changelog));
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn metadata_stamp_detects_manifest_creation() {
+        let dir = std::env::temp_dir().join(format!(
+            "dsh-watch-stamp-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let path = dir.join("package.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let missing = path_stamps(std::slice::from_ref(&path));
+        std::fs::write(&path, "{}").unwrap();
+        let present = path_stamps(std::slice::from_ref(&path));
+        assert_ne!(missing, present);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn active_profile_change_rebases_watched_paths() {
+        let old = Path::new("profiles/old");
+        let new = Path::new("profiles/new");
+        assert!(!profile_has_changed(Some(old), old));
+        assert!(profile_has_changed(Some(old), new));
+        assert!(profile_has_changed(None, new));
     }
 }

@@ -1,9 +1,7 @@
 use crate::config;
-use async_trait::async_trait;
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-#[async_trait]
 pub trait Installable: Send + Sync {
     fn title(&self) -> &str;
     fn check_installed(&self, app: &AppHandle) -> bool;
@@ -14,7 +12,6 @@ pub trait Installable: Send + Sync {
 // --- Node.js 实现 ---
 pub struct Nodejs;
 
-#[async_trait]
 impl Installable for Nodejs {
     fn title(&self) -> &str {
         "运行环境"
@@ -40,7 +37,6 @@ impl Installable for Nodejs {
 // --- MIR3 AI Core 实现 ---
 pub struct Dsh;
 
-#[async_trait]
 impl Installable for Dsh {
     fn title(&self) -> &str {
         "MIR3 AI Core"
@@ -59,7 +55,6 @@ impl Installable for Dsh {
 // --- pnpm 实现（dsh 的 plugin 命令依赖） ---
 pub struct Pnpm;
 
-#[async_trait]
 impl Installable for Pnpm {
     fn title(&self) -> &str {
         "pnpm 包管理器"

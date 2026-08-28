@@ -1035,6 +1035,9 @@ pub fn probe_document(
     project_id: &str,
     dev_relative_path: &str,
     known_sha256: Option<&str>,
+    known_modified_at: Option<i64>,
+    known_size: Option<u64>,
+    force_hash: bool,
 ) -> Result<GuiDocumentProbe, String> {
     let context = active_context(project_service, project_id)?;
     let path = validate_gui_export_path(dev_relative_path)?;
@@ -1053,10 +1056,28 @@ pub fn probe_document(
     if metadata.len() > MAX_GUI_SOURCE_BYTES as u64 {
         return Err("GUI_SOURCE_TOO_LARGE: GUI Lua 源码不能超过 8 MiB".to_string());
     }
+    let modified_at = metadata.modified().ok().and_then(system_time_millis);
+    if !force_hash
+        && probe_metadata_matches(
+            known_sha256,
+            known_modified_at,
+            known_size,
+            modified_at,
+            metadata.len(),
+        )
+    {
+        return Ok(GuiDocumentProbe {
+            path,
+            exists: true,
+            changed: false,
+            sha256: known_sha256.map(str::to_string),
+            byte_length: metadata.len(),
+            modified_at,
+        });
+    }
     let bytes = fs::read(&target)
         .map_err(|e| format!("GUI_DOCUMENT_READ_FAILED: {}: {e}", target.display()))?;
     let sha256 = hash_bytes(&bytes);
-    let modified_at = metadata.modified().ok().and_then(system_time_millis);
     Ok(GuiDocumentProbe {
         path,
         exists: true,
@@ -1065,6 +1086,19 @@ pub fn probe_document(
         byte_length: metadata.len(),
         modified_at,
     })
+}
+
+fn probe_metadata_matches(
+    known_sha256: Option<&str>,
+    known_modified_at: Option<i64>,
+    known_size: Option<u64>,
+    modified_at: Option<i64>,
+    size: u64,
+) -> bool {
+    known_sha256.is_some()
+        && modified_at.is_some()
+        && known_modified_at == modified_at
+        && known_size == Some(size)
 }
 
 /// 前端确认接受外部版本时才记录节点，避免轮询本身制造历史噪音。
@@ -2591,15 +2625,57 @@ mod tests {
         let path = "GUIExport/demo/main.lua";
         let opened = open_document(&service, &project_id, path, None).unwrap();
         let original_sha = opened.sha256.clone().unwrap();
-        let unchanged = probe_document(&service, &project_id, path, Some(&original_sha)).unwrap();
+        let initial = probe_document(
+            &service,
+            &project_id,
+            path,
+            Some(&original_sha),
+            None,
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(!initial.changed);
+        let unchanged = probe_document(
+            &service,
+            &project_id,
+            path,
+            Some(&original_sha),
+            initial.modified_at,
+            Some(initial.byte_length),
+            false,
+        )
+        .unwrap();
         assert!(!unchanged.changed);
+
+        let wrong_sha = "0".repeat(64);
+        let forced = probe_document(
+            &service,
+            &project_id,
+            path,
+            Some(&wrong_sha),
+            initial.modified_at,
+            Some(initial.byte_length),
+            true,
+        )
+        .unwrap();
+        assert!(forced.changed);
 
         let target = base.join("project/客户端/dev").join(path);
         let external = opened
             .source
             .replace("return ui", "-- game editor\r\nreturn ui");
         fs::write(&target, external).unwrap();
-        let changed = probe_document(&service, &project_id, path, Some(&original_sha)).unwrap();
+        let changed = probe_document(
+            &service,
+            &project_id,
+            path,
+            Some(&original_sha),
+            initial.modified_at,
+            Some(initial.byte_length),
+            false,
+        )
+        .unwrap();
         assert!(changed.changed);
         let recorded = record_external_change(
             &service,
@@ -2619,6 +2695,45 @@ mod tests {
             GuiSaveNodeOrigin::External
         );
         fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn probe_metadata_fast_path_requires_a_complete_matching_baseline() {
+        assert!(probe_metadata_matches(
+            Some("sha"),
+            Some(10),
+            Some(20),
+            Some(10),
+            20,
+        ));
+        assert!(!probe_metadata_matches(
+            None,
+            Some(10),
+            Some(20),
+            Some(10),
+            20,
+        ));
+        assert!(!probe_metadata_matches(
+            Some("sha"),
+            None,
+            Some(20),
+            None,
+            20,
+        ));
+        assert!(!probe_metadata_matches(
+            Some("sha"),
+            Some(10),
+            Some(20),
+            Some(11),
+            20,
+        ));
+        assert!(!probe_metadata_matches(
+            Some("sha"),
+            Some(10),
+            Some(20),
+            Some(10),
+            21,
+        ));
     }
 
     #[test]

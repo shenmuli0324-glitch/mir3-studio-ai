@@ -1,7 +1,7 @@
 {
   "name": "mir3-studio-ai",
   "type": "module",
-  "version": "0.9.21",
+  "version": "0.9.22",
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "description": "AI development workspace for MIR3 engine projects.",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "brand:audit": "node scripts/brand-audit.mjs",
     "plugin:audit": "node scripts/audit-harness-plugins.mjs",
-    "domain:audit": "node scripts/audit-domain-kernel.mjs",
+    "domain:audit": "node scripts/generate-domain-packs.mjs --check && node scripts/audit-domain-kernel.mjs",
     "domain:corpus:audit": "node scripts/audit-domain-corpus.mjs",
     "domain:corpus:accept": "node scripts/run-domain-corpus-acceptance.mjs",
     "version:bump": "node scripts/bump-product-version.mjs",
@@ -54,7 +54,6 @@
   "devDependencies": {
     "@antfu/eslint-config": "^9.3.0",
     "@eslint-react/eslint-plugin": "^5.18.6",
-    "@tailwindcss/postcss": "4.1.11",
     "@tailwindcss/vite": "4.1.11",
     "@tauri-apps/cli": "^2.11.4",
     "@testing-library/react": "^16.3.2",

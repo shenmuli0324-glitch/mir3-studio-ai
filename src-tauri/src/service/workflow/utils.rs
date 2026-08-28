@@ -3,40 +3,66 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
 
 const DSH_MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 const DSH_MAX_BACKUPS: usize = 3;
 static DSH_LOG_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static HEALTH_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 fn dsh_log_lock() -> &'static Mutex<()> {
     DSH_LOG_LOCK.get_or_init(|| Mutex::new(()))
 }
 
+/// 健康探测成功时返回的底层证据；进程所有权由上层调用者判定。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DshHealthProbe {
+    pub endpoint: String,
+    pub status: u16,
+    pub body_preview: String,
+}
+
+fn health_client() -> Result<&'static reqwest::Client, String> {
+    if let Some(client) = HEALTH_CLIENT.get() {
+        return Ok(client);
+    }
+    let client = reqwest::Client::builder()
+        .timeout(crate::config::HEALTH_CHECK_TIMEOUT)
+        .build()
+        .map_err(|error| format!("HEALTH_CLIENT_CREATE_FAILED: {error}"))?;
+    let _ = HEALTH_CLIENT.set(client);
+    HEALTH_CLIENT
+        .get()
+        .ok_or_else(|| "HEALTH_CLIENT_CREATE_FAILED: shared client unavailable".to_string())
+}
+
+/// 探测 Core HTTP 端点。这里只回答服务是否 ready，不把未知端口服务认作本应用进程。
+pub async fn probe_dsh_health(port: u16) -> Result<Option<DshHealthProbe>, String> {
+    let client = health_client()?;
+    for endpoint in [
+        format!("http://127.0.0.1:{port}/"),
+        format!("http://127.0.0.1:{port}/healthz"),
+    ] {
+        match client.get(&endpoint).send().await {
+            Ok(response) => {
+                let status = response.status();
+                if !status.is_success() {
+                    continue;
+                }
+                let body = response.text().await.unwrap_or_default();
+                return Ok(Some(DshHealthProbe {
+                    endpoint,
+                    status: status.as_u16(),
+                    body_preview: body.chars().take(80).collect(),
+                }));
+            }
+            Err(error) => log::debug!("Health check {endpoint}: {error}"),
+        }
+    }
+    Ok(None)
+}
+
 /// 检查 MIR3 AI Core 是否真正在运行（探测指定端口，随配置端口联动）
 pub async fn is_dsh_running(port: u16) -> bool {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .ok(); // 将 Result 转为 Option
-
-    // 如果 client 创建失败，直接返回 false
-    let client = match client {
-        Some(c) => c,
-        None => return false,
-    };
-
-    let url = format!("{}/", crate::config::get_dsh_service_url(port));
-
-    // 发送请求并判断是否就绪
-    let check_status = async {
-        let resp = client.get(&url).send().await.ok()?;
-        if resp.status() != reqwest::StatusCode::OK {
-            return None;
-        }
-        Some(true)
-    };
-
-    check_status.await.unwrap_or(false)
+    probe_dsh_health(port).await.ok().flatten().is_some()
 }
 
 /// 检查指定端口是否被占用（通过尝试连接来判断）
@@ -224,5 +250,12 @@ mod tests {
         rotate_service_log(&log, 0);
         assert!(!log.exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn health_client_is_shared() {
+        let first = health_client().unwrap();
+        let second = health_client().unwrap();
+        assert!(std::ptr::eq(first, second));
     }
 }

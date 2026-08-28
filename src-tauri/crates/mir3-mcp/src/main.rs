@@ -3336,8 +3336,12 @@ fn write_json(writer: &mut impl Write, value: &Value) -> Result<(), String> {
 mod tests {
     use super::*;
     use easyexcel_xls::biff8::{Biff8Book, Biff8Cell, Biff8Sheet, Biff8Value};
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
+
+    const OPERATION_MATRIX_SYSTEMS: usize = 33;
+    const OPERATION_MATRIX_OPERATIONS: usize = 155;
+    const OPERATION_MATRIX_SHARDS: usize = 8;
 
     #[test]
     fn tool_surface_is_exact_and_contains_no_generic_file_tools() {
@@ -3620,6 +3624,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "完整 155 操作生命周期矩阵由 CI 稳定分片执行"]
     fn every_writable_official_operation_compiles_into_a_scoped_draft() {
         let base = std::env::temp_dir().join(format!(
             "mir3-mcp-shaped-e2e-{}-{}",
@@ -3634,6 +3639,10 @@ mod tests {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../resources/mir3-domain-packs");
         let bootstrap = DomainStore::new(base.join("bootstrap")).unwrap();
         let manifests = bootstrap.list_domain_systems().unwrap();
+        let catalog = operation_matrix_catalog(&manifests);
+        assert_operation_matrix_catalog(&catalog);
+        let shard = operation_matrix_shard_from_env();
+        let selected_systems = operation_matrix_systems_for_shard(&catalog, shard);
         let fixture_records = normalized_fixture_records(&pack_root, &manifests);
         for manifest in &manifests {
             let records = &fixture_records[&manifest.system_id];
@@ -3715,7 +3724,10 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let manifests = store.list_domain_systems().unwrap();
         let mut coverage = BTreeMap::<String, CapabilityLifecycleCoverage>::new();
-        for manifest in manifests {
+        for manifest in manifests
+            .into_iter()
+            .filter(|manifest| selected_systems.contains(&manifest.system_id))
+        {
             let records = &fixture_records[&manifest.system_id];
             let files = store
                 .query_domain_files(
@@ -3937,7 +3949,7 @@ mod tests {
                 }
             }
         }
-        assert_capability_lifecycle_coverage(&coverage);
+        assert_capability_lifecycle_coverage(&coverage, &catalog, &selected_systems);
         fs::remove_dir_all(base).ok();
     }
 
@@ -5102,6 +5114,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "完整 3/8/33 系统全局工作流由 CI 独立执行"]
     fn global_workflow_mcp_scales_across_three_eight_and_all_domains() {
         let base = std::env::temp_dir().join(format!(
             "mir3-mcp-global-matrix-{}-{}",
@@ -5621,6 +5634,145 @@ mod tests {
         rejected: Vec<String>,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct OperationMatrixShard {
+        index: usize,
+        total: usize,
+    }
+
+    fn operation_matrix_catalog(manifests: &[DomainManifest]) -> BTreeMap<String, Vec<String>> {
+        manifests
+            .iter()
+            .map(|manifest| {
+                let mut operations = manifest
+                    .capabilities
+                    .iter()
+                    .filter(|capability| !capability.write_systems.is_empty())
+                    .map(|capability| capability.id.clone())
+                    .collect::<Vec<_>>();
+                operations.sort();
+                (manifest.system_id.clone(), operations)
+            })
+            .collect()
+    }
+
+    fn assert_operation_matrix_catalog(catalog: &BTreeMap<String, Vec<String>>) {
+        assert_eq!(
+            catalog.len(),
+            OPERATION_MATRIX_SYSTEMS,
+            "official operation systems: {catalog:#?}"
+        );
+        let operations = catalog
+            .iter()
+            .flat_map(|(system_id, operations)| {
+                operations
+                    .iter()
+                    .map(move |operation_id| format!("{system_id}:{operation_id}"))
+            })
+            .collect::<Vec<_>>();
+        let unique = operations.iter().collect::<BTreeSet<_>>();
+        assert_eq!(
+            operations.len(),
+            OPERATION_MATRIX_OPERATIONS,
+            "official operations: {catalog:#?}"
+        );
+        assert_eq!(
+            unique.len(),
+            OPERATION_MATRIX_OPERATIONS,
+            "duplicate official operations: {catalog:#?}"
+        );
+    }
+
+    fn operation_matrix_shard_from_env() -> OperationMatrixShard {
+        let index = std::env::var("MIR3_OPERATION_MATRIX_SHARD_INDEX").ok();
+        let total = std::env::var("MIR3_OPERATION_MATRIX_SHARD_TOTAL").ok();
+        match (index, total) {
+            (None, None) => OperationMatrixShard { index: 0, total: 1 },
+            (Some(index), Some(total)) => operation_matrix_shard(
+                index
+                    .parse()
+                    .expect("MIR3_OPERATION_MATRIX_SHARD_INDEX must be an integer"),
+                total
+                    .parse()
+                    .expect("MIR3_OPERATION_MATRIX_SHARD_TOTAL must be an integer"),
+            ),
+            _ => panic!(
+                "MIR3_OPERATION_MATRIX_SHARD_INDEX and MIR3_OPERATION_MATRIX_SHARD_TOTAL must be set together"
+            ),
+        }
+    }
+
+    fn operation_matrix_shard(index: usize, total: usize) -> OperationMatrixShard {
+        assert!(total > 0, "operation matrix shard total must be positive");
+        assert!(
+            index < total,
+            "operation matrix shard index {index} is outside 0..{total}"
+        );
+        OperationMatrixShard { index, total }
+    }
+
+    /// systemId 使用 BTreeMap 字典序形成稳定索引；每个系统只归属一个分片。
+    fn operation_matrix_systems_for_shard(
+        catalog: &BTreeMap<String, Vec<String>>,
+        shard: OperationMatrixShard,
+    ) -> BTreeSet<String> {
+        catalog
+            .keys()
+            .enumerate()
+            .filter(|(index, _)| index % shard.total == shard.index)
+            .map(|(_, system_id)| system_id.clone())
+            .collect()
+    }
+
+    #[test]
+    fn operation_matrix_eight_shards_assign_all_operations_exactly_once() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-mcp-operation-partition-{}-{}",
+            std::process::id(),
+            mir3_domain::now_millis()
+        ));
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let manifests = store.list_domain_systems().unwrap();
+        let catalog = operation_matrix_catalog(&manifests);
+        assert_operation_matrix_catalog(&catalog);
+
+        let mut assigned_systems = BTreeSet::new();
+        let mut assigned_operations = BTreeSet::new();
+        for index in 0..OPERATION_MATRIX_SHARDS {
+            let systems = operation_matrix_systems_for_shard(
+                &catalog,
+                operation_matrix_shard(index, OPERATION_MATRIX_SHARDS),
+            );
+            assert!(
+                !systems.is_empty(),
+                "operation matrix shard {index} is empty"
+            );
+            for system_id in systems {
+                assert!(
+                    assigned_systems.insert(system_id.clone()),
+                    "system {system_id} was assigned more than once"
+                );
+                for operation_id in &catalog[&system_id] {
+                    assert!(
+                        assigned_operations.insert(format!("{system_id}:{operation_id}")),
+                        "operation {system_id}:{operation_id} was assigned more than once"
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            assigned_systems.len(),
+            OPERATION_MATRIX_SYSTEMS,
+            "missing assigned systems"
+        );
+        assert_eq!(
+            assigned_operations.len(),
+            OPERATION_MATRIX_OPERATIONS,
+            "missing assigned operations"
+        );
+        fs::remove_dir_all(base).ok();
+    }
+
     fn normalized_fixture_records(
         pack_root: &std::path::Path,
         manifests: &[DomainManifest],
@@ -5781,16 +5933,27 @@ mod tests {
 
     fn assert_capability_lifecycle_coverage(
         coverage: &BTreeMap<String, CapabilityLifecycleCoverage>,
+        catalog: &BTreeMap<String, Vec<String>>,
+        selected_systems: &BTreeSet<String>,
     ) {
-        assert_eq!(coverage.len(), 33, "{coverage:#?}");
+        assert_operation_matrix_catalog(catalog);
+        assert_eq!(coverage.len(), selected_systems.len(), "{coverage:#?}");
         let mut compiled = 0;
         let mut applied = 0;
         let mut rejected = 0;
         let mut missing_applied = Vec::new();
-        for (system_id, lifecycle) in coverage {
+        for system_id in selected_systems {
+            let lifecycle = coverage
+                .get(system_id)
+                .unwrap_or_else(|| panic!("{system_id} has no lifecycle coverage"));
             assert!(
                 !lifecycle.compiled.is_empty(),
                 "{system_id} has no writable capability coverage"
+            );
+            assert_eq!(
+                lifecycle.compiled.len(),
+                catalog[system_id].len(),
+                "{system_id} operation count changed: {lifecycle:#?}"
             );
             assert_eq!(
                 lifecycle.compiled.len(),
@@ -5804,8 +5967,12 @@ mod tests {
             applied += lifecycle.applied.len();
             rejected += lifecycle.rejected.len();
         }
-        assert_eq!(compiled, 155, "{coverage:#?}");
-        assert_eq!(applied + rejected, 155, "{coverage:#?}");
+        let expected = selected_systems
+            .iter()
+            .map(|system_id| catalog[system_id].len())
+            .sum::<usize>();
+        assert_eq!(compiled, expected, "{coverage:#?}");
+        assert_eq!(applied + rejected, expected, "{coverage:#?}");
         assert!(
             missing_applied.is_empty(),
             "systems without a representative Apply/restore lifecycle: {missing_applied:#?}"

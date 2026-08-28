@@ -20,10 +20,10 @@ import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
 import { store } from '@/store'
 import { StudioViewContent } from '@/views'
-import { DevToolsView } from '@/views/devtools-view'
 import { DesktopUpdater } from './components/desktop-updater'
 import { DownloadToast } from './components/download-toast-trigger'
 import { HarnessUpdater } from './components/harness-updater'
+import { PersistentDevTools } from './components/persistent-devtools'
 import { StartupGate } from './components/startup-gate'
 import { StudioSidebar } from './components/studio-sidebar'
 import { StudioTopbar } from './components/studio-topbar'
@@ -42,6 +42,7 @@ export function App() {
   })
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [devtoolsTarget, setDevtoolsTarget] = useState<VerifiedDevtoolsTarget | null>(null)
+  const [devtoolsMounted, setDevtoolsMounted] = useState(false)
   const [compositeReview, setCompositeReview] = useState<CompositeDraftReviewRequest | null>(null)
   const [pendingCompositeReview, setPendingCompositeReview] = useState<CompositeDraftReviewRequest | null>(null)
   const globalResumeRequestsRef = useRef(new Set<string>())
@@ -201,8 +202,10 @@ export function App() {
         if (disposed || !verified)
           return
         setDevtoolsTarget(verified)
-        if (completed)
+        if (completed) {
+          setDevtoolsMounted(true)
           setShellState(value => ({ ...value, activeView: 'devtools' }))
+        }
       }).catch(() => {})
     })
     return () => {
@@ -246,6 +249,8 @@ export function App() {
   }
 
   function navigate(view: StudioView) {
+    if (view === 'devtools')
+      setDevtoolsMounted(true)
     setShellState(value => ({ ...value, activeView: view }))
   }
 
@@ -273,11 +278,11 @@ export function App() {
   function readyContent() {
     if (harnessVisible || activeView === 'devtools')
       return null
-    return <StudioViewContent view={activeView} devtoolsTarget={devtoolsTarget} />
+    return <StudioViewContent view={activeView} />
   }
 
   return (
-    <GuiDesignerScope.Provider key={activeProject?.id ?? 'no-project'}>
+    <GuiDesignerScope.Provider key={activeProject?.id ?? 'no-project'} active={activeView === 'gui-designer'}>
       {guiScope => (
         <div className="flex h-screen w-screen flex-col bg-canvas">
           <If
@@ -300,7 +305,7 @@ export function App() {
               <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} guiDirty={guiScope.dirty} onNavigate={navigate} />
               <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
                 <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
-                <div className={persistentDevtoolsClass(activeView)}><DevToolsView target={devtoolsTarget} /></div>
+                <PersistentDevTools mounted={devtoolsMounted} active={activeView === 'devtools'} target={devtoolsTarget} />
                 <div className={studioPageClass(activeView)}>{readyContent()}</div>
                 <If cond={visiblePendingCompositeReview != null && visibleCompositeReview == null}>
                   <Button
@@ -334,13 +339,6 @@ function studioPageClass(view: StudioView): string {
   if (isHarnessView(view) || view === 'devtools')
     return `${base} invisible pointer-events-none`
   return `${base} visible`
-}
-
-function persistentDevtoolsClass(view: StudioView): string {
-  const base = 'absolute inset-0 min-h-0 min-w-0'
-  if (view === 'devtools')
-    return `${base} visible`
-  return `${base} invisible pointer-events-none`
 }
 
 function reviewForActiveProject(review: CompositeDraftReviewRequest | null, projectId?: string): CompositeDraftReviewRequest | null {

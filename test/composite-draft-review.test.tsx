@@ -35,8 +35,6 @@ describe('composite Draft joint review', () => {
       }
       return Promise.reject(new Error(`Unexpected command: ${command}`))
     })
-    const confirm = vi.fn().mockReturnValue(true)
-    Object.defineProperty(window, 'confirm', { configurable: true, value: confirm })
     const onApplied = vi.fn()
     renderReview(onApplied)
 
@@ -49,6 +47,7 @@ describe('composite Draft joint review', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Confirm once and apply atomically' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('draft_composite_apply', {
       projectId: 'project-1',
       compositeId: 'composite-1',
@@ -57,7 +56,6 @@ describe('composite Draft joint review', () => {
         { draftId: 'draft-shop', confirmationToken: 'token-shop' },
       ],
     }))
-    expect(confirm).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(onApplied).toHaveBeenCalledWith(expect.objectContaining({ compositeId: 'composite-1' })))
   })
 

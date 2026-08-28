@@ -213,8 +213,6 @@ export interface GuiDocumentOpenResult {
   sha256?: string | null
   encoding?: string | null
   newline?: string | null
-  draftId?: string | null
-  revision?: number | null
 }
 
 export interface GuiTemplateRequest {
@@ -225,35 +223,6 @@ export interface GuiTemplateRequest {
 
 export interface GuiTemplateResult {
   documents: Array<{ path: string, source: string, document: Mir3UiDocument }>
-}
-
-export interface GuiDraftChangeSet {
-  files: Array<{
-    devRelativePath: string
-    source: string
-    expectedSha256?: string | null
-    isNew?: boolean
-  }>
-  draftId?: string | null
-  expectedRevision?: number
-}
-
-export interface GuiDraftPrepareResult {
-  draftId: string
-  revision: number
-}
-
-export interface GuiDraftConfirmation {
-  draftId: string
-  confirmationToken: string
-  diff: string
-  diffHash?: string | null
-}
-
-export interface GuiDraftApplyResult {
-  id?: string
-  snapshotId?: string
-  appliedPaths?: string[]
 }
 
 export type GuiSaveNodeOrigin = 'studio' | 'external' | 'restore'
@@ -290,6 +259,8 @@ export type GuiDocumentProbeState = 'unchanged' | 'changed' | 'missing'
 export interface GuiDocumentProbeResult {
   state: GuiDocumentProbeState
   sha256?: string | null
+  byteLength: number
+  modifiedAt?: number | null
 }
 
 export interface GuiAiWorkspace {

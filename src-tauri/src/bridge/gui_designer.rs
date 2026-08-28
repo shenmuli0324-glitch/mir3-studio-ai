@@ -212,6 +212,9 @@ pub async fn gui_document_probe(
     project_id: String,
     dev_relative_path: String,
     known_sha256: Option<String>,
+    known_modified_at: Option<i64>,
+    known_size: Option<u64>,
+    force_hash: Option<bool>,
 ) -> Result<GuiDocumentProbe, String> {
     let service = service.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -220,6 +223,9 @@ pub async fn gui_document_probe(
             &project_id,
             &dev_relative_path,
             known_sha256.as_deref(),
+            known_modified_at,
+            known_size,
+            force_hash.unwrap_or(false),
         )
     })
     .await

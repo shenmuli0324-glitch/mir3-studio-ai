@@ -43,8 +43,6 @@ export interface UseDshPluginsResult {
   plugins: DshPlugin[]
   loading: boolean
   error: string
-  /** 手动重新拉取（Rust 侧也会在插件文件变化时实时推送） */
-  refresh: () => Promise<void>
 }
 
 /**
@@ -61,7 +59,7 @@ export interface UseDshPluginsResult {
 export function useDshPlugins(): UseDshPluginsResult {
   const queryClient = useQueryClient()
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['plugins'],
     queryFn: () => invoke<DshPlugin[]>('get_dsh_plugins'),
   })
@@ -96,8 +94,5 @@ export function useDshPlugins(): UseDshPluginsResult {
     plugins: data ?? [],
     loading: isLoading,
     error: error ? String(error) : '',
-    refresh: async () => {
-      await refetch()
-    },
   }
 }

@@ -61,9 +61,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
             log::info!(
                 "Runtime files already present although store says not installed, healing installed flag"
             );
-            let mut setting = config::get_store_dat_setting(&app_handle);
-            setting.installed = true;
-            config::set_store_dat_setting(&app_handle, setting);
+            config::update_setting(&app_handle, |setting| setting.installed = true);
             sync_cli_link(&app_handle);
             return Ok(false);
         }
@@ -120,8 +118,11 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
                             latest.tag,
                             latest.commit
                         );
-                        config::set_dsh_pkg_commit(&app_handle, latest.commit.clone());
-                        config::set_dsh_pkg_tag(&app_handle, latest.tag.clone());
+                        config::set_dsh_pkg_release(
+                            &app_handle,
+                            latest.tag.clone(),
+                            latest.commit.clone(),
+                        );
                     }
                     false
                 }
@@ -155,10 +156,8 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
 
     if node_ok && !dsh_need_install && pnpm_ok {
         log::info!("Dependencies already installed and up to date, skipping installation");
-        let mut setting = config::get_store_dat_setting(&app_handle);
-        if !setting.installed {
-            setting.installed = true;
-            config::set_store_dat_setting(&app_handle, setting);
+        if !config::get_store_dat_setting(&app_handle).installed {
+            config::update_setting(&app_handle, |setting| setting.installed = true);
         }
         sync_cli_link(&app_handle);
         return Ok(false);
@@ -171,9 +170,7 @@ pub async fn install_dependencies(app_handle: AppHandle) -> Result<bool, String>
     // 版本相同仅记录滞后）时为 false，前端据此决定是否重启页面/保留更新提示
     let updated = workflow::install(&app_handle, dsh_latest.ok()).await?;
     log::debug!("Installation completed, marked as installed");
-    let mut setting = config::get_store_dat_setting(&app_handle);
-    setting.installed = true;
-    config::set_store_dat_setting(&app_handle, setting);
+    config::update_setting(&app_handle, |setting| setting.installed = true);
     sync_cli_link(&app_handle);
     Ok(updated)
 }
@@ -223,8 +220,7 @@ pub async fn check_dsh_update(
                 latest.tag,
                 latest.commit
             );
-            config::set_dsh_pkg_commit(&app_handle, latest.commit.clone());
-            config::set_dsh_pkg_tag(&app_handle, latest.tag.clone());
+            config::set_dsh_pkg_release(&app_handle, latest.tag.clone(), latest.commit.clone());
             Ok(None)
         }
     }
@@ -274,8 +270,16 @@ pub fn get_dsh_status() -> workflow::status::Status {
 /// 已就绪——此时前端跳过安装/下载界面，交给 install_dependencies 内部自愈
 /// 补记 installed 后直接启动，避免自动重开时闪现误导用户的安装界面。
 #[tauri::command]
-pub fn runtime_ready(app_handle: AppHandle) -> bool {
-    download::Nodejs.check_installed(&app_handle)
-        && download::Dsh.check_installed(&app_handle)
-        && download::Pnpm.check_installed(&app_handle)
+pub async fn runtime_ready(app_handle: AppHandle) -> bool {
+    match tauri::async_runtime::spawn_blocking(move || {
+        config::runtime_inventory(&app_handle).ready()
+    })
+    .await
+    {
+        Ok(ready) => ready,
+        Err(error) => {
+            log::error!("RUNTIME_INVENTORY_FAILED: blocking worker failed: {error}");
+            false
+        }
+    }
 }

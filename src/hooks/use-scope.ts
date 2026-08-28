@@ -1,8 +1,8 @@
 /* eslint-disable react/no-use-context */
-import type { Scope } from './define-scope'
+import type { Context } from 'react'
 import { useContext } from 'react'
 
-export function useScope<T>(scope: Scope<T>) {
+export function useScope<T>(scope: { Context: Context<T | undefined> }) {
   const value = useContext(scope.Context)
   if (!value)
     throw new Error('Scope not found')

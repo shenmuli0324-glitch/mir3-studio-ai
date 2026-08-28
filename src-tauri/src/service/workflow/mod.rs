@@ -425,9 +425,7 @@ pub async fn start(app_handle: tauri::AppHandle) -> Result<(), String> {
         if dsh_bin_open_error(&app_handle) == Some(448) {
             relaunch_via_shell_escape(&app_handle);
         }
-        let mut setting = config::get_store_dat_setting(&app_handle);
-        setting.installed = false;
-        config::set_store_dat_setting(&app_handle, setting);
+        config::update_setting(&app_handle, |setting| setting.installed = false);
         // 状态变更需要 info 级落盘：这是「store 显示未安装」的源头之一
         // （核心文件短暂缺失被复位），自更新后自动重开走进安装分支多由此触发。
         log::info!("Runtime files missing (node/dsh), resetting installed flag");
@@ -501,8 +499,9 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
             setting.port,
             available_port
         );
-        setting.port = available_port;
-        config::set_store_dat_setting(&app_handle, setting.clone());
+        setting = config::update_setting(&app_handle, |current| {
+            current.port = available_port;
+        });
     }
 
     // 构造环境变量：隔离的 $MIR3_STUDIO_HOME + 隐私默认（关闭遥测）
@@ -946,8 +945,7 @@ pub async fn install(
                     bundle.record_core_install(app_handle);
                 }
             } else if let Some(info) = &dsh_latest {
-                config::set_dsh_pkg_commit(app_handle, info.commit.clone());
-                config::set_dsh_pkg_tag(app_handle, info.tag.clone());
+                config::set_dsh_pkg_release(app_handle, info.tag.clone(), info.commit.clone());
             }
         }
     }
@@ -980,10 +978,10 @@ pub async fn finalize_core_update(app_handle: &tauri::AppHandle) -> Result<bool,
             backup.display()
         ));
     }
-    let mut setting = config::get_store_dat_setting(app_handle);
-    setting.last_known_good_core_tag = setting.dsh_pkg_tag.clone();
-    setting.last_known_good_core_commit = setting.dsh_pkg_commit.clone();
-    config::set_store_dat_setting(app_handle, setting.clone());
+    let setting = config::update_setting(app_handle, |setting| {
+        setting.last_known_good_core_tag = setting.dsh_pkg_tag.clone();
+        setting.last_known_good_core_commit = setting.dsh_pkg_commit.clone();
+    });
     if let Err(error) = persist_core_canary_state(app_handle, &setting) {
         // canary 本身已经通过且 LKG 已持久化；证据文件失败不能把已删除 backup
         // 的正常 Core 误判为需要回滚，但原生 smoke 会因缺少该文件而失败。
@@ -1094,11 +1092,11 @@ pub async fn rollback_core_update(app_handle: &tauri::AppHandle) -> Result<bool,
             failed.display()
         );
     }
-    let mut setting = config::get_store_dat_setting(app_handle);
-    setting.dsh_pkg_tag = setting.last_known_good_core_tag.clone();
-    setting.dsh_pkg_commit = setting.last_known_good_core_commit.clone();
-    setting.active_core = Some("app".to_string());
-    config::set_store_dat_setting(app_handle, setting);
+    config::update_setting(app_handle, |setting| {
+        setting.dsh_pkg_tag = setting.last_known_good_core_tag.clone();
+        setting.dsh_pkg_commit = setting.last_known_good_core_commit.clone();
+        setting.active_core = Some("app".to_string());
+    });
     Ok(true)
 }
 
@@ -1107,30 +1105,11 @@ pub async fn proxy_health_check(port: u16) -> Result<String, String> {
     if !has_owned_process() {
         return Err("HARNESS_NOT_OWNED: no MIR3 AI Core process is owned by this app".to_string());
     }
-    let client = reqwest::Client::builder()
-        .timeout(config::HEALTH_CHECK_TIMEOUT)
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    for endpoint in [
-        format!("http://127.0.0.1:{port}/"),
-        format!("http://127.0.0.1:{port}/healthz"),
-    ] {
-        match client.get(&endpoint).send().await {
-            Ok(response) => {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                if status.is_success() {
-                    return Ok(format!(
-                        "healthy - {status} - {}",
-                        body.chars().take(80).collect::<String>()
-                    ));
-                }
-            }
-            Err(err) => {
-                log::debug!("Health check {endpoint}: {err}");
-            }
-        }
+    if let Some(probe) = utils::probe_dsh_health(port).await? {
+        return Ok(format!(
+            "healthy - {} - {}",
+            probe.status, probe.body_preview
+        ));
     }
     Err("HARNESS_NOT_READY: MIR3 AI Core service is not ready".to_string())
 }

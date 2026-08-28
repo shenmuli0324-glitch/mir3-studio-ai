@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "owner": "scripts/generate-domain-packs.mjs",
+  "notice": "Only listed files are generated. Unlisted files are manually owned and must not be overwritten.",
+  "files": [
+    "CHANGELOG.md",
+    "domain.json",
+    "fixtures/expected-diagnostics.json",
+    "fixtures/invalid.json",
+    "fixtures/valid.json",
+    "package.json",
+    "schemas/resource.schema.json"
+  ]
+}

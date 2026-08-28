@@ -1,5 +1,6 @@
 use super::constants::*;
 use serde::{Deserialize, Serialize};
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
@@ -99,18 +100,24 @@ fn store_dat_file_name() -> &'static str {
     }
 }
 
-pub fn set_store_dat_setting(app_handle: &AppHandle, setting: Setting) {
+static SETTING_UPDATE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn setting_update_lock() -> &'static Mutex<()> {
+    SETTING_UPDATE_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn write_store_dat_setting(app_handle: &AppHandle, setting: &Setting) {
     let store = app_handle
         .store(store_dat_file_name())
         .expect("Failed to load store");
-    store.set(STORE_SETTING_KEY, serde_json::to_value(&setting).unwrap());
+    store.set(STORE_SETTING_KEY, serde_json::to_value(setting).unwrap());
     store.save().expect("Failed to save store");
     app_handle
-        .emit("setting_updated", &serde_json::to_value(&setting).unwrap())
+        .emit("setting_updated", &serde_json::to_value(setting).unwrap())
         .expect("Failed to emit event");
 }
 
-pub fn get_store_dat_setting(app_handle: &AppHandle) -> Setting {
+fn read_store_dat_setting(app_handle: &AppHandle) -> Setting {
     let store = app_handle
         .store(store_dat_file_name())
         .expect("Failed to load store");
@@ -125,16 +132,30 @@ pub fn get_store_dat_setting(app_handle: &AppHandle) -> Setting {
         .unwrap_or_else(Setting::default)
 }
 
+pub fn get_store_dat_setting(app_handle: &AppHandle) -> Setting {
+    let _guard = setting_update_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    read_store_dat_setting(app_handle)
+}
+
+/// 在同一把进程锁内完成读取、修改与持久化，避免并发命令互相覆盖字段。
+pub fn update_setting<F>(app_handle: &AppHandle, update: F) -> Setting
+where
+    F: FnOnce(&mut Setting),
+{
+    let _guard = setting_update_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let mut setting = read_store_dat_setting(app_handle);
+    update(&mut setting);
+    write_store_dat_setting(app_handle, &setting);
+    setting
+}
+
 /// 已安装 MIR3 AI Core 发行版对应的 GitHub release commit hash
 pub fn get_dsh_pkg_commit(app_handle: &AppHandle) -> Option<String> {
     get_store_dat_setting(app_handle).dsh_pkg_commit
-}
-
-/// 记录已安装 MIR3 AI Core 发行版的 GitHub release commit hash
-pub fn set_dsh_pkg_commit(app_handle: &AppHandle, commit: String) {
-    let mut setting = get_store_dat_setting(app_handle);
-    setting.dsh_pkg_commit = Some(commit);
-    set_store_dat_setting(app_handle, setting);
 }
 
 /// 已安装 MIR3 AI Core 发行版对应的 GitHub release tag
@@ -142,9 +163,10 @@ pub fn get_dsh_pkg_tag(app_handle: &AppHandle) -> Option<String> {
     get_store_dat_setting(app_handle).dsh_pkg_tag
 }
 
-/// 记录已安装 MIR3 AI Core 发行版的 GitHub release tag
-pub fn set_dsh_pkg_tag(app_handle: &AppHandle, tag: String) {
-    let mut setting = get_store_dat_setting(app_handle);
-    setting.dsh_pkg_tag = Some(tag);
-    set_store_dat_setting(app_handle, setting);
+/// 原子记录同一发行版的 tag 与 commit，避免观察到跨发行版的组合。
+pub fn set_dsh_pkg_release(app_handle: &AppHandle, tag: String, commit: String) {
+    update_setting(app_handle, |setting| {
+        setting.dsh_pkg_tag = Some(tag);
+        setting.dsh_pkg_commit = Some(commit);
+    });
 }

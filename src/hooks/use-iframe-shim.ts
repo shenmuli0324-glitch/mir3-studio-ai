@@ -316,7 +316,7 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
   }, [])
 
   // 兜底轮询：覆盖监听不到的状态变化（如任务栏切换）
-  useInterval(syncVisibility, 1000)
+  useInterval(syncVisibility, 10_000)
 }
 
 function isMir3BridgeV2(data: Mir3PluginMessage | null | undefined): data is Mir3PluginMessage & { type: NonNullable<Mir3PluginMessage['type']> } {

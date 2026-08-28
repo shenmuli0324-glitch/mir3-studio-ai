@@ -37,8 +37,8 @@ fn create_file_with_retry(outpath: &Path) -> Result<fs::File, String> {
 }
 
 /// 解压 ZIP 文件到指定目录
-pub fn extract_zip<'a, R: Runtime>(
-    tracker: &ProgressTracker<'a, R>,
+pub fn extract_zip<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     buffer: &[u8],
     dest: &PathBuf,
 ) -> Result<(), String> {
@@ -128,8 +128,8 @@ pub fn extract_zip<'a, R: Runtime>(
 }
 
 /// 解压 TGZ 文件到指定目录
-pub fn extract_tgz<'a, R: Runtime>(
-    tracker: &ProgressTracker<'a, R>,
+pub fn extract_tgz<R: Runtime>(
+    tracker: &ProgressTracker<R>,
     buffer: &[u8],
     dest: &PathBuf,
 ) -> Result<(), String> {

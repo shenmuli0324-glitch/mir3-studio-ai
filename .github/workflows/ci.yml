@@ -79,3 +79,38 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml --workspace --locked
       - name: Test Rust workspace
         run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked -- --test-threads=1
+
+  rust-operation-matrix:
+    name: Rust operation matrix (${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      # 常规 workspace 测试忽略完整生命周期矩阵；这里按稳定 systemId 索引并行补齐。
+      # 本 workflow 被 release.yml 复用，因此发布与 PR 都必须等待全部八片通过。
+      - name: Test governed operation lifecycle shard
+        env:
+          MIR3_OPERATION_MATRIX_SHARD_INDEX: ${{ matrix.shard }}
+          MIR3_OPERATION_MATRIX_SHARD_TOTAL: 8
+        run: >-
+          cargo test --manifest-path src-tauri/Cargo.toml --locked -p mir3-mcp
+          tests::every_writable_official_operation_compiles_into_a_scoped_draft --
+          --ignored --exact --test-threads=1
+
+  rust-global-workflow:
+    name: Rust global workflow matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test 3, 8, and 33-system global workflows
+        run: >-
+          cargo test --manifest-path src-tauri/Cargo.toml --locked -p mir3-mcp
+          tests::global_workflow_mcp_scales_across_three_eight_and_all_domains --
+          --ignored --exact --test-threads=1
