@@ -5,8 +5,8 @@
 ; MIR3 Studio AI customizations (marked with "MIR3 Studio AI:").
 ; MIR3 Studio AI customizations:
 ; - PageReinstall defaults an UPGRADE to a direct in-place update.
-; - Install/uninstall terminates the Studio process tree, the persisted Core process
-;   tree, and the packaged MCP sidecar before replacing files.
+; - Install/uninstall terminates the Studio process tree, the live Core parent of the
+;   packaged MCP sidecar, the persisted Core process tree, and the sidecar itself.
 
 Unicode true
 ManifestDPIAware true
@@ -89,13 +89,20 @@ Var OldMainBinaryName
 ; MIR3 Studio AI: terminate every product-owned process that can keep packaged files
 ; locked. Closing the main executable by image name alone is insufficient because an
 ; abruptly terminated tray process cannot run its Rust exit handler, leaving Core and
-; mir3-mcp orphaned. The persisted PID and port are converted back to integers and
-; matched against a live listening socket before taskkill, preventing PID-reuse kills
-; and ensuring marker contents can never inject extra command arguments.
+; mir3-mcp orphaned. Core also supervises mir3-mcp and immediately respawns it when the
+; installer only kills the child. Resolve that live parent from a sidecar whose exact
+; executable path belongs to this installation, and only terminate a node parent whose
+; command line is the Dsh web profile. The persisted PID and port fallback is converted
+; back to integers and matched against a live listening socket before taskkill,
+; preventing PID-reuse kills and ensuring marker contents cannot inject arguments.
 !macro TerminateStudioProcessTrees
   !define StudioCleanupID ${__LINE__}
 
   nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /IM "${MAINBINARYNAME}.exe" /T /F'
+  Pop $R7
+  Pop $R8
+
+  nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$target = [IO.Path]::GetFullPath('$INSTDIR\mir3-mcp.exe'); 1..6 | ForEach-Object { $$mcps = Get-CimInstance Win32_Process -Filter 'Name = ''mir3-mcp.exe''' -ErrorAction SilentlyContinue | Where-Object { $$_.ExecutablePath -and [IO.Path]::GetFullPath($$_.ExecutablePath) -eq $$target }; foreach ($$mcp in $$mcps) { $$parent = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $$mcp.ParentProcessId) -ErrorAction SilentlyContinue; if ($$parent.Name -eq 'node.exe' -and $$parent.CommandLine -like '*deepseek-ai*dsh*lib*bin.js*--profile web*') { taskkill.exe /PID $$parent.ProcessId /T /F | Out-Null } else { taskkill.exe /PID $$mcp.ProcessId /T /F | Out-Null } }; Start-Sleep -Milliseconds 250 }"`
   Pop $R7
   Pop $R8
 

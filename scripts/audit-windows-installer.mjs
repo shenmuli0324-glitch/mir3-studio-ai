@@ -25,10 +25,28 @@ function sectionBetween(start, end) {
 
 const cleanup = sectionBetween('!macro TerminateStudioProcessTrees', '!macroend')
 const mainTree = positionWithin(cleanup, `/IM "${mainBinaryName}.exe" /T /F`)
+const liveCoreParent = positionWithin(cleanup, '$$mcp.ParentProcessId')
 const persistedCore = positionWithin(cleanup, '.mir3-core.pid')
 const mcpTree = positionWithin(cleanup, '/IM "mir3-mcp.exe" /T /F')
 assert.ok(mainTree < persistedCore, 'Windows installer must stop the Studio tree before stale Core')
+assert.ok(mainTree < liveCoreParent, 'Windows installer must stop Studio before discovering live Core')
+assert.ok(liveCoreParent < persistedCore, 'Windows installer must stop live Core before PID fallback')
 assert.ok(persistedCore < mcpTree, 'Windows installer must stop stale Core before mir3-mcp')
+assert.match(
+  cleanup,
+  /GetFullPath\('\$INSTDIR\\mir3-mcp\.exe'\).*ExecutablePath.*-eq \$\$target/,
+  'Live Core discovery must be scoped to the installed mir3-mcp path',
+)
+assert.match(
+  cleanup,
+  /\$\$parent\.Name -eq 'node\.exe'.*\$\$parent\.CommandLine -like '\*deepseek-ai\*dsh\*lib\*bin\.js\*--profile web\*'/,
+  'Live Core discovery must verify the Dsh web node command line',
+)
+assert.match(
+  cleanup,
+  /taskkill\.exe \/PID \$\$parent\.ProcessId \/T \/F/,
+  'Windows installer must terminate the supervising Core process tree',
+)
 assert.match(cleanup, /IntFmt \$R9 "%u" \$R9/, 'Persisted Core PID must be sanitized')
 assert.match(cleanup, /IntFmt \$R6 "%u" \$R6/, 'Persisted Core port must be sanitized')
 assert.match(
