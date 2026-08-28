@@ -13,7 +13,7 @@ export function GameProcessButton() {
   const projectId = scope.activeProject?.id
   const [status, setStatus] = useState<GuiGameProcessStatus | null>(null)
   const [checking, setChecking] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const requestSequenceRef = useRef(0)
   const scopeRef = useRef(scope)
   scopeRef.current = scope
@@ -30,12 +30,12 @@ export function GameProcessButton() {
         const next = await scopeRef.current.gameProcessStatus()
         if (!cancelled && sequence === requestSequenceRef.current) {
           setStatus(next)
-          setFailed(false)
+          setFailure(null)
         }
       }
-      catch {
+      catch (error) {
         if (!cancelled && sequence === requestSequenceRef.current)
-          setFailed(true)
+          setFailure(errorMessage(error))
       }
       finally {
         if (!cancelled && sequence === requestSequenceRef.current)
@@ -58,18 +58,19 @@ export function GameProcessButton() {
       if (sequence !== requestSequenceRef.current)
         return
       setStatus(next)
-      setFailed(false)
-    }).catch(() => {
+      setFailure(null)
+    }).catch((error) => {
       if (sequence === requestSequenceRef.current)
-        setFailed(true)
+        setFailure(errorMessage(error))
     }).finally(() => {
       if (sequence === requestSequenceRef.current)
         setChecking(false)
     })
   }
 
+  const failed = failure != null
   const label = t(gameStatusKey(status, checking, failed))
-  const title = gameStatusTitle(label, status, t('studio.gui.game.refresh_hint'))
+  const title = gameStatusTitle(label, status, failure, t('studio.gui.game.refresh_hint'))
   return (
     <button
       className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-panel-2 px-2.5 text-[11px] text-muted ring-1 ring-line transition-colors hover:bg-panel-hover hover:text-ink"
@@ -85,10 +86,23 @@ export function GameProcessButton() {
   )
 }
 
-function gameStatusTitle(label: string, status: GuiGameProcessStatus | null, refreshHint: string): string {
+function gameStatusTitle(
+  label: string,
+  status: GuiGameProcessStatus | null,
+  failure: string | null,
+  refreshHint: string,
+): string {
+  if (failure)
+    return `${label}\n${failure}\n${refreshHint}`
   if (status?.executablePath)
     return `${label}\n${status.executablePath}\n${refreshHint}`
   return `${label}\n${refreshHint}`
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error)
+    return error.message
+  return String(error)
 }
 
 function refreshIconClass(checking: boolean): string {

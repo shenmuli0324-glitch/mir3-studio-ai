@@ -1139,38 +1139,24 @@ pub fn record_external_change(
     })
 }
 
-const GAME_PROCESS_NAMES: [&str; 2] = ["996M3_Client.exe", "game.exe"];
+const GAME_PROCESS_NAMES: [&str; 2] = ["game.exe", "996M3_Client.exe"];
 
-/// 从当前已导入项目中确定客户端程序；完整路径可读时限定在客户端目录，
-/// 游戏保护阻止读取路径时才按已知客户端进程名降级判断。
+/// 游戏运行状态只是提示信息；直接枚举受保护客户端的进程名，避免项目路径或
+/// 进程路径读取失败把“游戏正在运行”误报为检测失败。
 pub fn game_process_status(
     project_service: &ProjectService,
     project_id: &str,
 ) -> Result<GuiGameProcessStatus, String> {
     let project = ensure_active_project(project_service, project_id)?;
-    let project_root =
-        fs::canonicalize(&project.root).map_err(|e| format!("GUI_PROJECT_PATH_INVALID: {e}"))?;
-    let client_root = fs::canonicalize(&project.client_root)
-        .map_err(|e| format!("GUI_CLIENT_PATH_INVALID: {e}"))?;
-    if !client_root.starts_with(&project_root) {
-        return Err("GUI_CLIENT_PATH_OUTSIDE: 客户端目录超出项目根".to_string());
-    }
-    let candidates = game_executable_candidates(&client_root)?;
-    if candidates.is_empty() {
-        return Ok(GuiGameProcessStatus {
-            supported: cfg!(windows),
-            executable_path: String::new(),
-            running: false,
-        });
-    }
-
-    let executable_path = candidates[0].to_string_lossy().into_owned();
-    #[cfg(windows)]
-    let executable_path = validate_executable_path(&executable_path)?;
-    game_process_status_platform(executable_path, &client_root)
+    let client_root = PathBuf::from(&project.client_root);
+    let executable_path = game_executable_candidates(&client_root)
+        .first()
+        .map(|candidate| candidate.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    game_process_status_platform(executable_path)
 }
 
-fn game_executable_candidates(client_root: &Path) -> Result<Vec<PathBuf>, String> {
+fn game_executable_candidates(client_root: &Path) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     for name in GAME_PROCESS_NAMES {
         let candidate = client_root.join(name);
@@ -1180,17 +1166,9 @@ fn game_executable_candidates(client_root: &Path) -> Result<Vec<PathBuf>, String
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             continue;
         }
-        let canonical = fs::canonicalize(&candidate).map_err(|e| {
-            format!(
-                "GUI_GAME_PROCESS_PATH_INVALID: {}: {e}",
-                candidate.display()
-            )
-        })?;
-        if canonical.starts_with(client_root) {
-            candidates.push(canonical);
-        }
+        candidates.push(candidate);
     }
-    Ok(candidates)
+    candidates
 }
 
 #[derive(Debug, Clone)]
@@ -1579,46 +1557,13 @@ fn validate_content_ref(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
-fn validate_executable_path(value: &str) -> Result<String, String> {
-    let value = value.trim();
-    let bytes = value.as_bytes();
-    let drive_absolute = bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && matches!(bytes[2], b'/' | b'\\');
-    let unc_absolute = value.starts_with("\\\\") || value.starts_with("//");
-    if value.is_empty()
-        || value.len() > 32_767
-        || (!drive_absolute && !unc_absolute)
-        || !value.to_ascii_lowercase().ends_with(".exe")
-        || value.chars().any(|character| {
-            character.is_control() || matches!(character, '"' | '*' | '?' | '<' | '>' | '|')
-        })
-    {
-        return Err("GUI_GAME_PROCESS_PATH_INVALID: 请输入完整、安全的 exe 路径".to_string());
-    }
-    Ok(value.to_string())
-}
-
 #[cfg(windows)]
-fn game_process_status_platform(
-    executable_path: String,
-    client_root: &Path,
-) -> Result<GuiGameProcessStatus, String> {
+fn game_process_status_platform(executable_path: String) -> Result<GuiGameProcessStatus, String> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
     };
-    use windows_sys::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-
-    let canonical =
-        fs::canonicalize(&executable_path).unwrap_or_else(|_| PathBuf::from(&executable_path));
-    let expected = normalize_windows_executable_path(&canonical.to_string_lossy());
-    let expected_root = normalize_windows_executable_path(&client_root.to_string_lossy());
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if snapshot == INVALID_HANDLE_VALUE {
         return Err(format!(
@@ -1640,26 +1585,7 @@ fn game_process_status_platform(
             .unwrap_or(entry.szExeFile.len());
         let name = String::from_utf16_lossy(&entry.szExeFile[..name_length]);
         if is_known_game_process_name(&name) {
-            let process =
-                unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.th32ProcessID) };
-            let mut process_path = None;
-            if !process.is_null() {
-                let mut buffer = vec![0_u16; 32_768];
-                let mut length = buffer.len() as u32;
-                if unsafe {
-                    QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length)
-                } != 0
-                {
-                    process_path = Some(String::from_utf16_lossy(&buffer[..length as usize]));
-                }
-                unsafe { CloseHandle(process) };
-            }
-            running = game_process_entry_matches(
-                &name,
-                process_path.as_deref(),
-                &expected,
-                &expected_root,
-            );
+            running = true;
         }
         if running {
             break;
@@ -1675,48 +1601,14 @@ fn game_process_status_platform(
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
-fn normalize_windows_executable_path(path: &str) -> String {
-    path.strip_prefix("\\\\?\\")
-        .unwrap_or(path)
-        .replace('/', "\\")
-        .to_lowercase()
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
 fn is_known_game_process_name(name: &str) -> bool {
     GAME_PROCESS_NAMES
         .iter()
         .any(|candidate| name.eq_ignore_ascii_case(candidate))
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
-fn game_process_entry_matches(
-    name: &str,
-    process_path: Option<&str>,
-    expected_executable: &str,
-    expected_root: &str,
-) -> bool {
-    if !is_known_game_process_name(name) {
-        return false;
-    }
-    let Some(process_path) = process_path else {
-        // 996 客户端的保护模块会拒绝 QueryFullProcessImageNameW；这里只影响状态灯，
-        // 不据此取得控制权或执行写操作，因此可按官方进程名降级。
-        return true;
-    };
-    let process_path = normalize_windows_executable_path(process_path);
-    process_path == expected_executable
-        || process_path == expected_root
-        || process_path
-            .strip_prefix(expected_root)
-            .is_some_and(|suffix| suffix.starts_with('\\'))
-}
-
 #[cfg(not(windows))]
-fn game_process_status_platform(
-    executable_path: String,
-    _client_root: &Path,
-) -> Result<GuiGameProcessStatus, String> {
+fn game_process_status_platform(executable_path: String) -> Result<GuiGameProcessStatus, String> {
     Ok(GuiGameProcessStatus {
         supported: false,
         executable_path,
@@ -2768,20 +2660,6 @@ mod tests {
     }
 
     #[test]
-    fn game_process_configuration_requires_a_full_windows_executable_path() {
-        assert_eq!(
-            validate_executable_path(r"C:\Games\MIR3\Mir3.exe").unwrap(),
-            r"C:\Games\MIR3\Mir3.exe"
-        );
-        assert!(validate_executable_path("Mir3.exe")
-            .unwrap_err()
-            .starts_with("GUI_GAME_PROCESS_PATH_INVALID"));
-        assert!(validate_executable_path(r"C:\Games\MIR3\Mir3.bat")
-            .unwrap_err()
-            .starts_with("GUI_GAME_PROCESS_PATH_INVALID"));
-    }
-
-    #[test]
     fn game_process_detection_uses_the_imported_client_executable() {
         let (base, service, project_id) = fixture_service();
         let executable = base.join("project/客户端/996M3_Client.exe");
@@ -2793,35 +2671,11 @@ mod tests {
     }
 
     #[test]
-    fn protected_game_process_falls_back_to_known_name() {
-        assert!(game_process_entry_matches(
-            "game.exe",
-            None,
-            r"d:\project\client\996m3_client.exe",
-            r"d:\project\client",
-        ));
-        assert!(!game_process_entry_matches(
-            "unrelated.exe",
-            None,
-            r"d:\project\client\996m3_client.exe",
-            r"d:\project\client",
-        ));
-    }
-
-    #[test]
-    fn readable_game_process_must_belong_to_imported_client() {
-        assert!(game_process_entry_matches(
-            "game.exe",
-            Some(r"D:\Project\Client\bin\game.exe"),
-            r"d:\project\client\996m3_client.exe",
-            r"d:\project\client",
-        ));
-        assert!(!game_process_entry_matches(
-            "game.exe",
-            Some(r"D:\Other\game.exe"),
-            r"d:\project\client\996m3_client.exe",
-            r"d:\project\client",
-        ));
+    fn protected_game_process_uses_the_actual_process_name() {
+        assert!(is_known_game_process_name("game.exe"));
+        assert!(is_known_game_process_name("GAME.EXE"));
+        assert!(is_known_game_process_name("996M3_Client.exe"));
+        assert!(!is_known_game_process_name("GameCenter.exe"));
     }
 
     #[test]
