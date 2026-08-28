@@ -1139,7 +1139,10 @@ pub fn record_external_change(
     })
 }
 
-/// 从当前已导入项目中确定客户端程序，再按完整路径判断是否运行。
+const GAME_PROCESS_NAMES: [&str; 2] = ["996M3_Client.exe", "game.exe"];
+
+/// 从当前已导入项目中确定客户端程序；完整路径可读时限定在客户端目录，
+/// 游戏保护阻止读取路径时才按已知客户端进程名降级判断。
 pub fn game_process_status(
     project_service: &ProjectService,
     project_id: &str,
@@ -1161,25 +1164,15 @@ pub fn game_process_status(
         });
     }
 
-    let mut stopped = None;
-    for candidate in candidates {
-        let executable_path = candidate.to_string_lossy().into_owned();
-        #[cfg(windows)]
-        let executable_path = validate_executable_path(&executable_path)?;
-        let status = game_process_status_platform(executable_path)?;
-        if status.running {
-            return Ok(status);
-        }
-        if stopped.is_none() {
-            stopped = Some(status);
-        }
-    }
-    stopped.ok_or_else(|| "GUI_GAME_PROCESS_NOT_CONFIGURED: 未找到客户端启动程序".to_string())
+    let executable_path = candidates[0].to_string_lossy().into_owned();
+    #[cfg(windows)]
+    let executable_path = validate_executable_path(&executable_path)?;
+    game_process_status_platform(executable_path, &client_root)
 }
 
 fn game_executable_candidates(client_root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut candidates = Vec::new();
-    for name in ["996M3_Client.exe", "game.exe"] {
+    for name in GAME_PROCESS_NAMES {
         let candidate = client_root.join(name);
         let Ok(metadata) = fs::symlink_metadata(&candidate) else {
             continue;
@@ -1609,7 +1602,10 @@ fn validate_executable_path(value: &str) -> Result<String, String> {
 }
 
 #[cfg(windows)]
-fn game_process_status_platform(executable_path: String) -> Result<GuiGameProcessStatus, String> {
+fn game_process_status_platform(
+    executable_path: String,
+    client_root: &Path,
+) -> Result<GuiGameProcessStatus, String> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
@@ -1622,11 +1618,7 @@ fn game_process_status_platform(executable_path: String) -> Result<GuiGameProces
     let canonical =
         fs::canonicalize(&executable_path).unwrap_or_else(|_| PathBuf::from(&executable_path));
     let expected = normalize_windows_executable_path(&canonical.to_string_lossy());
-    let expected_name = canonical
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_string();
+    let expected_root = normalize_windows_executable_path(&client_root.to_string_lossy());
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if snapshot == INVALID_HANDLE_VALUE {
         return Err(format!(
@@ -1647,9 +1639,10 @@ fn game_process_status_platform(executable_path: String) -> Result<GuiGameProces
             .position(|value| *value == 0)
             .unwrap_or(entry.szExeFile.len());
         let name = String::from_utf16_lossy(&entry.szExeFile[..name_length]);
-        if name.eq_ignore_ascii_case(&expected_name) {
+        if is_known_game_process_name(&name) {
             let process =
                 unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.th32ProcessID) };
+            let mut process_path = None;
             if !process.is_null() {
                 let mut buffer = vec![0_u16; 32_768];
                 let mut length = buffer.len() as u32;
@@ -1657,11 +1650,16 @@ fn game_process_status_platform(executable_path: String) -> Result<GuiGameProces
                     QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length)
                 } != 0
                 {
-                    let path = String::from_utf16_lossy(&buffer[..length as usize]);
-                    running = normalize_windows_executable_path(&path) == expected;
+                    process_path = Some(String::from_utf16_lossy(&buffer[..length as usize]));
                 }
                 unsafe { CloseHandle(process) };
             }
+            running = game_process_entry_matches(
+                &name,
+                process_path.as_deref(),
+                &expected,
+                &expected_root,
+            );
         }
         if running {
             break;
@@ -1676,7 +1674,7 @@ fn game_process_status_platform(executable_path: String) -> Result<GuiGameProces
     })
 }
 
-#[cfg(windows)]
+#[cfg_attr(not(windows), allow(dead_code))]
 fn normalize_windows_executable_path(path: &str) -> String {
     path.strip_prefix("\\\\?\\")
         .unwrap_or(path)
@@ -1684,8 +1682,41 @@ fn normalize_windows_executable_path(path: &str) -> String {
         .to_lowercase()
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_known_game_process_name(name: &str) -> bool {
+    GAME_PROCESS_NAMES
+        .iter()
+        .any(|candidate| name.eq_ignore_ascii_case(candidate))
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn game_process_entry_matches(
+    name: &str,
+    process_path: Option<&str>,
+    expected_executable: &str,
+    expected_root: &str,
+) -> bool {
+    if !is_known_game_process_name(name) {
+        return false;
+    }
+    let Some(process_path) = process_path else {
+        // 996 客户端的保护模块会拒绝 QueryFullProcessImageNameW；这里只影响状态灯，
+        // 不据此取得控制权或执行写操作，因此可按官方进程名降级。
+        return true;
+    };
+    let process_path = normalize_windows_executable_path(process_path);
+    process_path == expected_executable
+        || process_path == expected_root
+        || process_path
+            .strip_prefix(expected_root)
+            .is_some_and(|suffix| suffix.starts_with('\\'))
+}
+
 #[cfg(not(windows))]
-fn game_process_status_platform(executable_path: String) -> Result<GuiGameProcessStatus, String> {
+fn game_process_status_platform(
+    executable_path: String,
+    _client_root: &Path,
+) -> Result<GuiGameProcessStatus, String> {
     Ok(GuiGameProcessStatus {
         supported: false,
         executable_path,
@@ -2759,6 +2790,38 @@ mod tests {
         assert!(status.executable_path.ends_with("996M3_Client.exe"));
         assert!(!status.running);
         fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn protected_game_process_falls_back_to_known_name() {
+        assert!(game_process_entry_matches(
+            "game.exe",
+            None,
+            r"d:\project\client\996m3_client.exe",
+            r"d:\project\client",
+        ));
+        assert!(!game_process_entry_matches(
+            "unrelated.exe",
+            None,
+            r"d:\project\client\996m3_client.exe",
+            r"d:\project\client",
+        ));
+    }
+
+    #[test]
+    fn readable_game_process_must_belong_to_imported_client() {
+        assert!(game_process_entry_matches(
+            "game.exe",
+            Some(r"D:\Project\Client\bin\game.exe"),
+            r"d:\project\client\996m3_client.exe",
+            r"d:\project\client",
+        ));
+        assert!(!game_process_entry_matches(
+            "game.exe",
+            Some(r"D:\Other\game.exe"),
+            r"d:\project\client\996m3_client.exe",
+            r"d:\project\client",
+        ));
     }
 
     #[test]
