@@ -3,9 +3,10 @@
 ;
 ; Keep it in sync with upstream tauri-bundler upgrades, but preserve the
 ; MIR3 Studio AI customizations (marked with "MIR3 Studio AI:").
-; The single customization so far is in PageReinstall: a version UPGRADE defaults to
-; "don't uninstall" (direct in-place update) instead of upstream's "uninstall before
-; installing". This mirrors Clash Nyanpasu's installer behavior.
+; MIR3 Studio AI customizations:
+; - PageReinstall defaults an UPGRADE to a direct in-place update.
+; - Install/uninstall terminates the Studio process tree, the persisted Core process
+;   tree, and the packaged MCP sidecar before replacing files.
 
 Unicode true
 ManifestDPIAware true
@@ -84,6 +85,43 @@ Var UpdateMode
 Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
+
+; MIR3 Studio AI: terminate every product-owned process that can keep packaged files
+; locked. Closing the main executable by image name alone is insufficient because an
+; abruptly terminated tray process cannot run its Rust exit handler, leaving Core and
+; mir3-mcp orphaned. The persisted PID and port are converted back to integers and
+; matched against a live listening socket before taskkill, preventing PID-reuse kills
+; and ensuring marker contents can never inject extra command arguments.
+!macro TerminateStudioProcessTrees
+  !define StudioCleanupID ${__LINE__}
+
+  nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /IM "${MAINBINARYNAME}.exe" /T /F'
+  Pop $R7
+  Pop $R8
+
+  IfFileExists "$PROFILE\.mir3-studio-ai\.mir3-core.pid" 0 no_core_marker_${StudioCleanupID}
+    ClearErrors
+    FileOpen $R7 "$PROFILE\.mir3-studio-ai\.mir3-core.pid" r
+    IfErrors no_core_marker_${StudioCleanupID}
+    FileRead $R7 $R9
+    FileRead $R7 $R6
+    FileClose $R7
+    IntFmt $R9 "%u" $R9
+    IntFmt $R6 "%u" $R6
+    StrCmp $R9 "0" no_core_marker_${StudioCleanupID}
+    StrCmp $R6 "0" no_core_marker_${StudioCleanupID}
+    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if (Get-NetTCPConnection -State Listen -LocalPort $R6 -ErrorAction SilentlyContinue | Where-Object OwningProcess -eq $R9) { taskkill.exe /PID $R9 /T /F | Out-Null }"'
+    Pop $R7
+    Pop $R8
+  no_core_marker_${StudioCleanupID}:
+
+  nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /IM "mir3-mcp.exe" /T /F'
+  Pop $R7
+  Pop $R8
+  Sleep 1200
+
+  !undef StudioCleanupID
+!macroend
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -657,7 +695,9 @@ Section Install
     !insertmacro NSIS_HOOK_PREINSTALL
   !endif
 
+  !insertmacro TerminateStudioProcessTrees
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "mir3-mcp.exe" "${PRODUCTNAME}"
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
@@ -794,7 +834,9 @@ Section Uninstall
     !insertmacro NSIS_HOOK_PREUNINSTALL
   !endif
 
+  !insertmacro TerminateStudioProcessTrees
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "mir3-mcp.exe" "${PRODUCTNAME}"
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
