@@ -71,14 +71,18 @@ window.__ModuleLoader__.load({
 
       function wrapWorkspaceBoundary() {
         const methods = {}
-        for (const method of ['create', 'pickDirectory', 'listDirectory', 'createDirectory', 'openPath']) {
+        for (const method of ['create', 'delete', 'pickDirectory', 'listDirectory', 'createDirectory', 'openPath']) {
           if (typeof ctx.workspaces?.[method] === 'function')
             methods[method] = ctx.workspaces[method].bind(ctx.workspaces)
         }
         if (methods.create) {
           ctx.workspaces.create = async (input) => {
             requireProjectPath(input?.path)
-            return methods.create(input)
+            const workspace = await methods.create(input)
+            await retainOnlyWorkspace(workspace, methods.delete)
+            if (activeProject)
+              activeProject.workspaceRoot = normalizePath(workspace.path)
+            return workspace
           }
         }
         if (methods.pickDirectory) {
@@ -110,6 +114,18 @@ window.__ModuleLoader__.load({
           }
         }
         return methods
+      }
+
+      async function retainOnlyWorkspace(workspace, remove) {
+        if (typeof remove !== 'function')
+          throw new Error('WORKSPACE_DELETE_UNAVAILABLE: Harness cannot enforce the active project Workspace')
+        const items = ctx.workspaces?.list?.getSnapshot?.().items
+        if (!Array.isArray(items))
+          throw new Error('WORKSPACE_LIST_UNAVAILABLE: Harness cannot inspect the active project Workspace')
+        for (const candidate of items) {
+          if (candidate.workspaceId !== workspace.workspaceId)
+            await remove(candidate.workspaceId)
+        }
       }
 
       function requireActiveProject(request) {

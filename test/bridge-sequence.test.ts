@@ -453,6 +453,7 @@ function loadCoreClientHarness() {
         calls.push(`workspace.create:${options.path}`)
         return { workspaceId: 'workspace-1', path: '/project' }
       },
+      async delete() {},
       startSession() {},
     },
   })

@@ -57,7 +57,16 @@ export function useMir3Projects() {
         return null
       return invoke<Mir3Project>('workspace_select', { projectId, path })
     },
-    onSuccess: () => invalidateProjectQueries(queryClient),
+    onSuccess: async (project) => {
+      if (!project)
+        return
+      const isActiveProject = active.data?.id === project.id
+      if (isActiveProject)
+        queryClient.setQueryData(['mir3-active-project'], project)
+      await invalidateProjectQueries(queryClient)
+      if (isActiveProject)
+        await restartHarnessAfterProjectChange()
+    },
   })
 
   const startScan = useMutation({

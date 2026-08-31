@@ -34,6 +34,9 @@ pub fn prepare(
     fs::create_dir_all(&storages)
         .and_then(|_| fs::create_dir_all(&sessions))
         .map_err(|error| format!("HARNESS_SCOPE_CREATE_FAILED: {error}"))?;
+    if let Some(project) = active {
+        retain_active_workspace(&storages, Path::new(&project.active_workspace_root))?;
+    }
     replace_directory_link(&dsh_home.join("storages"), &storages)?;
     replace_directory_link(&dsh_home.join("sessions"), &sessions)?;
     log::info!(
@@ -82,8 +85,11 @@ fn migrate_legacy_runtime(
             .map_err(|error| format!("HARNESS_SCOPE_MIGRATION_FAILED: {error}"))?;
         let mut session_ids = HashSet::new();
         if let Some(document) = workspace_document.as_ref() {
-            let filtered =
-                filter_workspace_document(document, Path::new(&project.root), &mut session_ids);
+            let filtered = filter_workspace_document(
+                document,
+                Path::new(&project.active_workspace_root),
+                &mut session_ids,
+            );
             write_json_if_missing(&project_storages.join("workspace.json"), &filtered)?;
         }
         if let Some(document) = projection_document.as_ref() {
@@ -93,6 +99,27 @@ fn migrate_legacy_runtime(
         }
         copy_matching_sessions(&legacy_sessions, &project_sessions, &session_ids)?;
     }
+    Ok(())
+}
+
+/// Core 停止期间修复旧版本累积的 Workspace，只留下 Studio 当前明确选择的目录。
+fn retain_active_workspace(storages: &Path, workspace_root: &Path) -> Result<(), String> {
+    let path = storages.join("workspace.json");
+    let Some(document) = read_json_if_exists(&path)? else {
+        return Ok(());
+    };
+    let mut session_ids = HashSet::new();
+    let filtered = filter_workspace_document(&document, workspace_root, &mut session_ids);
+    if filtered == document {
+        return Ok(());
+    }
+    let bytes = serde_json::to_vec_pretty(&filtered)
+        .map_err(|error| format!("HARNESS_SCOPE_REPAIR_FAILED: {error}"))?;
+    fs::write(&path, bytes).map_err(|error| format!("HARNESS_SCOPE_REPAIR_FAILED: {error}"))?;
+    log::info!(
+        "Harness Workspace scope repaired: workspace={}",
+        workspace_root.display()
+    );
     Ok(())
 }
 
@@ -121,7 +148,7 @@ fn move_real_directory_once(source: &Path, destination: &Path) -> Result<(), Str
 
 fn filter_workspace_document(
     document: &Value,
-    project_root: &Path,
+    workspace_root: &Path,
     session_ids: &mut HashSet<String>,
 ) -> Value {
     let mut filtered = document.clone();
@@ -135,7 +162,7 @@ fn filter_workspace_document(
         let owned = workspace
             .get("path")
             .and_then(Value::as_str)
-            .is_some_and(|path| is_within(project_root, Path::new(path)));
+            .is_some_and(|path| same_path(workspace_root, Path::new(path)));
         if owned {
             if let Some(ids) = workspace.get("sessionIds").and_then(Value::as_array) {
                 session_ids.extend(ids.iter().filter_map(Value::as_str).map(str::to_string));
@@ -157,6 +184,10 @@ fn filter_workspace_document(
         ids.retain(|id| id.as_str().is_some_and(|id| session_ids.contains(id)));
     }
     filtered
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    normalize_path(left) == normalize_path(right)
 }
 
 fn filter_projection_document(
@@ -382,6 +413,36 @@ mod tests {
             .pointer("/tables/sessions/session-beta")
             .is_none());
         assert_eq!(sessions, HashSet::from(["session-alpha".to_string()]));
+    }
+
+    #[test]
+    fn workspace_filter_keeps_only_the_selected_workspace() {
+        let workspace = json!({
+            "global": {
+                "workspaceIds": ["project", "client", "nested-project"],
+                "archivedSessionIds": []
+            },
+            "tables": { "workspaces": {
+                "project": { "path": "/game/alpha", "sessionIds": ["session-project"] },
+                "client": { "path": "/game/alpha/client", "sessionIds": ["session-client"] },
+                "nested-project": { "path": "/game/alpha/projects/beta", "sessionIds": [] }
+            }}
+        });
+        let mut sessions = HashSet::new();
+
+        let filtered =
+            filter_workspace_document(&workspace, Path::new("/game/alpha"), &mut sessions);
+
+        assert!(filtered.pointer("/tables/workspaces/project").is_some());
+        assert!(filtered.pointer("/tables/workspaces/client").is_none());
+        assert!(filtered
+            .pointer("/tables/workspaces/nested-project")
+            .is_none());
+        assert_eq!(
+            filtered.pointer("/global/workspaceIds"),
+            Some(&json!(["project"]))
+        );
+        assert_eq!(sessions, HashSet::from(["session-project".to_string()]));
     }
 
     #[test]

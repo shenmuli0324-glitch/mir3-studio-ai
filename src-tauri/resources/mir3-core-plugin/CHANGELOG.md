@@ -1,5 +1,10 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.3.1 - 2026-08-31
+
+- 激活或选择 Workspace 时只保留当前项目对应的一个 Workspace 注册，自动清理旧项目、嵌套项目和历史目录残留，但保留实际目录与 Session 日志。
+- Workspace 清理继续使用 Harness 公共 `workspaces.delete()` 契约，不修改 Harness/Core 源码或内部存储。
+
 ## 1.3.0 - 2026-08-27
 
 - 新增独立 `mir3/guiSession.*` 协议和 `mir3-gui-` 归档会话，不把 GUI Designer 伪装为 33 个领域系统。

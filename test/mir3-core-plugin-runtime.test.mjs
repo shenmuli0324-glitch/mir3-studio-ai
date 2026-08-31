@@ -41,6 +41,20 @@ describe('mir3 Core Plugin public runtime contract', () => {
     ).rejects.toThrow('PROJECT_PATH_OUTSIDE_SCOPE')
   })
 
+  it('keeps only the currently selected Workspace registration', async () => {
+    const runtime = loadAdapter()
+    const calls = []
+    const context = createHarnessContext({ calls, sessions: new Map() })
+    runtime.plugin.apply(context)
+    await runtime.send(request('mir3/bridge.describe', 1))
+
+    const selected = await context.workspaces.create({ path: '/tmp/mir3-runtime/client' })
+    const items = context.workspaces.list.getSnapshot().items
+
+    expect(items).toEqual([selected])
+    expect(calls).toContainEqual(['workspace-delete', 'workspace-1'])
+  })
+
   it('runs ordinary, system, and global Session flows through the real adapter', async () => {
     const runtime = loadAdapter()
     const calls = []
@@ -581,11 +595,20 @@ function createHarnessContext({ calls, sessions }) {
         return { path, entries: [] }
       },
       async create({ path }) {
+        const existing = workspaces.find(workspace => workspace.path === path)
+        if (existing)
+          return existing
         workspaceSequence += 1
         calls.push(['workspace-create', path])
         const workspace = { path, workspaceId: `workspace-${workspaceSequence}` }
         workspaces.push(workspace)
         return workspace
+      },
+      async delete(workspaceId) {
+        calls.push(['workspace-delete', workspaceId])
+        const index = workspaces.findIndex(workspace => workspace.workspaceId === workspaceId)
+        if (index >= 0)
+          workspaces.splice(index, 1)
       },
       startSession(workspaceId) {
         calls.push(['workspace-start', workspaceId])

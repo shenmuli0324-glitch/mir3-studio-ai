@@ -124,8 +124,8 @@ for (const pluginRoot of pluginRoots) {
         failures.push(`${manifest.name}: client entry is missing ${contract}`)
     }
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
-      if (manifest.version !== '1.3.0')
-        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.0`)
+      if (manifest.version !== '1.3.1')
+        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.1`)
       for (const contract of [
         'const PROTOCOL_VERSION = 2',
         'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',
