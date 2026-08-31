@@ -124,8 +124,8 @@ for (const pluginRoot of pluginRoots) {
         failures.push(`${manifest.name}: client entry is missing ${contract}`)
     }
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
-      if (manifest.version !== '1.3.1')
-        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.1`)
+      if (manifest.version !== '1.3.2')
+        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.2`)
       for (const contract of [
         'const PROTOCOL_VERSION = 2',
         'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',
@@ -143,6 +143,7 @@ for (const pluginRoot of pluginRoots) {
         'case \'mir3/systemSession.snapshot\'',
         'case \'mir3/systemSession.complete\'',
         'case \'mir3/globalSession.prompt\'',
+        'mir3/project.workspaceChanged',
         'case \'mir3/globalSession.cancel\'',
         'case \'mir3/globalSession.complete\'',
         'domainResults: projectDomainResults',

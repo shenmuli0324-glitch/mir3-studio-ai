@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
 import { runCoreCandidateCanary } from '@/features/projects/core-candidate-canary'
-import { bridgeRequestId, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, postProjectActivation, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, bridgeRequestId, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, postProjectActivation, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
 import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
 
@@ -176,6 +176,10 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
       return
     }
     if (data.type === 'mir3/plugin.ready') {
+      // Windows 上客户端插件可能晚于 iframe load 才完成 apply，首次发送的
+      // MessagePort 因此会丢失。fallback ready 证明监听器已就绪，此时重建专用
+      // 通道；端口消息不会再次进入此 window handler，不会形成握手循环。
+      bootstrapHarnessBridge(iframeRef)
       postHarnessBridge({
         type: 'mir3/bridge.describe',
         projectId: '',

@@ -78,10 +78,14 @@ window.__ModuleLoader__.load({
         if (methods.create) {
           ctx.workspaces.create = async (input) => {
             requireProjectPath(input?.path)
+            const previousRoot = activeProject?.workspaceRoot ?? null
             const workspace = await methods.create(input)
             await retainOnlyWorkspace(workspace, methods.delete)
-            if (activeProject)
+            if (activeProject) {
               activeProject.workspaceRoot = normalizePath(workspace.path)
+              if (previousRoot && previousRoot !== activeProject.workspaceRoot)
+                postWorkspaceChanged(activeProject.workspaceRoot)
+            }
             return workspace
           }
         }
@@ -126,6 +130,17 @@ window.__ModuleLoader__.load({
           if (candidate.workspaceId !== workspace.workspaceId)
             await remove(candidate.workspaceId)
         }
+      }
+
+      function postWorkspaceChanged(workspaceRoot) {
+        post('mir3/project.workspaceChanged', {
+          requestId: `workspace-${Date.now()}`,
+          projectId: activeProject.projectId,
+          systemId: '__project__',
+          taskId: 'workspace-change',
+          sessionId: '',
+          sequence: 0,
+        }, { workspaceRoot })
       }
 
       function requireActiveProject(request) {

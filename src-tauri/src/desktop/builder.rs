@@ -18,7 +18,9 @@ use crate::utils::show_main_window;
 /// setup app
 pub fn setup(app_handle: tauri::AppHandle) {
     // 清扫会调用系统进程枚举/结束命令，放入 blocking worker；完成后再启动监控与
-    // Core，保持“先清残留、后拉新实例”的原有顺序。
+    // Core，保持“先清残留、后拉新实例”的原有顺序。同步置位让已经加载的前端
+    // 也必须等待清扫结束，避免两条启动链路互相误杀。
+    crate::service::workflow::begin_startup_sweep();
     let app_for_start = app_handle.clone();
     tauri::async_runtime::spawn(async move {
         let app_for_sweep = app_for_start.clone();
@@ -29,6 +31,7 @@ pub fn setup(app_handle: tauri::AppHandle) {
         {
             log::error!("CORE_ORPHAN_SWEEP_FAILED: blocking worker failed: {error}");
         }
+        crate::service::workflow::finish_startup_sweep();
 
         crate::service::scheduler::start(&app_for_start);
         let setting = crate::config::get_store_dat_setting(&app_for_start);

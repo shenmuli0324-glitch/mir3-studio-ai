@@ -3,11 +3,13 @@ import type { RefObject } from 'react'
 import type { Mir3Project } from '@/features/projects/types'
 import type { HarnessSurface, HarnessWorkbenchState } from '@/layout/studio-types'
 import { CircleExclamation } from '@gravity-ui/icons'
+import { invoke } from '@tauri-apps/api/core'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
-import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, postHarnessBridge } from '@/features/projects/workspace-bridge'
+import { queryClient } from '@/config/client'
+import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
 import { useIframeShim } from '@/hooks/use-iframe-shim'
 import { Loadable } from '@/layout/components/loadable'
 import { store } from '@/store'
@@ -29,6 +31,13 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
   useIframeShim(iframeRef)
 
   useEffect(() => connectHarnessBridge(iframeRef), [iframeRef])
+
+  useEffect(() => subscribeHarnessBridge((message) => {
+    const workspaceRoot = readWorkspaceChange(message, projectId)
+    if (!workspaceRoot || !projectId)
+      return
+    void persistWorkbenchWorkspace(projectId, workspaceRoot)
+  }), [projectId])
 
   useEffect(() => {
     if (!iframeLoaded)
@@ -88,6 +97,24 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
       </If>
     </section>
   )
+}
+
+function readWorkspaceChange(message: { type: string, projectId: string, payload: unknown }, projectId?: string): string | null {
+  if (message.type !== 'mir3/project.workspaceChanged' || !projectId || message.projectId !== projectId)
+    return null
+  const payload = message.payload as { workspaceRoot?: unknown } | null
+  return typeof payload?.workspaceRoot === 'string' ? payload.workspaceRoot : null
+}
+
+async function persistWorkbenchWorkspace(projectId: string, workspaceRoot: string) {
+  try {
+    const project = await invoke<Mir3Project>('workspace_select', { projectId, path: workspaceRoot })
+    queryClient.setQueryData(['mir3-active-project'], project)
+    queryClient.setQueryData<Mir3Project[]>(['mir3-projects'], current => current?.map(item => item.id === project.id ? project : item))
+  }
+  catch (error) {
+    console.error('[MIR3 project] failed to persist Harness Workspace selection:', error)
+  }
 }
 
 function showIframeError(serviceHealthy: boolean, iframeError: boolean) {

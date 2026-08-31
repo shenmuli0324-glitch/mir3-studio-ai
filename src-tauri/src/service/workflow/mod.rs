@@ -22,6 +22,9 @@ use tauri::Manager;
 
 /// 启动守卫：并发调用 `launch` 时只允许一个真正拉起 dsh 进程
 static LAUNCH_GUARD: AtomicBool = AtomicBool::new(false);
+/// Windows 启动清扫进行中。setup 在派发 blocking worker 前同步置位，避免前端
+/// `launch_harness` 抢先启动的新进程被随后完成的旧进程清扫误杀。
+static STARTUP_SWEEP_RUNNING: AtomicBool = AtomicBool::new(false);
 /// 当前进程内由桌面端创建的 MIR3 AI Core 根进程 PID；0 表示没有持有的实例。
 static OWNED_PROCESS_ID: AtomicU32 = AtomicU32::new(0);
 /// Windows 进程句柄用于确认 PID 仍指向原进程，消除 PID 复用误杀窗口。
@@ -34,6 +37,31 @@ impl Drop for LaunchGuard {
     fn drop(&mut self) {
         LAUNCH_GUARD.store(false, Ordering::SeqCst);
     }
+}
+
+/// 标记应用启动阶段的孤儿 Core 清扫已经开始。
+pub(crate) fn begin_startup_sweep() {
+    STARTUP_SWEEP_RUNNING.store(true, Ordering::SeqCst);
+}
+
+/// 标记应用启动阶段的孤儿 Core 清扫已经完成。
+pub(crate) fn finish_startup_sweep() {
+    STARTUP_SWEEP_RUNNING.store(false, Ordering::SeqCst);
+}
+
+/// 前端可能在 setup 的 blocking 清扫尚未结束时调用启动命令；必须等清扫结束后
+/// 再创建新进程，否则 PowerShell 枚举会把新实例也识别为旧实例并结束。
+async fn wait_for_startup_sweep() -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
+    while STARTUP_SWEEP_RUNNING.load(Ordering::SeqCst) {
+        if tokio::time::Instant::now() >= deadline {
+            return Err(
+                "CORE_STARTUP_SWEEP_TIMEOUT: stale Core process cleanup did not finish".to_string(),
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    Ok(())
 }
 
 /// 等待并取得启动所有权；并发调用不能在首个启动尚未登记 PID 时提前返回成功。
@@ -468,6 +496,7 @@ pub async fn restart(app_handle: tauri::AppHandle) -> Result<(), String> {
 
 /// 启动 MIR3 AI Core 服务进程
 pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
+    wait_for_startup_sweep().await?;
     let mut setting = config::get_store_dat_setting(&app_handle);
     let node_binary_path = config::get_node_binary_path(&app_handle);
     // 活动核心的 dsh 入口（本地核心优先，未检测到走预打包）
@@ -1118,6 +1147,21 @@ pub async fn proxy_health_check(port: u16) -> Result<String, String> {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[tokio::test]
+    async fn launch_barrier_waits_until_startup_sweep_finishes() {
+        begin_startup_sweep();
+        let release = tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+            finish_startup_sweep();
+        });
+        let started_at = tokio::time::Instant::now();
+
+        wait_for_startup_sweep().await.unwrap();
+        release.await.unwrap();
+
+        assert!(started_at.elapsed() >= std::time::Duration::from_millis(50));
+    }
 
     #[test]
     fn occupied_port_advances_to_a_free_port() {

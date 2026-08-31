@@ -34,9 +34,10 @@ pub fn prepare(
     fs::create_dir_all(&storages)
         .and_then(|_| fs::create_dir_all(&sessions))
         .map_err(|error| format!("HARNESS_SCOPE_CREATE_FAILED: {error}"))?;
-    if let Some(project) = active {
-        retain_active_workspace(&storages, Path::new(&project.active_workspace_root))?;
-    }
+    retain_workspace_scope(
+        &storages,
+        active.map(|project| Path::new(&project.active_workspace_root)),
+    )?;
     replace_directory_link(&dsh_home.join("storages"), &storages)?;
     replace_directory_link(&dsh_home.join("sessions"), &sessions)?;
     log::info!(
@@ -103,24 +104,57 @@ fn migrate_legacy_runtime(
 }
 
 /// Core 停止期间修复旧版本累积的 Workspace，只留下 Studio 当前明确选择的目录。
-fn retain_active_workspace(storages: &Path, workspace_root: &Path) -> Result<(), String> {
+fn retain_workspace_scope(storages: &Path, workspace_root: Option<&Path>) -> Result<(), String> {
     let path = storages.join("workspace.json");
     let Some(document) = read_json_if_exists(&path)? else {
         return Ok(());
     };
     let mut session_ids = HashSet::new();
-    let filtered = filter_workspace_document(&document, workspace_root, &mut session_ids);
+    let filtered = match workspace_root {
+        Some(workspace_root) => {
+            filter_workspace_document(&document, workspace_root, &mut session_ids)
+        }
+        None => clear_workspace_document(&document),
+    };
     if filtered == document {
         return Ok(());
     }
     let bytes = serde_json::to_vec_pretty(&filtered)
         .map_err(|error| format!("HARNESS_SCOPE_REPAIR_FAILED: {error}"))?;
     fs::write(&path, bytes).map_err(|error| format!("HARNESS_SCOPE_REPAIR_FAILED: {error}"))?;
-    log::info!(
-        "Harness Workspace scope repaired: workspace={}",
-        workspace_root.display()
-    );
+    if let Some(workspace_root) = workspace_root {
+        log::info!(
+            "Harness Workspace scope repaired: workspace={}",
+            workspace_root.display()
+        );
+    } else {
+        log::info!("Harness unbound Workspace scope cleared");
+    }
     Ok(())
+}
+
+/// 未激活项目时保留 Workspace 文档结构，但移除全部项目注册与归档引用。
+fn clear_workspace_document(document: &Value) -> Value {
+    let mut filtered = document.clone();
+    if let Some(workspaces) = filtered
+        .pointer_mut("/tables/workspaces")
+        .and_then(Value::as_object_mut)
+    {
+        workspaces.clear();
+    }
+    if let Some(ids) = filtered
+        .pointer_mut("/global/workspaceIds")
+        .and_then(Value::as_array_mut)
+    {
+        ids.clear();
+    }
+    if let Some(ids) = filtered
+        .pointer_mut("/global/archivedSessionIds")
+        .and_then(Value::as_array_mut)
+    {
+        ids.clear();
+    }
+    filtered
 }
 
 fn move_real_directory_once(source: &Path, destination: &Path) -> Result<(), String> {
@@ -443,6 +477,29 @@ mod tests {
             Some(&json!(["project"]))
         );
         assert_eq!(sessions, HashSet::from(["session-project".to_string()]));
+    }
+
+    #[test]
+    fn unbound_scope_removes_all_workspace_registrations() {
+        let workspace = json!({
+            "global": {
+                "workspaceIds": ["alpha", "beta"],
+                "archivedSessionIds": ["session-alpha"]
+            },
+            "tables": { "workspaces": {
+                "alpha": { "path": "/game/alpha", "sessionIds": ["session-alpha"] },
+                "beta": { "path": "/game/beta", "sessionIds": [] }
+            }}
+        });
+
+        let filtered = clear_workspace_document(&workspace);
+
+        assert_eq!(filtered.pointer("/tables/workspaces"), Some(&json!({})));
+        assert_eq!(filtered.pointer("/global/workspaceIds"), Some(&json!([])));
+        assert_eq!(
+            filtered.pointer("/global/archivedSessionIds"),
+            Some(&json!([]))
+        );
     }
 
     #[test]
