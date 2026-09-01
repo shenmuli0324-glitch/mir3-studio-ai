@@ -132,7 +132,7 @@ export function StudioTopbar({
       </div>
       <div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region onDoubleClick={() => { void getCurrentWindow().toggleMaximize() }} />
       <If cond={project != null && activeView !== 'gui-designer'}>
-        <Button className="hidden h-7 max-w-56 rounded-lg px-2 text-xs min-[920px]:flex" size="sm" variant="ghost" onPress={onSelectWorkspace}>
+        <Button className="h-7 max-w-56 rounded-lg px-2 text-xs" size="sm" variant="ghost" aria-label={t('studio.project.workspace')} onPress={onSelectWorkspace}>
           <span className="truncate">{project?.activeWorkspaceRoot}</span>
         </Button>
       </If>

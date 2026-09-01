@@ -1,5 +1,10 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.3.3 - 2026-09-01
+
+- Windows 首次加载时等待 Studio 完成项目作用域握手，避免插件晚于 iframe 挂载时新建会话或选择目录立即报 `PROJECT_SCOPE_UNAVAILABLE`。
+- 项目 Workspace 创建失败时回滚临时作用域，只有 Workspace 创建成功后才放行等待中的会话与目录操作。
+
 ## 1.3.2 - 2026-09-01
 
 - 工作台内选择新的 Workspace 后向 Studio 回传规范路径，使当前项目的工作区选择持久化，重启后仍绑定同一目录。

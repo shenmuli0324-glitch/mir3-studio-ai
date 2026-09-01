@@ -62,9 +62,12 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       let bridgePort = null
       let activeProject = null
+      let projectActivationReady = false
+      const projectReadyWaiters = new Set()
       const originalWorkspaceMethods = wrapWorkspaceBoundary()
       const originalSessionCreate = ctx.sessions.create.bind(ctx.sessions)
       ctx.sessions.create = async (options = {}) => {
+        await waitForActiveProject()
         requireActiveSessionTarget(options)
         return originalSessionCreate(options)
       }
@@ -91,6 +94,7 @@ window.__ModuleLoader__.load({
         }
         if (methods.pickDirectory) {
           ctx.workspaces.pickDirectory = async () => {
+            await waitForActiveProject()
             requireActiveProject()
             const selected = await methods.pickDirectory()
             if (selected != null)
@@ -100,6 +104,7 @@ window.__ModuleLoader__.load({
         }
         if (methods.listDirectory) {
           ctx.workspaces.listDirectory = async (path, signal) => {
+            await waitForActiveProject()
             const target = path ?? requireActiveProject().projectRoot
             requireProjectPath(target)
             return methods.listDirectory(target, signal)
@@ -107,12 +112,14 @@ window.__ModuleLoader__.load({
         }
         if (methods.createDirectory) {
           ctx.workspaces.createDirectory = async (path, name) => {
+            await waitForActiveProject()
             requireProjectPath(path)
             return methods.createDirectory(path, name)
           }
         }
         if (methods.openPath) {
           ctx.workspaces.openPath = async (path) => {
+            await waitForActiveProject()
             requireProjectPath(path)
             return methods.openPath(path)
           }
@@ -149,6 +156,43 @@ window.__ModuleLoader__.load({
         if (request?.projectId && request.projectId !== activeProject.projectId)
           throw new Error('PROJECT_SCOPE_MISMATCH: request belongs to another MIR3 project')
         return activeProject
+      }
+
+      function waitForActiveProject() {
+        if (activeProject && projectActivationReady)
+          return Promise.resolve(activeProject)
+        return new Promise((resolve, reject) => {
+          let waiter
+          const timeout = window.setTimeout(() => {
+            projectReadyWaiters.delete(waiter)
+            reject(new Error('PROJECT_SCOPE_UNAVAILABLE: activate a MIR3 project before starting development'))
+          }, 15_000)
+          waiter = {
+            resolve(project) {
+              window.clearTimeout(timeout)
+              resolve(project)
+            },
+            reject(error) {
+              window.clearTimeout(timeout)
+              reject(error)
+            },
+          }
+          projectReadyWaiters.add(waiter)
+        })
+      }
+
+      function resolveProjectWaiters() {
+        if (!activeProject || !projectActivationReady)
+          return
+        for (const waiter of projectReadyWaiters)
+          waiter.resolve(activeProject)
+        projectReadyWaiters.clear()
+      }
+
+      function rejectProjectWaiters(error) {
+        for (const waiter of projectReadyWaiters)
+          waiter.reject(error)
+        projectReadyWaiters.clear()
       }
 
       function requireProjectPath(path, request) {
@@ -244,12 +288,25 @@ window.__ModuleLoader__.load({
           throw new Error('PROJECT_MESSAGE_INVALID: projectRoot and workspaceRoot are required')
         if (!isWithinPath(payload.projectRoot, payload.workspaceRoot))
           throw new Error('PROJECT_WORKSPACE_OUTSIDE_SCOPE: workspaceRoot must be inside projectRoot')
+        const previousProject = activeProject
+        const previousProjectReady = projectActivationReady
         activeProject = {
           projectId: request.projectId,
           projectRoot: normalizePath(payload.projectRoot),
           workspaceRoot: normalizePath(payload.workspaceRoot),
         }
-        const workspace = await ctx.workspaces.create({ path: payload.workspaceRoot })
+        projectActivationReady = false
+        let workspace
+        try {
+          workspace = await ctx.workspaces.create({ path: payload.workspaceRoot })
+        }
+        catch (error) {
+          activeProject = previousProject
+          projectActivationReady = previousProjectReady
+          throw error
+        }
+        projectActivationReady = true
+        resolveProjectWaiters()
         if (payload.startSession !== false)
           ctx.workspaces.startSession(workspace.workspaceId)
         post('mir3/project.activated', request, {
@@ -821,12 +878,14 @@ window.__ModuleLoader__.load({
         sessionOwners.clear()
         sessionPreparations.clear()
         recoverableManagedSessions.clear()
+        rejectProjectWaiters(new Error('PROJECT_SCOPE_UNAVAILABLE: MIR3 Core Plugin was unloaded'))
         inboundSequences.clear()
         outboundSequences.clear()
         ctx.sessions.create = originalSessionCreate
         for (const [method, original] of Object.entries(originalWorkspaceMethods))
           ctx.workspaces[method] = original
         activeProject = null
+        projectActivationReady = false
       }
     }
 

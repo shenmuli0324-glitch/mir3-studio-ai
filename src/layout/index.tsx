@@ -19,6 +19,7 @@ import { currentScopeLease, stopScopeLease } from '@/features/system-ai/scope-le
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
 import { store } from '@/store'
+import { toast } from '@/utils'
 import { StudioViewContent } from '@/views'
 import { DesktopUpdater } from './components/desktop-updater'
 import { DownloadToast } from './components/download-toast-trigger'
@@ -254,6 +255,21 @@ export function App() {
     setShellState(value => ({ ...value, activeView: view }))
   }
 
+  async function selectCurrentWorkspace() {
+    const project = shellState.project
+    if (!project)
+      return
+    try {
+      const selected = await selectWorkspace(project.id)
+      if (selected)
+        toast(t('studio.project.workspace_selected'), {})
+    }
+    catch (error) {
+      console.error('[MIR3 project] Workspace selection failed:', error)
+      toast(t('studio.project.workspace_failed'), { variant: 'danger' })
+    }
+  }
+
   function finishCompositeReview() {
     const review = compositeReview ?? pendingCompositeReview
     if (!review)
@@ -296,10 +312,7 @@ export function App() {
               showSidebarToggle
               onToggleSidebar={toggleSidebar}
               project={shellState.project}
-              onSelectWorkspace={() => {
-                if (shellState.project)
-                  void selectWorkspace(shellState.project.id)
-              }}
+              onSelectWorkspace={() => void selectCurrentWorkspace()}
             />
             <div className="flex min-h-0 flex-1">
               <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} guiDirty={guiScope.dirty} onNavigate={navigate} />

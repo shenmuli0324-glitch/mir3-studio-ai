@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
 import { runCoreCandidateCanary } from '@/features/projects/core-candidate-canary'
-import { bootstrapHarnessBridge, bridgeRequestId, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, postProjectActivation, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, bridgeRequestId, ensureHarnessProjectActive, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
 import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
 
@@ -190,8 +190,10 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
       })
       void invoke<Mir3Project | null>('project_get_active')
         .then((project) => {
-          if (project)
-            postProjectActivation(iframeRef, project)
+          if (project) {
+            void ensureHarnessProjectActive(project)
+              .catch(error => console.error('[MIR3 Core Plugin] project activation retry failed:', error))
+          }
         })
         .catch(error => console.error('[MIR3 Core Plugin] failed to read active project:', error))
       return

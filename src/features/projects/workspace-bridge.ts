@@ -23,6 +23,7 @@ type HarnessProjectScope = Pick<Mir3Project, 'id' | 'root' | 'activeWorkspaceRoo
 
 let activeIframeRef: RefObject<HTMLIFrameElement | null> | null = null
 let bridgePort: MessagePort | null = null
+let bridgeReady = false
 let activeProjectScopeKey: string | null = null
 const pendingProjectActivations = new Map<string, Promise<void>>()
 const bridgeListeners = new Set<BridgeListener>()
@@ -35,7 +36,7 @@ export function connectHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | nu
     const origin = getIframeOrigin(iframeRef)
     if (!origin || event.origin !== origin || event.source !== iframeRef.current?.contentWindow)
       return
-    dispatchBridgeMessage(event.data)
+    dispatchBridgeMessage(event.data, 'window')
   }
   window.addEventListener('message', handleMessage)
   return () => {
@@ -44,6 +45,7 @@ export function connectHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | nu
       activeIframeRef = null
       bridgePort?.close()
       bridgePort = null
+      bridgeReady = false
       activeProjectScopeKey = null
       pendingProjectActivations.clear()
     }
@@ -57,11 +59,11 @@ export function bootstrapHarnessBridge(iframeRef: RefObject<HTMLIFrameElement | 
   if (!origin || !target)
     return false
   bridgePort?.close()
+  bridgeReady = false
   activeProjectScopeKey = null
-  pendingProjectActivations.clear()
   const channel = new MessageChannel()
   bridgePort = channel.port1
-  bridgePort.addEventListener('message', event => dispatchBridgeMessage(event.data))
+  bridgePort.addEventListener('message', event => dispatchBridgeMessage(event.data, 'port'))
   bridgePort.start()
   target.postMessage({
     source: 'mir3-studio',
@@ -113,32 +115,6 @@ export function postHarnessBridge<T>(message: Omit<Mir3BridgeEnvelope<T>, 'sourc
   return true
 }
 
-export function postProjectActivation(
-  iframeRef: RefObject<HTMLIFrameElement | null>,
-  project: Mir3Project,
-) {
-  const origin = getIframeOrigin(iframeRef)
-  if (!origin || !bridgePort)
-    return false
-  bridgePort.postMessage({
-    source: 'mir3-studio',
-    protocolVersion: MIR3_BRIDGE_PROTOCOL_VERSION,
-    type: 'mir3/project.activate',
-    requestId: bridgeRequestId(),
-    projectId: project.id,
-    systemId: '',
-    taskId: '',
-    sessionId: '',
-    sequence: outgoingSequences.next({ projectId: project.id, taskId: '', sessionId: '' }),
-    payload: {
-      projectId: project.id,
-      projectRoot: project.root,
-      workspaceRoot: project.activeWorkspaceRoot,
-    },
-  })
-  return true
-}
-
 /** 在创建或恢复 AI Session 前确认 Harness 已接受当前项目作用域。 */
 export function ensureHarnessProjectActive(project: HarnessProjectScope): Promise<void> {
   const scopeKey = projectScopeKey(project)
@@ -158,23 +134,50 @@ export function ensureHarnessProjectActive(project: HarnessProjectScope): Promis
 
 async function activateHarnessProject(project: HarnessProjectScope, scopeKey: string): Promise<void> {
   try {
+    await ensureHarnessBridgeReady()
     await activateHarnessProjectOnce(project)
   }
   catch (error) {
     if (!isRetryableActivationError(error) || !activeIframeRef)
       throw error
-    // 客户端插件可能晚于 iframe load 才挂载，首次 MessagePort 会被页面丢弃。
-    // 监听器此时已经通过 fallback 消息暴露出来，重建一次端口并等待 ready，
-    // 再重放激活；只重试一次，避免真实插件错误形成重启循环。
-    const ready = waitForHarnessBridge(message => message.type === 'mir3/plugin.ready', 5_000)
-    if (!bootstrapHarnessBridge(activeIframeRef)) {
-      void ready.catch(() => {})
-      throw error
-    }
-    await ready
+    bridgeReady = false
+    await ensureHarnessBridgeReady()
     await activateHarnessProjectOnce(project)
   }
   activeProjectScopeKey = scopeKey
+}
+
+/**
+ * Windows WebView2 可能先触发 iframe load，随后才挂载客户端插件。传给尚未监听的
+ * frame 的 MessagePort 不会被补收，因此这里重复建立短期端口，直到插件通过该端口
+ * 返回 ready。项目激活必须发生在 ready 之后，不能再依赖首次启动弹窗或猜测延时。
+ */
+async function ensureHarnessBridgeReady(): Promise<void> {
+  if (bridgeReady && bridgePort)
+    return
+  const iframeRef = activeIframeRef
+  if (!iframeRef)
+    throw new Error('HARNESS_BRIDGE_UNAVAILABLE: Harness frame is unavailable')
+  let lastError: unknown = new Error('HARNESS_BRIDGE_TIMEOUT: MIR3 Core Plugin is not ready')
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const ready = waitForHarnessBridge(
+      message => message.type === 'mir3/plugin.ready',
+      1_250,
+    )
+    if (!bootstrapHarnessBridge(iframeRef)) {
+      void ready.catch(() => {})
+      throw new Error('HARNESS_BRIDGE_UNAVAILABLE: Harness frame is unavailable')
+    }
+    try {
+      await ready
+      if (bridgeReady && bridgePort)
+        return
+    }
+    catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
 }
 
 async function activateHarnessProjectOnce(project: HarnessProjectScope): Promise<void> {
@@ -211,13 +214,14 @@ function isRetryableActivationError(error: unknown): boolean {
     || message.includes('HARNESS_BRIDGE_UNAVAILABLE')
 }
 
-function dispatchBridgeMessage(value: unknown) {
+function dispatchBridgeMessage(value: unknown, channel: 'port' | 'window') {
   if (!isBridgeEnvelope(value) || value.source !== 'mir3-core-plugin')
     return
   if (value.type === 'mir3/plugin.ready') {
+    if (channel === 'port')
+      bridgeReady = true
     incomingSequences.clear()
     activeProjectScopeKey = null
-    pendingProjectActivations.clear()
   }
   if (!incomingSequences.accept(value, value.sequence))
     return

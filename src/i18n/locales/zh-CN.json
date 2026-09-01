@@ -478,6 +478,7 @@
   "studio.project.removed": "项目登记已移除，原始文件未被删除。",
   "studio.project.relinked": "项目目录已重新关联。",
   "studio.project.workspace_selected": "工作区已更新。",
+  "studio.project.workspace_failed": "无法选择工作区，请确认目录位于当前项目内后重试。",
   "studio.project.scan_started": "已开始重新扫描。",
   "studio.project.workspace_outside": "请选择当前项目根目录或项目内的子目录。",
   "studio.project.scan_busy": "另一个项目正在扫描，请完成后重试。",

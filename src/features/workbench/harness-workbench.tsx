@@ -33,11 +33,16 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
   useEffect(() => connectHarnessBridge(iframeRef), [iframeRef])
 
   useEffect(() => subscribeHarnessBridge((message) => {
+    if (message.type === 'mir3/plugin.ready' && projectId && projectRoot && projectWorkspaceRoot) {
+      void ensureHarnessProjectActive({ id: projectId, root: projectRoot, activeWorkspaceRoot: projectWorkspaceRoot })
+        .catch(error => console.error('[MIR3 Core Plugin] project reactivation failed:', error))
+      return
+    }
     const workspaceRoot = readWorkspaceChange(message, projectId)
     if (!workspaceRoot || !projectId)
       return
     void persistWorkbenchWorkspace(projectId, workspaceRoot)
-  }), [projectId])
+  }), [projectId, projectRoot, projectWorkspaceRoot])
 
   useEffect(() => {
     if (!iframeLoaded)

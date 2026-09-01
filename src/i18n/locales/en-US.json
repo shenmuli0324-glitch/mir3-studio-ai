@@ -478,6 +478,7 @@
   "studio.project.removed": "Project registration removed. Source files were not deleted.",
   "studio.project.relinked": "Project directory relinked.",
   "studio.project.workspace_selected": "Workspace updated.",
+  "studio.project.workspace_failed": "Could not select the workspace. Choose a directory inside the active project and try again.",
   "studio.project.scan_started": "Rescan started.",
   "studio.project.workspace_outside": "Choose the project root or a directory inside this project.",
   "studio.project.scan_busy": "Another project is being scanned. Try again when it finishes.",

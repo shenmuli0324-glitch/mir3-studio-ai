@@ -421,6 +421,8 @@ function loadCoreClientHarness() {
         listener = callback
     },
     removeEventListener() {},
+    setTimeout,
+    clearTimeout,
   }
   vm.runInNewContext(source, {
     URL,
