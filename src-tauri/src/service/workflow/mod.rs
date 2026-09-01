@@ -87,20 +87,6 @@ async fn acquire_launch_guard() -> Result<Option<LaunchGuard>, String> {
     }
 }
 
-/// 从起始端口向上查找第一个空闲端口，绝不结束未知的端口占用进程。
-fn find_available_port(start: u16) -> Result<u16, String> {
-    let mut port = start;
-    loop {
-        if !is_port_in_use(port) {
-            return Ok(port);
-        }
-        log::warn!("Port {port} is occupied, trying the next port");
-        port = port.checked_add(1).ok_or_else(|| {
-            "PORT_EXHAUSTED: no available TCP port after the configured port".to_string()
-        })?;
-    }
-}
-
 /// dsh 版本是否支持 `--no-open` 标志。
 ///
 /// 0.1.0-rc.8 起 `dsh web` 默认在系统浏览器打开 UI（桌面端内嵌 WebView，
@@ -200,6 +186,15 @@ pub fn has_owned_process() -> bool {
     OWNED_PROCESS_ID.load(Ordering::SeqCst) != 0
 }
 
+fn ensure_core_port_available(port: u16) -> Result<(), String> {
+    if is_port_in_use(port) {
+        return Err(format!(
+            "CORE_PORT_OCCUPIED: fixed MIR3 AI Core port {port} is used by another process"
+        ));
+    }
+    Ok(())
+}
+
 /// 结束所有从本应用 dsh 安装目录启动的 MIR3 AI Core 服务进程（含历史崩溃残留的孤儿实例）。
 ///
 /// 只停本应用当前持有的进程不够：`.mir3-core.pid` 标记只记录最近一次会话的 PID，
@@ -259,10 +254,37 @@ pub fn terminate_stale_core_processes(app_handle: &tauri::AppHandle) {
             std::thread::sleep(std::time::Duration::from_millis(800));
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        // Unix 允许对打开中的文件重命名，孤儿进程不阻塞更新切换，无需处理。
-        let _ = app_handle;
+        let dsh_bin_path = config::get_dsh_binary_path(app_handle);
+        let Some(dsh_bin) = dsh_bin_path.to_str() else {
+            return;
+        };
+        let Ok(output) = Command::new("ps").args(["-axo", "pid=,command="]).output() else {
+            log::error!("Failed to enumerate stale MIR3 AI Core service processes");
+            return;
+        };
+        let mut found = 0;
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let line = line.trim_start();
+            let Some((pid, command)) = line.split_once(char::is_whitespace) else {
+                continue;
+            };
+            if !command.contains(dsh_bin) || !command.contains("--profile web") {
+                continue;
+            }
+            let Ok(pid) = pid.parse::<u32>() else {
+                continue;
+            };
+            found += 1;
+            log::warn!(
+                "Terminating stale MIR3 AI Core service process {pid} (from dsh install dir)"
+            );
+            kill_pid_tree(pid);
+        }
+        if found > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
     }
 }
 
@@ -343,21 +365,7 @@ fn port_owner_pid(port: u16) -> Option<u32> {
     {
         let output = Command::new("netstat").arg("-ano").output().ok()?;
         let text = String::from_utf8_lossy(&output.stdout);
-        let needle = format!(":{port} ");
-        for line in text.lines() {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() < 5 || fields[0] != "TCP" {
-                continue;
-            }
-            // 本地地址列（如 127.0.0.1:3080 / [::1]:3080）以 :<port> 结尾
-            if !fields[1].ends_with(&needle) {
-                continue;
-            }
-            if fields[3] == "LISTENING" {
-                return fields[4].parse().ok();
-            }
-        }
-        None
+        parse_windows_port_owner(&text, port)
     }
     #[cfg(not(windows))]
     {
@@ -374,6 +382,22 @@ fn port_owner_pid(port: u16) -> Option<u32> {
             .next()
             .and_then(|l| l.trim().parse().ok())
     }
+}
+
+#[cfg(any(windows, test))]
+fn parse_windows_port_owner(text: &str, port: u16) -> Option<u32> {
+    let needle = format!(":{port}");
+    for line in text.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 5 || fields[0] != "TCP" {
+            continue;
+        }
+        // 本地地址列（如 127.0.0.1:3080 / [::1]:3080）以 :<port> 结尾。
+        if fields[1].ends_with(&needle) && fields[3] == "LISTENING" {
+            return fields[4].parse().ok();
+        }
+    }
+    None
 }
 
 /// Windows RedirectionGuard（错误码 448 = ERROR_UNTRUSTED_MOUNT_POINT）逃逸重拉的标记路径。
@@ -497,7 +521,7 @@ pub async fn restart(app_handle: tauri::AppHandle) -> Result<(), String> {
 /// 启动 MIR3 AI Core 服务进程
 pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     wait_for_startup_sweep().await?;
-    let mut setting = config::get_store_dat_setting(&app_handle);
+    let setting = config::get_store_dat_setting(&app_handle);
     let node_binary_path = config::get_node_binary_path(&app_handle);
     // 活动核心的 dsh 入口（本地核心优先，未检测到走预打包）
     let dsh_binary_path = crate::service::core::active_dsh_binary(&app_handle);
@@ -520,18 +544,13 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     };
 
-    // 端口冲突时从当前值开始逐个递增，并持久化最终选择供所有调用方复用。
-    let available_port = find_available_port(setting.port)?;
-    if available_port != setting.port {
-        log::info!(
-            "MIR3 AI Core port changed from {} to {} because the configured port is occupied",
-            setting.port,
-            available_port
-        );
-        setting = config::update_setting(&app_handle, |current| {
-            current.port = available_port;
-        });
-    }
+    // Release 只允许一个固定的 3080 实例（debug 固定 3081）。先按精确 dsh
+    // 入口清扫历史残留，再检查端口；未知程序占用时明确失败，绝不漂移到新端口。
+    let app_for_cleanup = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || terminate_stale_core_processes(&app_for_cleanup))
+        .await
+        .map_err(|error| format!("CORE_PROCESS_CLEANUP_FAILED: {error}"))?;
+    ensure_core_port_available(setting.port)?;
 
     // 构造环境变量：隔离的 $MIR3_STUDIO_HOME + 隐私默认（关闭遥测）
     let dsh_home = config::get_dsh_data_path(&app_handle);
@@ -753,6 +772,10 @@ pub async fn stop(app_handle: tauri::AppHandle) -> Result<(), String> {
     // 重置启动守卫，确保后续 launch 可以重新拉起；仅结束持有的根进程树。
     LAUNCH_GUARD.store(false, Ordering::SeqCst);
     terminate_owned_process();
+    let app_for_cleanup = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || terminate_stale_core_processes(&app_for_cleanup))
+        .await
+        .map_err(|error| format!("CORE_PROCESS_CLEANUP_FAILED: {error}"))?;
     // 清理孤儿清扫标记：正常停止的实例不应被下次启动当作残留
     let _ = fs::remove_file(core_pid_path(&app_handle));
 
@@ -767,8 +790,9 @@ pub async fn stop(app_handle: tauri::AppHandle) -> Result<(), String> {
 /// 应用退出时同步回收 MIR3 AI Core 进程。
 ///
 /// 退出路径上不更新状态、不做异步等待，只结束当前应用持有的 MIR3 AI Core 进程树。
-pub fn stop_on_exit(app_handle: tauri::AppHandle, _port: u16) {
+pub fn stop_on_exit(app_handle: tauri::AppHandle) {
     terminate_owned_process();
+    terminate_stale_core_processes(&app_handle);
     // 正常退出路径同样清理清扫标记（崩溃路径才需要下次启动清扫）
     let _ = fs::remove_file(core_pid_path(&app_handle));
 }
@@ -1146,7 +1170,6 @@ pub async fn proxy_health_check(port: u16) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
 
     #[tokio::test]
     async fn launch_barrier_waits_until_startup_sweep_finishes() {
@@ -1164,12 +1187,21 @@ mod tests {
     }
 
     #[test]
-    fn occupied_port_advances_to_a_free_port() {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind occupied test port");
-        let occupied = listener.local_addr().expect("read occupied port").port();
-        let selected = find_available_port(occupied).expect("find next free port");
-        assert!(selected > occupied);
-        assert!(!is_port_in_use(selected));
+    fn occupied_fixed_port_is_rejected_without_fallback() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind occupied test port");
+        let port = listener.local_addr().expect("read occupied port").port();
+
+        let error = ensure_core_port_available(port).unwrap_err();
+
+        assert!(error.starts_with("CORE_PORT_OCCUPIED:"));
+        assert!(error.contains(&port.to_string()));
+    }
+
+    #[test]
+    fn windows_port_owner_parser_accepts_listening_rows() {
+        let text = "  TCP    127.0.0.1:3080    0.0.0.0:0    LISTENING    4488\n";
+        assert_eq!(parse_windows_port_owner(text, 3080), Some(4488));
+        assert_eq!(parse_windows_port_owner(text, 3081), None);
     }
 
     #[test]

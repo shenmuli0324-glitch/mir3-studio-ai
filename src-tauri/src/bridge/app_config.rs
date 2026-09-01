@@ -1,6 +1,6 @@
 //! 应用全局配置、系统偏好与 CLI Link 集成。
 //!
-//! 桌面端自身设置（端口/自启/语言/主题/侧边栏）的读写，以及命令行集成的
+//! 桌面端自身设置（自启/语言/主题/侧边栏）的读写，以及命令行集成的
 //! 状态查询；命令行集成开关的落库顺序与 CLI Link 的文件/PATH 操作绑定。
 
 use crate::config;
@@ -21,10 +21,11 @@ pub async fn update_app_config(
     auto_start: Option<bool>,
     cli_link_enabled: Option<bool>,
 ) -> Result<config::Setting, String> {
-    if let Some(port) = port {
-        if port == 0 {
-            return Err("port must be a positive number".to_string());
-        }
+    if port.is_some_and(|port| port != config::fixed_core_port()) {
+        return Err(format!(
+            "CORE_PORT_FIXED: MIR3 AI Core uses port {}",
+            config::fixed_core_port()
+        ));
     }
     // 命令行集成：先执行文件系统/PATH 操作，成功后再持久化开关，
     // 失败时配置保持不变，避免"开关已开但 shim 未生成"的不一致状态。
@@ -36,9 +37,7 @@ pub async fn update_app_config(
         }
     }
     let setting = config::update_setting(&app_handle, |setting| {
-        if let Some(port) = port {
-            setting.port = port;
-        }
+        setting.port = config::fixed_core_port();
         if let Some(auto_start) = auto_start {
             setting.auto_start = auto_start;
         }

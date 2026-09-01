@@ -278,7 +278,7 @@ export const harness = defineStore({
       try {
         await invoke('launch_harness')
         this.serviceRunning = true
-        // 后端遇到端口占用时会自动递增并持久化端口，启动后重新读取真实地址。
+        // 生产固定使用 3080（开发固定 3081）；重新读取用于保持前后端同一来源。
         const runtimeInfo = await invoke<{ service_url: string }>('get_runtime_info')
         this.serviceUrl = runtimeInfo.service_url
         this.iframeSrc = generateTimestampedUrl(runtimeInfo.service_url)

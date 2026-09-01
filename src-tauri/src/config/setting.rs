@@ -57,7 +57,7 @@ fn default_cli_link_enabled() -> bool {
 }
 
 /// 默认服务端口：debug 构建与生产隔离，避免开发时与已运行的桌面端争用 3080。
-fn default_port() -> u16 {
+pub fn fixed_core_port() -> u16 {
     if cfg!(debug_assertions) {
         DSH_DEV_PORT
     } else {
@@ -69,7 +69,7 @@ impl Default for Setting {
     fn default() -> Self {
         Self {
             installed: false,
-            port: default_port(),
+            port: fixed_core_port(),
             auto_start: true,
             language: "zh-CN".to_string(),
             dsh_pkg_commit: None,
@@ -127,9 +127,14 @@ fn read_store_dat_setting(app_handle: &AppHandle) -> Setting {
             .and_then(|s| serde_json::from_str(s).ok())
             .or_else(|| Some(v.clone()))
     });
-    value
+    let mut setting = value
         .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_else(Setting::default)
+        .unwrap_or_else(Setting::default);
+    // Core 端口是桌面端内部协议的一部分：生产固定 3080，开发固定 3081。
+    // 读取时归一化旧版本遗留的漂移端口，避免健康检查、iframe 与实际进程
+    // 分别继续使用不同地址。
+    setting.port = fixed_core_port();
+    setting
 }
 
 pub fn get_store_dat_setting(app_handle: &AppHandle) -> Setting {

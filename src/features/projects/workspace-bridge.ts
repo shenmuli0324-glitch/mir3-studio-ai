@@ -157,6 +157,27 @@ export function ensureHarnessProjectActive(project: HarnessProjectScope): Promis
 }
 
 async function activateHarnessProject(project: HarnessProjectScope, scopeKey: string): Promise<void> {
+  try {
+    await activateHarnessProjectOnce(project)
+  }
+  catch (error) {
+    if (!isRetryableActivationError(error) || !activeIframeRef)
+      throw error
+    // 客户端插件可能晚于 iframe load 才挂载，首次 MessagePort 会被页面丢弃。
+    // 监听器此时已经通过 fallback 消息暴露出来，重建一次端口并等待 ready，
+    // 再重放激活；只重试一次，避免真实插件错误形成重启循环。
+    const ready = waitForHarnessBridge(message => message.type === 'mir3/plugin.ready', 5_000)
+    if (!bootstrapHarnessBridge(activeIframeRef)) {
+      void ready.catch(() => {})
+      throw error
+    }
+    await ready
+    await activateHarnessProjectOnce(project)
+  }
+  activeProjectScopeKey = scopeKey
+}
+
+async function activateHarnessProjectOnce(project: HarnessProjectScope): Promise<void> {
   const requestId = bridgeRequestId()
   const response = waitForHarnessBridge(message => message.requestId === requestId
     && (message.type === 'mir3/project.activated' || message.type === 'mir3/bridge.error'))
@@ -182,7 +203,12 @@ async function activateHarnessProject(project: HarnessProjectScope, scopeKey: st
     throw new Error(bridgeError(result.payload))
   if (result.projectId !== project.id)
     throw new Error('PROJECT_SCOPE_MISMATCH: Harness activated another project')
-  activeProjectScopeKey = scopeKey
+}
+
+function isRetryableActivationError(error: unknown): boolean {
+  const message = String(error)
+  return message.includes('HARNESS_BRIDGE_TIMEOUT')
+    || message.includes('HARNESS_BRIDGE_UNAVAILABLE')
 }
 
 function dispatchBridgeMessage(value: unknown) {

@@ -24,6 +24,7 @@ pub fn prepare(
     let scopes = dsh_home.join(SCOPE_DIR);
     fs::create_dir_all(&scopes).map_err(|error| format!("HARNESS_SCOPE_CREATE_FAILED: {error}"))?;
     migrate_legacy_runtime(dsh_home, &scopes, projects)?;
+    prune_removed_project_scopes(&scopes, projects)?;
 
     let scope_id = active
         .map(|project| project.id.as_str())
@@ -45,6 +46,35 @@ pub fn prepare(
         scope_id,
         scope.display()
     );
+    Ok(())
+}
+
+/// Core 已停止后清理不再存在于项目注册表中的运行槽位，避免已移除项目继续
+/// 出现在 Harness Workspace。legacy-v1 是只读迁移源，unbound 是无项目槽位，
+/// 两者不参与项目清理。
+fn prune_removed_project_scopes(scopes: &Path, projects: &[Mir3Project]) -> Result<(), String> {
+    let retained: HashSet<&str> = projects.iter().map(|project| project.id.as_str()).collect();
+    for entry in
+        fs::read_dir(scopes).map_err(|error| format!("HARNESS_SCOPE_PRUNE_FAILED: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("HARNESS_SCOPE_PRUNE_FAILED: {error}"))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == LEGACY_DIR || name == UNBOUND_SCOPE || retained.contains(name.as_ref()) {
+            continue;
+        }
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("HARNESS_SCOPE_PRUNE_FAILED: {error}"))?;
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            fs::remove_dir_all(&path)
+                .map_err(|error| format!("HARNESS_SCOPE_PRUNE_FAILED: {error}"))?;
+        } else {
+            fs::remove_file(&path)
+                .map_err(|error| format!("HARNESS_SCOPE_PRUNE_FAILED: {error}"))?;
+        }
+        log::info!("Removed inactive Harness project scope: {}", path.display());
+    }
     Ok(())
 }
 
@@ -576,6 +606,10 @@ mod tests {
             .join("sessions/cwd-beta/session-beta/session.jsonl.zstd")
             .is_file());
         assert!(!root.join("sessions/cwd-alpha/session-alpha").exists());
+
+        prepare(&root, &projects[1..], projects.get(1)).unwrap();
+        assert!(!root.join("harness-projects/mir3-alpha").exists());
+        assert!(root.join("harness-projects/mir3-beta").is_dir());
 
         remove_directory_link(&root.join("storages")).unwrap();
         remove_directory_link(&root.join("sessions")).unwrap();

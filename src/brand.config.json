@@ -2,7 +2,7 @@
   "productName": "MIR3 Studio AI",
   "coreDisplayName": "MIR3 AI Core",
   "identifier": "ai.mir3.studio",
-  "version": "0.9.28",
+  "version": "0.9.29",
   "userAgent": "mir3-studio-ai",
   "updateRepo": "https://github.com/shenmuli0324-glitch/mir3-studio-ai",
   "cliCommand": "mir3",

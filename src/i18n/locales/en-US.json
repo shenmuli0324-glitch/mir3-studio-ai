@@ -125,8 +125,6 @@
   "messages.copy_success": "URL copied to clipboard",
   "messages.log_copied": "Logs copied to clipboard",
   "messages.copy_failed": "Failed to copy URL",
-  "messages.port_changed": "Port changed",
-  "messages.port_restart_hint": "It takes effect after the service restarts. Restart now?",
   "messages.save_failed": "Failed to save configuration",
   "messages.cli_link_enabled": "mir3 command enabled — open a new terminal to use it",
   "messages.cli_link_disabled": "mir3 command removed",

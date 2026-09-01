@@ -2,7 +2,6 @@ import { ArrowRotateRight, ArrowUpRightFromSquare, ChevronRight, CircleInfo, Cop
 import { Button, Chip, Input, Link, ListBox, Select, Spinner, Surface, Tooltip } from '@heroui/react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
@@ -31,20 +30,14 @@ export function ConfigDebug() {
   const { serviceRunning, busyAction, preinstall } = useStore(store.harness)
   const { updateInfo } = useStore(store.harnessUpdater)
 
-  const [port, setPort] = useState<number>(3080)
-
   const { data: info } = useQuery({
     queryKey: ['info'],
     queryFn: () => invoke<RuntimeInfo>('get_runtime_info'),
   })
 
-  const { refetch: refreshConfig } = useQuery({
+  const { data: config } = useQuery({
     queryKey: ['config'],
-    queryFn: async () => {
-      const config = await invoke<AppConfig>('get_app_config')
-      setPort(config.port)
-      return config
-    },
+    queryFn: () => invoke<AppConfig>('get_app_config'),
   })
 
   const { data: logs, refetch: refreshLogs } = useQuery({
@@ -65,25 +58,6 @@ export function ConfigDebug() {
     mutationFn: async () => {
       await invoke('copy_service_url')
       toast(t('messages.copy_success'))
-    },
-  })
-
-  const { mutate: onSavePort } = useMutation({
-    mutationFn: async (port: number) => {
-      await invoke<AppConfig>('update_app_config', { port })
-      await refreshConfig()
-      const key = toast(t('messages.port_changed'), {
-        variant: 'accent',
-        description: t('messages.port_restart_hint'),
-        timeout: 10_000,
-        actionProps: {
-          children: t('app.restart'),
-          onPress: () => {
-            store.harness.restart()
-            toast.close(key)
-          },
-        },
-      })
     },
   })
 
@@ -205,27 +179,7 @@ export function ConfigDebug() {
       </div>
       <div className="border-t border-line/30" />
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-ink">{t('ui.port')}</span>
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="number"
-              variant="secondary"
-              value={String(port)}
-              onChange={e => setPort(Number(e.target.value))}
-              className="w-24 h-8 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              aria-label={t('ui.port')}
-            />
-            <Button
-              size="sm"
-              variant="primary"
-              className="rounded-md h-8"
-              onPress={() => onSavePort(port)}
-            >
-              {t('buttons.save')}
-            </Button>
-          </div>
-        </div>
+        <Info term={t('ui.port')}>{config?.port ?? '-'}</Info>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1">
             <span className="text-xs font-medium text-ink">{t('preinstall.settings_title')}</span>

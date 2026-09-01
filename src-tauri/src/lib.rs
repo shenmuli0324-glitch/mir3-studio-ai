@@ -26,10 +26,7 @@ pub fn run() {
             // 残留并把原生模块 DLL（如 sharp 的 libvips-42.dll）锁在内存，
             // 下次启动重新解压时会失败（Windows os error 32）
             tauri::RunEvent::Exit => {
-                let setting = config::get_store_dat_setting(app_handle);
-                if setting.installed {
-                    service::workflow::stop_on_exit(app_handle.clone(), setting.port);
-                }
+                service::workflow::stop_on_exit(app_handle.clone());
             }
             _ => {}
         });

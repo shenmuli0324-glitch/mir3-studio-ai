@@ -38,7 +38,15 @@ export function useMir3Projects() {
         return null
       return invoke<Mir3Project>('project_import', { path })
     },
-    onSuccess: () => invalidateProjectQueries(queryClient),
+    onSuccess: async (project) => {
+      if (!project)
+        return
+      // 后端导入会同时把项目设为当前项目；必须立刻让 Core 重绑对应的
+      // Harness 存储，否则 UI 已显示项目而工作台仍停留在 unbound。
+      queryClient.setQueryData(['mir3-active-project'], project)
+      await invalidateProjectQueries(queryClient)
+      await restartHarnessAfterProjectChange()
+    },
   })
 
   const activateProject = useMutation({
@@ -85,8 +93,9 @@ export function useMir3Projects() {
       if (wasActive)
         queryClient.setQueryData(['mir3-active-project'], null)
       await invalidateProjectQueries(queryClient)
-      if (wasActive)
-        await restartHarnessAfterProjectChange()
+      // 删除任意项目都重启一次，让后端在 Core 停止期间立即清理对应的
+      // Harness 项目槽位；不等待下次切换或应用重启才消失。
+      await restartHarnessAfterProjectChange()
     },
   })
 
