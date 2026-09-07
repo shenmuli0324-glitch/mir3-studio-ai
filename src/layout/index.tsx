@@ -13,7 +13,7 @@ import { CompositeDraftReviewDialog } from '@/features/devtools/domain/composite
 import { GuiDesignerScope } from '@/features/gui-designer/gui-designer-scope'
 import { useMir3Projects } from '@/features/projects/use-mir3-projects'
 import { bridgeRequestId, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
-import { draftHandoffs, GLOBAL_WORKBENCH_EVENT, isCompletedGlobalTask, isGlobalDraftEvent, isGlobalTerminalEvent, markGlobalTaskMcpActive, markGlobalTaskMcpDisabled, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, restoreGlobalTasks, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import { GLOBAL_WORKBENCH_EVENT, isCompletedGlobalTask, isGlobalTerminalEvent, isGlobalWorkingCopyEvent, markGlobalTaskMcpActive, markGlobalTaskMcpDisabled, markGlobalTaskReviewPending, registeredGlobalTask, registeredGlobalTasks, restoreGlobalTasks, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget, workingCopyHandoffs } from '@/features/system-ai/ai-handoff'
 import { deliverGlobalTaskScope, recoverAndManageGlobalTaskScope } from '@/features/system-ai/global-task-recovery'
 import { currentScopeLease, stopScopeLease } from '@/features/system-ai/scope-lease-manager'
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
@@ -146,7 +146,7 @@ export function App() {
         }
         return
       }
-      if (!isGlobalDraftEvent(message.type))
+      if (!isGlobalWorkingCopyEvent(message.type))
         return
       const registration = registeredGlobalTask(message)
       if (!registration)
@@ -175,7 +175,7 @@ export function App() {
         }
       }
       const requestedTarget = returnTarget(message, registration)
-      const handoffs = draftHandoffs(message, registration)
+      const handoffs = workingCopyHandoffs(message, registration)
       if (completed) {
         void stopScopeLease(registration)
       }

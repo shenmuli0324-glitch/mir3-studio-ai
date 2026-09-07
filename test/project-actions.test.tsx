@@ -61,14 +61,10 @@ vi.mock('../src/features/projects/use-mir3-projects', () => ({
 vi.mock('../src/features/projects/use-project-details', () => ({
   useProjectDetails: () => ({
     stats: null,
-    drafts: [],
-    snapshots: [],
+    saveNodes: [],
     knowledge: [],
     loading: false,
-    previewDraft: vi.fn(),
-    applyDraft: vi.fn(),
-    discardDraft: vi.fn(),
-    restoreSnapshot: vi.fn(),
+    restoreSaveNode: vi.fn(),
     setKnowledgeStatus: vi.fn(),
     busy: false,
     error: null,

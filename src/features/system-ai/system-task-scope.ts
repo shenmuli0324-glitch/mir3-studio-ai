@@ -5,6 +5,9 @@ export interface SystemTaskScopeContract {
   systemId: string
   pluginVersion: string
   readSystems: string[]
+  /** 对外的工作副本标识；后端租约暂以 draftIds 字段传输同一批 ID。 */
+  workingCopyIds: string[]
+  /** @deprecated 仅用于与旧租约协议兼容。 */
   draftIds: string[]
   pluginVersions: Record<string, string>
 }
@@ -12,7 +15,7 @@ export interface SystemTaskScopeContract {
 export function buildSystemTaskScopeContract(
   manifest: DomainManifest,
   taskId: string,
-  draftId: string | null | undefined,
+  workingCopyId: string | null | undefined,
   manifests: DomainManifest[],
 ): SystemTaskScopeContract {
   const readSystems = uniqueStrings([manifest.systemId, ...manifest.dependencies])
@@ -28,12 +31,14 @@ export function buildSystemTaskScopeContract(
       `SYSTEM_SCOPE_PLUGIN_VERSION_MISMATCH: ${manifest.systemId} expected ${manifest.version}`,
     )
   }
+  const workingCopyIds = workingCopyId ? [workingCopyId] : []
   return {
     taskId,
     systemId: manifest.systemId,
     pluginVersion: manifest.version,
     readSystems,
-    draftIds: draftId ? [draftId] : [],
+    workingCopyIds,
+    draftIds: workingCopyIds,
     pluginVersions,
   }
 }
@@ -51,8 +56,8 @@ export function assertSystemTaskScopeLease(
       `SYSTEM_SCOPE_LEASE_WRITE_MISMATCH: only ${contract.systemId} may be writable`,
     )
   }
-  if (!sameUniqueStrings(lease.draftIds, contract.draftIds))
-    throw new Error('SYSTEM_SCOPE_LEASE_DRAFT_MISMATCH: Draft binding changed during issuance')
+  if (!sameUniqueStrings(lease.draftIds, contract.workingCopyIds))
+    throw new Error('SYSTEM_SCOPE_LEASE_WORKING_COPY_MISMATCH: working copy binding changed during issuance')
   if (!sameVersionMap(lease.pluginVersions, contract.pluginVersions))
     throw new Error('SYSTEM_SCOPE_LEASE_VERSION_MISMATCH: pinned plugin versions changed during issuance')
   if (lease.pluginVersions[contract.systemId] !== contract.pluginVersion) {
@@ -84,6 +89,7 @@ export function buildSystemTaskRenewalContract(
     systemId: manifest.systemId,
     pluginVersion: manifest.version,
     readSystems,
+    workingCopyIds: [...previous.draftIds],
     draftIds: [...previous.draftIds],
     pluginVersions,
   }
@@ -97,7 +103,9 @@ export function systemTaskSafetyInstructions(manifest: DomainManifest): string {
     '- Modify only files/resources owned by the current system and explicitly marked writable.',
     '- Unknown, generated, shared-without-ownership, and dependency files are read-only.',
     '- Never write project files through shell, terminal, generic filesystem, or editor tools.',
-    '- All changes must use the scoped MIR3 MCP Draft tools; preview and validate the Draft before asking the user to apply it.',
+    '- Use only scoped MIR3 working-copy tools for changes and pass workingCopyId, never legacy draftId.',
+    '- Reuse the Working Copy supplied in the scope; do not open a second copy for the same system.',
+    '- Inspect and validate the Working Copy after edits. Studio owns Save, save nodes, conflict checks, and restore; ask the user to Save, never to Apply a Draft.',
   ].join('\n')
 }
 

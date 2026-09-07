@@ -1,4 +1,4 @@
-import type { CompositeDraftApplyResult, CompositeDraftReview, CompositeDraftReviewItem } from './types'
+import type { CompositeDraftReview, CompositeDraftReviewItem, DomainCompositeWorkingSaveResult } from './types'
 import { Button, Modal, Spinner } from '@heroui/react'
 import { useOverlay } from '@overlastic/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { Modal as ConfirmationModal } from '@/components/modal'
 import { toast } from '@/utils'
-import { applyCompositeDrafts, previewCompositeDrafts } from './api'
+import { previewCompositeDrafts, saveDomainWorkingCopies } from './api'
 
 export interface CompositeDraftReviewRequest {
   projectId: string
@@ -18,7 +18,7 @@ export interface CompositeDraftReviewRequest {
 export function CompositeDraftReviewDialog({ request, onClose, onApplied }: {
   request: CompositeDraftReviewRequest
   onClose: () => void
-  onApplied: (result: CompositeDraftApplyResult) => void
+  onApplied: (result: DomainCompositeWorkingSaveResult) => void
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -28,16 +28,17 @@ export function CompositeDraftReviewDialog({ request, onClose, onApplied }: {
     queryFn: () => previewCompositeDrafts(request.projectId, request.compositeId),
   })
   const apply = useMutation({
-    mutationFn: (value: CompositeDraftReview) => applyCompositeDrafts(
+    mutationFn: (value: CompositeDraftReview) => saveDomainWorkingCopies(
       request.projectId,
       request.compositeId,
       value.drafts.map(draft => ({
-        draftId: draft.draftId,
-        confirmationToken: draft.confirmation.confirmationToken,
+        workingCopyId: draft.draftId,
+        expectedRevision: draft.confirmation.preview.draft.revision,
       })),
+      true,
     ),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ['domain-drafts', request.projectId] })
+      void queryClient.invalidateQueries({ queryKey: ['domain-save-nodes', request.projectId] })
       void queryClient.invalidateQueries({ queryKey: ['domain-files', request.projectId] })
       void queryClient.invalidateQueries({ queryKey: ['domain-resources', request.projectId] })
       void queryClient.invalidateQueries({ queryKey: ['domain-source', request.projectId] })
@@ -130,7 +131,7 @@ function ReviewContent({ review }: { review: CompositeDraftReview }) {
   const { t } = useTranslation()
   return (
     <div className="space-y-4" data-composite-review={review.compositeId}>
-      {review.drafts.map(draft => <DraftReviewCard key={draft.draftId} draft={draft} />)}
+      {review.drafts.map(draft => <WorkingCopyReviewCard key={draft.draftId} draft={draft} />)}
       <If cond={review.drafts.length < 2}>
         <div className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">{t('studio.composite_review.incomplete')}</div>
       </If>
@@ -138,15 +139,14 @@ function ReviewContent({ review }: { review: CompositeDraftReview }) {
   )
 }
 
-function DraftReviewCard({ draft }: { draft: CompositeDraftReviewItem }) {
+function WorkingCopyReviewCard({ draft }: { draft: CompositeDraftReviewItem }) {
   const { t } = useTranslation()
   const title = t(`studio.devtools.tool.${draft.systemId}.title`, { defaultValue: draft.systemId })
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-panel2" data-composite-draft={draft.draftId}>
+    <section className="overflow-hidden rounded-xl border border-line bg-panel2" data-composite-working-copy={draft.draftId}>
       <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
         <span className="min-w-0">
           <strong className="block truncate text-xs text-ink">{title}</strong>
-          <small className="mt-1 block truncate text-[10px] text-muted">{draft.confirmation.preview.draft.intent}</small>
           <small className="mt-0.5 block text-[9px] text-muted">
             {draft.pluginVersion}
             {' · r'}
@@ -168,7 +168,7 @@ function DraftReviewCard({ draft }: { draft: CompositeDraftReviewItem }) {
         {draft.confirmation.preview.changes.map(change => (
           <article key={change.path} className="overflow-hidden rounded-lg border border-line bg-panel">
             <h3 className="border-b border-line px-3 py-2 font-mono text-[10px] text-ink">{change.path}</h3>
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap p-3 text-[10px] leading-5 text-muted">{change.unifiedDiff ?? t('studio.devtools.diff.binary')}</pre>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap p-3 text-[10px] leading-5 text-muted">{change.unifiedDiff ?? t('studio.devtools.working.binary_change')}</pre>
           </article>
         ))}
         <If cond={draft.confirmation.preview.changes.length === 0}>

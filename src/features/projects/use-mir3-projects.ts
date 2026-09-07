@@ -152,8 +152,7 @@ export async function invalidateProjectQueries(queryClient: ReturnType<typeof us
     queryClient.invalidateQueries({ queryKey: ['mir3-active-project'] }),
     queryClient.invalidateQueries({ queryKey: ['mir3-scan'] }),
     queryClient.invalidateQueries({ queryKey: ['mir3-index-stats'] }),
-    queryClient.invalidateQueries({ queryKey: ['mir3-drafts'] }),
-    queryClient.invalidateQueries({ queryKey: ['mir3-snapshots'] }),
+    queryClient.invalidateQueries({ queryKey: ['domain-save-nodes'] }),
     queryClient.invalidateQueries({ queryKey: ['mir3-knowledge'] }),
   ])
 }

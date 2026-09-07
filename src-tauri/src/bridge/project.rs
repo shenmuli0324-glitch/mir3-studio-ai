@@ -4,9 +4,11 @@ use crate::service::project::{DraftConfirmation, ProjectService, ScanState};
 use mir3_domain::{
     CapabilityCompileRequest, CapabilityPromotionRequest, CapabilityResolution,
     CapabilityRollbackRequest, CompositeApplyResult, CompositeDraftConfirmation,
-    DomainDependencyGraph, DomainFileQuery, DomainFileRecord, DomainManifest, DomainMemory,
-    DomainResourceQuery, DomainResourceRecord, DomainSystemDescription, DomainValidationReport,
-    Draft, GlobalCapabilityCompileRequest, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
+    DomainCompositeWorkingSaveResult, DomainDependencyGraph, DomainFileQuery, DomainFileRecord,
+    DomainManifest, DomainMemory, DomainResourceQuery, DomainResourceRecord, DomainSaveNode,
+    DomainSystemDescription, DomainValidationReport, DomainWorkingCopy, DomainWorkingCopyRevision,
+    DomainWorkingRestoreResult, DomainWorkingSaveResult, Draft, DraftPreview,
+    GlobalCapabilityCompileRequest, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
     KnowledgeRecord, KnowledgeStatus, LegacyDraftCloneRequest, Mir3Project, SafeTextOpen,
     SafeTextPatch, SafeTextPatchResult, SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet,
     SafeXlsWorkbook, Snapshot, SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability,
@@ -599,6 +601,137 @@ pub fn draft_list(
     project_id: String,
 ) -> Result<Vec<Draft>, String> {
     service.store().list_drafts(&project_id)
+}
+
+/// 返回当前系统唯一的工作副本；内部 Draft 标识只以 workingCopyId 语义返回。
+#[tauri::command]
+pub fn domain_working_copy_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    plugin_version: String,
+    intent: Option<String>,
+) -> Result<DomainWorkingCopy, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().get_or_create_domain_working_copy(
+        &project_id,
+        &system_id,
+        &plugin_version,
+        intent.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn domain_working_file_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    relative_path: String,
+    working_copy_id: Option<String>,
+) -> Result<SafeTextOpen, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().domain_working_file_open(
+        &project_id,
+        &relative_path,
+        working_copy_id.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn domain_working_text_patch(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    working_copy_id: String,
+    operation: SafeTextPatch,
+) -> Result<SafeTextPatchResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .domain_working_text_patch(&project_id, &working_copy_id, operation)
+}
+
+#[tauri::command]
+pub fn domain_working_xls_patch(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    working_copy_id: String,
+    operation: SafeXlsDraftPatch,
+) -> Result<SafeXlsPatchResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .domain_working_xls_patch(&project_id, &working_copy_id, operation)
+}
+
+#[tauri::command]
+pub fn domain_working_copy_preview(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    working_copy_id: String,
+) -> Result<DraftPreview, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .preview_domain_working_copy(&project_id, &working_copy_id)
+}
+
+/// 普通保存由后端在一次调用中完成校验、SHA 检查、原子 Apply 与保存节点创建。
+#[tauri::command]
+pub fn domain_working_save(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    working_copy_id: String,
+    expected_revision: i64,
+    confirmed: bool,
+) -> Result<DomainWorkingSaveResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().save_domain_working_copy(
+        &project_id,
+        &working_copy_id,
+        expected_revision,
+        confirmed,
+    )
+}
+
+#[tauri::command]
+pub fn domain_working_composite_save(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    composite_id: String,
+    working_copies: Vec<DomainWorkingCopyRevision>,
+    confirmed: bool,
+) -> Result<DomainCompositeWorkingSaveResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service.store().save_domain_working_copies(
+        &project_id,
+        &composite_id,
+        &working_copies,
+        confirmed,
+    )
+}
+
+#[tauri::command]
+pub fn domain_save_node_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<DomainSaveNode>, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .list_domain_save_nodes(&project_id, system_id.as_deref(), limit.unwrap_or(100))
+}
+
+#[tauri::command]
+pub fn domain_save_node_restore(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    node_id: String,
+) -> Result<DomainWorkingRestoreResult, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .restore_domain_save_node(&project_id, &node_id)
 }
 
 /// 为 Studio 人工编辑创建并绑定当前领域版本的外置 Draft。

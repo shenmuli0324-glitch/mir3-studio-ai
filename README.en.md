@@ -8,7 +8,7 @@
 
 <p align="center"><samp><strong>English</strong> · <a href="./README.md">中文</a></samp></p>
 
-> Version `0.9.30` develops projects created by 996 Project Manager through one system kernel, 33 domain packs, archived system sessions, and a safe Draft workflow.
+> Version `0.9.31` develops projects created by 996 Project Manager through one system kernel, 33 domain packs, archived system sessions, and a safe Working Copy workflow.
 
 MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastructure foundations. On top of its plugin architecture, we independently develop the project model, knowledge system, development toolchain, and AI workflows for the 996 MIR3 ecosystem.
 
@@ -18,13 +18,13 @@ MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastruct
 - Installers carry a locked Node.js, pnpm, and MIR3 AI Core baseline for the target platform, so first launch does not download the Core from GitHub.
 - Core version downloads, switching, health checks, and process lifecycle management.
 - Isolated profiles, plugin management, and recovery workflows.
-- 996 project recognition, external indexing, real file-to-resource mapping, governed knowledge, Draft previews, and version snapshots.
-- A three-pane system workspace: real files/resources/dependencies, domain views/Diff/validation, and an archived AI session.
+- 996 project recognition, external indexing, real file-to-resource mapping, governed knowledge, Working Copies, and save nodes.
+- A three-pane system workspace: real files/resources/dependencies, domain views, and an archived AI session, with Save, Restore Previous Save, and optional change review in the top bar.
 - One system kernel and 33 independently versioned domain packs that can be audited, upgraded, disabled, and rolled back without competing for the Harness UI lifecycle.
-- Sixteen fixed MCP tools comprise twelve domain tools and four GUI tools. Domain tools expose resources, dependencies, Draft diffs, validation, and the capability registry to system AI and the global Harness workbench; GUI tools operate only on Studio's private Working Workspace.
+- Sixteen fixed MCP tools comprise twelve domain tools and four GUI tools. Domain tools expose resources, dependencies, Working Copy inspection, validation, and the capability registry to system AI and the global Harness workbench; GUI tools operate only on Studio's private Working Workspace.
 - Successful tasks produce Task Receipts and can be promoted, after preview and validation, into versioned project, personal, or team capabilities.
-- Studio domain-source editing first opens an external Draft bound to the current system version, then performs format-preserving TXT/Lua changes and BIFF XLS viewing; Harness AI writes only through the task-scoped generic MCP.
-- GUI Designer AI edits first enter the app-private Working Workspace and do not write game files directly. Only explicit Save or Restore Previous Save actions update `客户端/dev/GUIExport` after SHA conflict checks and save-node creation.
+- All 33 domain systems and GUI Designer share one user workflow: humans and AI modify an app-private Working Copy; only Save validates, checks source SHA, atomically updates the project, and creates a save node. Restore Previous Save appends a restore node. Ordinary saves do not force a Diff dialog, while high-risk and cross-system changes still require confirmation.
+- Domain Working Copies preserve GB18030/BOM/newline details for TXT and Lua changes and support BIFF XLS data; Harness AI writes only through task-scoped generic MCP with pinned domain-pack versions and never directly to game files.
 - Self-updates exclusively from MIR3 Studio AI GitHub Releases.
 
 ## Public identity
@@ -33,7 +33,7 @@ MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastruct
 | --- | --- |
 | App | MIR3 Studio AI |
 | Core display name | MIR3 AI Core |
-| Version | 0.9.30 |
+| Version | 0.9.31 |
 | Tauri identifier | `ai.mir3.studio` |
 | Data directory | `~/.mir3-studio-ai` |
 | Development data directory | `~/.mir3-studio-ai.dev` |
@@ -54,7 +54,7 @@ Use `pnpm package:mac` for the fixed Apple Silicon macOS delivery flow. It build
 
 Production builds that enable remote domain-pack candidates must inject both the HTTPS index URL through `MIR3_DOMAIN_PACK_INDEX_URL` and a Base64-encoded 32-byte Ed25519 public key through `MIR3_DOMAIN_PACK_ED25519_PUBLIC_KEY` at compile time. The build rejects one-sided configuration, non-HTTPS or credential-bearing URLs, and clearly invalid keys. When configured, Studio checks after 60 seconds and every six hours, verifies signatures, and stages candidates in the background, but never activates them without user confirmation. Without configuration the background job stays disabled and manual remote checks fail closed with `DOMAIN_PACK_UPDATE_NOT_CONFIGURED`; bundled/local candidates, confirmed activation, and rollback remain available. The repository intentionally contains no placeholder official source or key.
 
-All 33 domain packs use evidence-gated engine generalization. Only SemVer, v-prefixed SemVer, and major.minor aliases are normalized, and write access also requires the real 996 project layout, a domain selector/content fingerprint, and resource-schema validation. Unknown or incompatible engines remain viewable for diagnostics but are refused by both Draft writes and final Apply.
+All 33 domain packs use evidence-gated engine generalization. Only SemVer, v-prefixed SemVer, and major.minor aliases are normalized, and write access also requires the real 996 project layout, a domain selector/content fingerprint, and resource-schema validation. Unknown or incompatible engines remain viewable for diagnostics but are refused by both Working Copy writes and final Save.
 
 See [Development](./docs/DEVELOPMENT.md), the [runtime baseline policy](./docs/runtime-baseline-policy.md), and the product [CHANGELOG](./CHANGELOG.md).
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { CompositeDraftApplyResult } from '../src/features/devtools/domain/types'
+import type { DomainCompositeWorkingSaveResult } from '../src/features/devtools/domain/types'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -20,17 +20,17 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('composite Draft joint review', () => {
-  it('previews every Draft, validates each one, and applies the complete set after one confirmation', async () => {
+describe('composite Working Copy joint review', () => {
+  it('previews every Working Copy, validates each one, and saves the complete set after one confirmation', async () => {
     const review = compositeReview(true)
     mocks.invoke.mockImplementation((command: string) => {
       if (command === 'draft_composite_preview')
         return Promise.resolve(review)
-      if (command === 'draft_composite_apply') {
+      if (command === 'domain_working_composite_save') {
         return Promise.resolve({
-          compositeId: 'composite-1',
-          draftIds: ['draft-quest', 'draft-shop'],
-          snapshot: { id: 'snapshot-1', createdAt: 3 },
+          saveNode: { id: 'node-1', origin: 'studio', projectId: 'project-1', createdAt: 3 },
+          validations: [],
+          applyResult: { compositeId: 'composite-1', draftIds: ['draft-quest', 'draft-shop'], snapshot: { id: 'snapshot-1', createdAt: 3 } },
         })
       }
       return Promise.reject(new Error(`Unexpected command: ${command}`))
@@ -38,39 +38,40 @@ describe('composite Draft joint review', () => {
     const onApplied = vi.fn()
     renderReview(onApplied)
 
-    expect(await screen.findByText('Quest flow')).toBeTruthy()
-    expect(screen.getByText('Shop price')).toBeTruthy()
-    expect(document.querySelectorAll('[data-composite-draft]')).toHaveLength(2)
+    expect(await screen.findByText('Quest system')).toBeTruthy()
+    expect(screen.getByText('Shop system')).toBeTruthy()
+    expect(document.querySelectorAll('[data-composite-working-copy]')).toHaveLength(2)
     expect(mocks.invoke).toHaveBeenCalledWith('draft_composite_preview', {
       projectId: 'project-1',
       compositeId: 'composite-1',
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm once and apply atomically' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save all changes' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm' }))
-    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('draft_composite_apply', {
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('domain_working_composite_save', {
       projectId: 'project-1',
       compositeId: 'composite-1',
-      drafts: [
-        { draftId: 'draft-quest', confirmationToken: 'token-quest' },
-        { draftId: 'draft-shop', confirmationToken: 'token-shop' },
+      workingCopies: [
+        { workingCopyId: 'draft-quest', expectedRevision: 1 },
+        { workingCopyId: 'draft-shop', expectedRevision: 1 },
       ],
+      confirmed: true,
     }))
-    await waitFor(() => expect(onApplied).toHaveBeenCalledWith(expect.objectContaining({ compositeId: 'composite-1' })))
+    await waitFor(() => expect(onApplied).toHaveBeenCalledWith(expect.objectContaining({ saveNode: expect.objectContaining({ id: 'node-1' }) })))
   })
 
-  it('keeps the atomic Apply disabled when any Draft validation fails', async () => {
+  it('keeps the atomic Save disabled when any Working Copy validation fails', async () => {
     mocks.invoke.mockResolvedValueOnce(compositeReview(false))
     renderReview(vi.fn())
 
-    expect(await screen.findByText('Quest flow')).toBeTruthy()
+    expect(await screen.findByText('Quest system')).toBeTruthy()
     expect(screen.getByText('Missing dependency')).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Confirm once and apply atomically' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(mocks.invoke.mock.calls.some(([command]) => command === 'draft_composite_apply')).toBe(false)
+    expect((screen.getByRole('button', { name: 'Save all changes' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(mocks.invoke.mock.calls.some(([command]) => command === 'domain_working_composite_save')).toBe(false)
   })
 })
 
-function renderReview(onApplied: (result: CompositeDraftApplyResult) => void) {
+function renderReview(onApplied: (result: DomainCompositeWorkingSaveResult) => void) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })

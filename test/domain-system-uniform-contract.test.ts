@@ -20,11 +20,14 @@ describe('33-system simplified workspace contract', () => {
     expect(view).not.toMatch(/switch\s*\(\s*(?:activeToolId|tool\.id)/)
   })
 
-  it('loads only the current domain file projection and opens source directly', () => {
+  it('loads only the current domain file projection through the shared Working Copy', () => {
     const view = source('src/features/devtools/domain/domain-system-view.tsx')
 
     expect(view).toContain('queryDomainFiles(')
-    expect(view).toContain('openDomainText(')
+    expect(view).toContain('openDomainWorkingText(')
+    expect(view).toContain('openDomainWorkingCopy(')
+    expect(view).toContain('saveDomainWorkingCopy(')
+    expect(view).toContain('restoreDomainSaveNode(')
     expect(view).not.toContain('queryUnclaimedDomainFiles')
     expect(view).not.toContain('queryDomainResources')
     expect(view).not.toContain('getDomainResource')
@@ -85,7 +88,8 @@ describe('33-system simplified workspace contract', () => {
     const scope = source('src/features/system-ai/system-task-scope.ts')
     const mcp = source('src-tauri/crates/mir3-mcp/src/main.rs')
 
-    expect(panel).toContain('buildSystemTaskScopeContract(manifest, taskId, draftId, manifests)')
+    expect(panel).toContain('buildSystemTaskScopeContract(manifest, taskId, activeWorkingCopyId, manifests)')
+    expect(panel).toContain('const prepared = await ensureWorkingCopy()')
     expect(panel).toMatch(/issueTaskScope\([\s\S]*?contract\.readSystems,\s*\[contract\.systemId\]/)
     expect(panel).toMatch(/writeSystems=\$\{manifest\.systemId\}/)
     expect(scope).toContain('lease.writeSystems.length !== 1')

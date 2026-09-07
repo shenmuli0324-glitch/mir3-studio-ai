@@ -1,9 +1,8 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDraftConfirmation, DomainFileRecord, DomainManifest, DomainSnapshot, DomainValidationReport, SafeTextOpen, SafeXlsSheet, SafeXlsWorkbook } from './types'
+import type { DomainDraftPreview, DomainFileRecord, DomainManifest, DomainValidationReport, DomainWorkingCopy, SafeTextOpen, SafeXlsSheet, SafeXlsWorkbook } from './types'
 import type { Mir3Project } from '@/features/projects/types'
-import type { DomainDraftHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
-import { CircleCheck, CircleExclamation, File, Folder, Magnifier } from '@gravity-ui/icons'
-import { Button } from '@heroui/react'
+import type { DomainWorkingCopyHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
+import { File, Folder, Magnifier } from '@gravity-ui/icons'
 import { useOverlay } from '@overlastic/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
@@ -14,18 +13,26 @@ import { SystemAiPanel } from '@/features/system-ai/system-ai-panel'
 import { toast } from '@/utils'
 import { DevToolWorkspace } from '../shell/devtool-workspace'
 import {
-  applyDomainDraft,
-  discardDomainDraft,
+  listDomainSaveNodes,
   listDomainSystems,
-  openDomainDraft,
-  openDomainText,
+  openDomainWorkingCopy,
+  openDomainWorkingText,
   openDomainXls,
-  patchDomainText,
-  previewDomainDraft,
+  patchDomainWorkingText,
+  previewDomainWorkingCopy,
   queryDomainFiles,
   readDomainXlsSheet,
-  validateDomainDraft,
+  restoreDomainSaveNode,
+  saveDomainWorkingCopy,
 } from './api'
+import { DomainChangeReviewDialog } from './domain-change-review'
+import { isSaveConfirmationRequired, requiresSaveConfirmation } from './domain-save-policy'
+import { DomainWorkingToolbar } from './domain-working-toolbar'
+
+interface WorkingTextEdit {
+  content: string
+  baseSha256: string
+}
 
 interface MutableFileTree {
   directories: Map<string, MutableFileTree>
@@ -54,9 +61,18 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   const [selectedFile, setSelectedFile] = useState<DomainFileRecord | null>(null)
   const [editedContent, setEditedContent] = useState<string | null>(null)
   const [selectedSheet, setSelectedSheet] = useState('')
-  const [draftPreview, setDraftPreview] = useState<DomainDraftConfirmation | null>(null)
+  const [workingCopy, setWorkingCopy] = useState<DomainWorkingCopy | null>(null)
+  const [workingEdits, setWorkingEdits] = useState<Record<string, WorkingTextEdit>>({})
+  const [changePreview, setChangePreview] = useState<DomainDraftPreview | null>(null)
   const [validation, setValidation] = useState<DomainValidationReport | null>(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const handledTargetRef = useRef('')
+  const workingCopyRef = useRef<DomainWorkingCopy | null>(null)
+  const workingEditsRef = useRef<Record<string, WorkingTextEdit>>({})
+  const syncPromiseRef = useRef<Promise<DomainWorkingCopy | null> | null>(null)
+  const acceptWorkingCopyHandoffRef = useRef(acceptWorkingCopyHandoff)
+  acceptWorkingCopyHandoffRef.current = acceptWorkingCopyHandoff
 
   const manifests = useQuery({
     queryKey: ['domain-systems'],
@@ -70,10 +86,10 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     enabled: project != null,
   })
   const projectedFiles = currentSystemFiles(files.data ?? [])
-  const activeDraftId = draftPreview?.preview.draft.id ?? null
+  const activeWorkingCopyId = workingCopy?.id ?? null
   const openedFile = useQuery({
-    queryKey: ['domain-source', project?.id, selectedFile?.path, activeDraftId],
-    queryFn: () => openDomainText(project!.id, selectedFile!.path, activeDraftId),
+    queryKey: ['domain-source', project?.id, selectedFile?.path, activeWorkingCopyId],
+    queryFn: () => openDomainWorkingText(project!.id, selectedFile!.path, activeWorkingCopyId),
     enabled: project != null && isTextFile(selectedFile),
   })
   const workbook = useQuery({
@@ -87,62 +103,37 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     queryFn: () => readDomainXlsSheet(project!.id, selectedFile!.path, sheetName, workbook.data!.sha256),
     enabled: project != null && isXlsFile(selectedFile) && workbook.data != null && sheetName.length > 0,
   })
+  const saveNodes = useQuery({
+    queryKey: ['domain-save-nodes', project?.id, tool.id],
+    queryFn: () => listDomainSaveNodes(project!.id, tool.id),
+    enabled: project != null,
+  })
 
-  const patch = useMutation({
-    mutationFn: async ({ opened, content }: { opened: SafeTextOpen, content: string }) => {
-      if (opened.draftId)
-        return patchDomainText(project!.id, opened, content)
-      const draft = await openDomainDraft(
-        project!.id,
-        manifest.systemId,
-        manifest.version,
-        t('studio.devtools.source.draft_intent', { path: opened.relativePath }),
-      )
-      const scoped = await openDomainText(project!.id, opened.relativePath, draft.id)
-      if (scoped.sha256 !== opened.sha256)
-        throw new Error('SAFE_FILE_SOURCE_CONFLICT')
-      return patchDomainText(project!.id, scoped, content)
-    },
-    onSuccess: async (result) => {
-      setDraftPreview(await previewDomainDraft(project!.id, result.draftId))
-      setValidation(null)
-      setEditedContent(null)
-      await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
-      toast(t('studio.devtools.source.staged'), {})
-    },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
-  })
-  const applyDraft = useMutation({
-    mutationFn: async (confirmation: DomainDraftConfirmation) => {
-      const report = await validateDomainDraft(project!.id, confirmation.preview.draft.id)
-      setValidation(report)
-      if (!report.valid)
-        throw new Error('DOMAIN_VALIDATION_FAILED')
-      return applyDomainDraft(project!.id, confirmation.preview.draft.id, confirmation.confirmationToken)
-    },
-    onSuccess: async (_snapshot: DomainSnapshot) => {
-      setDraftPreview(null)
-      setValidation(null)
-      setEditedContent(null)
-      await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
-      toast(t('studio.devtools.diff.applied'), {})
-    },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
-  })
-  const discardDraft = useMutation({
-    mutationFn: (draftId: string) => discardDomainDraft(project!.id, draftId),
+  const saveWorking = useMutation({
+    mutationFn: async ({ copy, confirmed }: { copy: DomainWorkingCopy, confirmed: boolean }) => saveDomainWorkingCopy(project!.id, copy.id, copy.revision, confirmed),
     onSuccess: async () => {
-      setDraftPreview(null)
+      updateWorkingCopy(null)
+      updateWorkingEdits({})
+      setChangePreview(null)
       setValidation(null)
       setEditedContent(null)
       await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
-      toast(t('studio.devtools.draft.discarded'), {})
+      await saveNodes.refetch()
+      toast(t('studio.devtools.working.saved'), {})
     },
-    onError: reason => toast(String(reason), { variant: 'danger' }),
   })
-  const validateDraft = useMutation({
-    mutationFn: (draftId: string) => validateDomainDraft(project!.id, draftId),
-    onSuccess: setValidation,
+  const restoreSave = useMutation({
+    mutationFn: (nodeId: string) => restoreDomainSaveNode(project!.id, nodeId),
+    onSuccess: async () => {
+      updateWorkingCopy(null)
+      updateWorkingEdits({})
+      setChangePreview(null)
+      setValidation(null)
+      setEditedContent(null)
+      await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
+      await saveNodes.refetch()
+      toast(t('studio.devtools.working.restored'), {})
+    },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
 
@@ -150,68 +141,186 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     if (!project || !target || files.isLoading || target.projectId !== project.id || target.systemId !== tool.id || handledTargetRef.current === target.nonce)
       return
     handledTargetRef.current = target.nonce
-    void consumeNavigationTarget(project, target, projectedFiles, selectFile, setDraftPreview, setValidation)
+    void consumeNavigationTarget(target, projectedFiles, selectFile, acceptWorkingCopyHandoffRef.current)
       .catch(reason => toast(String(reason), { variant: 'danger' }))
   }, [files.data, files.isLoading, project, projectedFiles, target, tool.id])
 
   function selectFile(file: DomainFileRecord | null) {
     setSelectedFile(file)
-    setEditedContent(null)
+    setEditedContent(file ? workingEditsRef.current[file.path]?.content ?? null : null)
     setSelectedSheet('')
   }
 
-  async function handleAiDraftHandoff(handoff: DomainDraftHandoff) {
+  async function handleAiWorkingCopyHandoff(handoff: DomainWorkingCopyHandoff) {
     if (!project || handoff.systemId !== tool.id)
       throw new Error('AI_DRAFT_SCOPE_MISMATCH')
-    const [preview, report] = await Promise.all([
-      previewDomainDraft(project.id, handoff.draftId),
-      validateDomainDraft(project.id, handoff.draftId),
-    ])
-    if (report.systemId !== tool.id || preview.preview.draft.revision < handoff.revision)
-      throw new Error('AI_DRAFT_BINDING_MISMATCH')
-    setDraftPreview(preview)
-    setValidation(report)
+    await acceptWorkingCopyHandoff(handoff.workingCopyId, handoff.revision)
     const handoffFile = projectedFiles.find(file => file.resourceId === handoff.resourceId)
     if (handoffFile)
       selectFile(handoffFile)
     await invalidateWorkspaceQueries(queryClient, project.id, tool.id)
   }
 
-  function saveSource() {
-    if (!canEditSource(selectedFile) || !openedFile.data || editedContent == null || editedContent === openedFile.data.content)
-      return
-    patch.mutate({ opened: openedFile.data, content: editedContent })
+  function updateWorkingCopy(copy: DomainWorkingCopy | null) {
+    workingCopyRef.current = copy
+    setWorkingCopy(copy)
   }
 
-  function validateActiveDraft() {
-    if (!project || !draftPreview)
-      return
-    validateDraft.mutate(draftPreview.preview.draft.id)
+  function updateWorkingEdits(edits: Record<string, WorkingTextEdit>) {
+    workingEditsRef.current = edits
+    setWorkingEdits(edits)
   }
 
-  async function applyActiveDraft() {
-    if (!draftPreview)
+  function editSource(content: string) {
+    if (!selectedFile || !openedFile.data)
       return
-    if (await confirmDraftAction('warning', t('studio.devtools.diff.apply'), t('studio.devtools.diff.apply_confirm')))
-      applyDraft.mutate(draftPreview)
+    const next = { ...workingEditsRef.current }
+    if (content === openedFile.data.content)
+      delete next[selectedFile.path]
+    else
+      next[selectedFile.path] = { content, baseSha256: openedFile.data.sha256 }
+    updateWorkingEdits(next)
+    setEditedContent(content)
+    setValidation(null)
   }
 
-  async function discardActiveDraft() {
-    if (!draftPreview)
-      return
-    if (await confirmDraftAction('danger', t('studio.devtools.draft.discard'), t('studio.devtools.draft.discard_confirm')))
-      discardDraft.mutate(draftPreview.preview.draft.id)
+  async function acceptWorkingCopyHandoff(workingCopyId: string, revision: number) {
+    if (!project)
+      throw new Error('DOMAIN_WORKING_PROJECT_REQUIRED')
+    const preview = await previewDomainWorkingCopy(project.id, workingCopyId)
+    if (preview.draft.revision < revision)
+      throw new Error('DOMAIN_WORKING_REVISION_CONFLICT')
+    updateWorkingCopy({
+      id: workingCopyId,
+      systemId: tool.id,
+      pluginVersion: manifest.version,
+      revision: preview.draft.revision,
+      dirty: preview.changes.length > 0,
+      createdAt: preview.draft.createdAt,
+      updatedAt: preview.draft.updatedAt,
+    })
+    setChangePreview(preview)
+    setValidation(null)
   }
 
-  async function confirmDraftAction(status: 'warning' | 'danger', title: string, description: string): Promise<boolean> {
+  async function ensureWorkingCopyBeforeAi() {
+    const copy = await flushWorkingEdits()
+    if (copy)
+      return { workingCopyId: copy.id, revision: copy.revision }
+    if (!project)
+      throw new Error('DOMAIN_WORKING_PROJECT_REQUIRED')
+    const opened = await openDomainWorkingCopy(project.id, manifest.systemId, manifest.version)
+    updateWorkingCopy(opened)
+    return { workingCopyId: opened.id, revision: opened.revision }
+  }
+
+  async function flushWorkingEdits(): Promise<DomainWorkingCopy | null> {
+    if (syncPromiseRef.current)
+      await syncPromiseRef.current
+    if (Object.keys(workingEditsRef.current).length === 0)
+      return workingCopyRef.current
+    const pending = syncWorkingEdits()
+    syncPromiseRef.current = pending
+    setSyncing(true)
     try {
-      await openConfirmation({ status, title, description: <p>{description}</p> })
+      return await pending
+    }
+    finally {
+      syncPromiseRef.current = null
+      setSyncing(false)
+    }
+  }
+
+  async function syncWorkingEdits(): Promise<DomainWorkingCopy | null> {
+    if (!project)
+      return null
+    let copy = workingCopyRef.current
+    if (!copy) {
+      copy = await openDomainWorkingCopy(project.id, manifest.systemId, manifest.version, t('studio.devtools.working.intent'))
+      updateWorkingCopy(copy)
+    }
+    const edits = Object.entries(workingEditsRef.current)
+    for (const [path, edit] of edits) {
+      const opened = await openDomainWorkingText(project.id, path, copy.id)
+      if (opened.sha256 !== edit.baseSha256)
+        throw new Error('SAFE_FILE_SOURCE_CONFLICT')
+      if (opened.content !== edit.content) {
+        const result = await patchDomainWorkingText(project.id, copy.id, opened, edit.content)
+        copy = { ...copy, revision: result.revision, dirty: true, updatedAt: Date.now() }
+        updateWorkingCopy(copy)
+      }
+      const current = { ...workingEditsRef.current }
+      if (current[path]?.content === edit.content)
+        delete current[path]
+      updateWorkingEdits(current)
+    }
+    const preview = await previewDomainWorkingCopy(project.id, copy.id)
+    setChangePreview(preview)
+    copy = { ...copy, revision: preview.draft.revision, dirty: preview.changes.length > 0, updatedAt: preview.draft.updatedAt }
+    updateWorkingCopy(copy)
+    await invalidateWorkspaceQueries(queryClient, project.id, tool.id)
+    return copy
+  }
+
+  async function saveChanges() {
+    try {
+      const copy = await flushWorkingEdits()
+      if (!copy || !copy.dirty)
+        return
+      const preview = await previewDomainWorkingCopy(project!.id, copy.id)
+      setChangePreview(preview)
+      let confirmed = false
+      if (requiresSaveConfirmation(tool.id, preview)) {
+        confirmed = await confirmRiskSave(preview.changes.length)
+        if (!confirmed)
+          return
+      }
+      try {
+        await saveWorking.mutateAsync({ copy, confirmed })
+      }
+      catch (reason) {
+        if (confirmed || !isSaveConfirmationRequired(reason))
+          throw reason
+        if (await confirmRiskSave(preview.changes.length))
+          await saveWorking.mutateAsync({ copy, confirmed: true })
+      }
+    }
+    catch (reason) {
+      toast(String(reason), { variant: 'danger' })
+    }
+  }
+
+  async function confirmRiskSave(changeCount: number): Promise<boolean> {
+    try {
+      await openConfirmation({ status: 'warning', title: t('studio.devtools.working.risk_title'), description: <p>{t('studio.devtools.working.risk_confirm', { count: changeCount })}</p> })
       return true
     }
     catch {
       return false
     }
   }
+
+  async function reviewChanges() {
+    try {
+      const copy = await flushWorkingEdits()
+      if (!copy)
+        return
+      setChangePreview(await previewDomainWorkingCopy(project!.id, copy.id))
+      setReviewOpen(true)
+    }
+    catch (reason) {
+      toast(String(reason), { variant: 'danger' })
+    }
+  }
+
+  function restorePreviousSave() {
+    const node = saveNodes.data?.[0]
+    if (node)
+      restoreSave.mutate(node.id)
+  }
+
+  const dirty = Object.keys(workingEdits).length > 0 || workingCopy?.dirty === true || (changePreview?.changes.length ?? 0) > 0
+  const busy = saveWorking.isPending || restoreSave.isPending || syncing
 
   return (
     <>
@@ -228,32 +337,31 @@ export function DomainSystemView({ tool, project, onBack, target }: {
             onSelect={selectFile}
           />
         )}
-        toolbar={<FileWorkspaceToolbar manifest={manifest} project={project} selectedPath={selectedFile?.path} />}
-        rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedFile?.resourceId, activeDraftId ?? undefined, handleAiDraftHandoff)}
+        toolbar={(
+          <DomainWorkingToolbar
+            projectName={project?.name}
+            systemId={manifest.systemId}
+            selectedPath={selectedFile?.path}
+            dirty={dirty}
+            changeCount={changePreview?.changes.length ?? Object.keys(workingEdits).length}
+            canRestore={(saveNodes.data?.length ?? 0) > 0}
+            busy={busy}
+            onSave={() => void saveChanges()}
+            onRestore={restorePreviousSave}
+            onReview={() => void reviewChanges()}
+          />
+        )}
+        rightPanel={renderSystemAiPanel(project, manifest, selectedFile?.path, selectedFile?.resourceId, activeWorkingCopyId, ensureWorkingCopyBeforeAi, handleAiWorkingCopyHandoff)}
       >
         <If cond={project != null} else={<NoProject />}>
           <div className="flex h-full min-h-0 flex-col">
-            <If cond={draftPreview != null}>
-              <CompactDraftBar
-                preview={draftPreview}
-                validation={validation}
-                validating={validateDraft.isPending}
-                applying={applyDraft.isPending}
-                discarding={discardDraft.isPending}
-                onValidate={() => void validateActiveDraft()}
-                onApply={() => void applyActiveDraft()}
-                onDiscard={() => void discardActiveDraft()}
-              />
-            </If>
             <FileSourceWorkspace
               selectedFile={selectedFile}
               openedFile={openedFile.data}
               sourceLoading={openedFile.isLoading}
               sourceError={openedFile.error}
               editedContent={editedContent}
-              onEditedContent={setEditedContent}
-              onSaveSource={saveSource}
-              saving={patch.isPending}
+              onEditedContent={editSource}
               workbook={workbook.data}
               workbookLoading={workbook.isLoading}
               workbookError={workbook.error}
@@ -266,6 +374,9 @@ export function DomainSystemView({ tool, project, onBack, target }: {
           </div>
         </If>
       </DevToolWorkspace>
+      <If cond={reviewOpen}>
+        <DomainChangeReviewDialog preview={changePreview} validation={validation} onClose={() => setReviewOpen(false)} />
+      </If>
       {confirmationHolder}
     </>
   )
@@ -333,55 +444,6 @@ function FileTreeButton({ file, selected, onSelect }: { file: DomainFileRecord, 
   )
 }
 
-function FileWorkspaceToolbar({ manifest, project, selectedPath }: { manifest: DomainManifest, project: Mir3Project | null, selectedPath?: string }) {
-  return (
-    <div className="flex min-w-0 flex-1 items-center gap-3 text-[10px] text-muted">
-      <span className="shrink-0">{project?.name ?? manifest.systemId}</span>
-      <If cond={selectedPath != null}>
-        <span className="min-w-0 truncate border-l border-line pl-3 font-mono">{selectedPath}</span>
-      </If>
-    </div>
-  )
-}
-
-function CompactDraftBar({ preview, validation, validating, applying, discarding, onValidate, onApply, onDiscard }: {
-  preview: DomainDraftConfirmation | null
-  validation: DomainValidationReport | null
-  validating: boolean
-  applying: boolean
-  discarding: boolean
-  onValidate: () => void
-  onApply: () => void
-  onDiscard: () => void
-}) {
-  const { t } = useTranslation()
-  if (!preview)
-    return null
-  const valid = validation?.valid === true
-  return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-line bg-panel px-4 py-2">
-      <DraftStateIcon validation={validation} />
-      <span className="min-w-0 flex-1">
-        <strong className="block truncate text-[11px] text-ink">{preview.preview.draft.intent}</strong>
-        <small className={draftMessageClass(validation)}>{draftMessage(t, preview, validation)}</small>
-      </span>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="ghost" isPending={validating} onPress={onValidate}>{t('studio.devtools.draft.validate')}</Button>
-        <Button size="sm" className="bg-accent text-white" isDisabled={!valid} isPending={applying} onPress={onApply}>{t('studio.devtools.draft.apply')}</Button>
-        <Button size="sm" variant="ghost" className="text-danger" isPending={discarding} onPress={onDiscard}>{t('studio.devtools.draft.discard')}</Button>
-      </div>
-    </div>
-  )
-}
-
-function DraftStateIcon({ validation }: { validation: DomainValidationReport | null }) {
-  if (validation?.valid === true)
-    return <CircleCheck className="size-4 shrink-0 text-success" />
-  if (validation?.valid === false)
-    return <CircleExclamation className="size-4 shrink-0 text-danger" />
-  return <span className="size-2 shrink-0 rounded-full bg-warning" />
-}
-
 function FileSourceWorkspace(props: {
   selectedFile: DomainFileRecord | null
   openedFile?: SafeTextOpen
@@ -389,8 +451,6 @@ function FileSourceWorkspace(props: {
   sourceError: Error | null
   editedContent: string | null
   onEditedContent: (content: string) => void
-  onSaveSource: () => void
-  saving: boolean
   workbook?: SafeXlsWorkbook
   workbookLoading: boolean
   workbookError: Error | null
@@ -433,8 +493,8 @@ function FileSourceWorkspace(props: {
           <strong className="block truncate text-xs text-ink">{props.selectedFile.path}</strong>
           <small className="text-[9px] text-muted">{props.openedFile.encoding}</small>
         </span>
-        <If cond={editable}>
-          <Button size="sm" className="bg-accent text-white" isDisabled={content === props.openedFile.content} isPending={props.saving} onPress={props.onSaveSource}>{t('studio.devtools.source.stage')}</Button>
+        <If cond={editable && content !== props.openedFile.content}>
+          <small className="text-[9px] text-accent">{t('studio.devtools.working.buffered')}</small>
         </If>
       </header>
       <textarea readOnly={!editable} className="min-h-0 flex-1 resize-none bg-canvas p-4 font-mono text-xs leading-5 text-ink outline-none" value={content} aria-label={t('studio.devtools.source.editor')} onChange={event => props.onEditedContent(event.target.value)} />
@@ -601,21 +661,30 @@ function renderSystemAiPanel(
   manifest: DomainManifest,
   selectedPath?: string,
   selectedResourceId?: string,
-  draftId?: string,
-  onDraftHandoff?: (handoff: DomainDraftHandoff) => Promise<void>,
+  workingCopyId?: string | null,
+  ensureWorkingCopy?: () => Promise<{ workingCopyId: string, revision: number }>,
+  onWorkingCopyHandoff?: (handoff: DomainWorkingCopyHandoff) => Promise<void>,
 ) {
   if (!project)
     return null
-  return <SystemAiPanel project={project} manifest={manifest} selectedPath={selectedPath} selectedResourceId={selectedResourceId} draftId={draftId} onDraftHandoff={onDraftHandoff} />
+  return (
+    <SystemAiPanel
+      project={project}
+      manifest={manifest}
+      selectedPath={selectedPath}
+      selectedResourceId={selectedResourceId}
+      workingCopyId={workingCopyId}
+      ensureWorkingCopy={ensureWorkingCopy}
+      onWorkingCopyHandoff={onWorkingCopyHandoff}
+    />
+  )
 }
 
 async function consumeNavigationTarget(
-  project: Mir3Project,
   target: VerifiedDevtoolsTarget,
   files: DomainFileRecord[],
   selectFile: (file: DomainFileRecord | null) => void,
-  setDraftPreview: (preview: DomainDraftConfirmation | null) => void,
-  setValidation: (report: DomainValidationReport | null) => void,
+  acceptWorkingCopyHandoff: (workingCopyId: string, revision: number) => Promise<void>,
 ): Promise<void> {
   if (target.relativePath) {
     const file = files.find(item => item.path === target.relativePath)
@@ -623,16 +692,10 @@ async function consumeNavigationTarget(
       throw new Error('DEVTOOLS_RETURN_RESOURCE_NOT_PROJECTED')
     selectFile(file)
   }
-  if (!target.draftId)
+  const workingCopyId = target.workingCopyId ?? target.draftId
+  if (!workingCopyId)
     return
-  const [preview, report] = await Promise.all([
-    previewDomainDraft(project.id, target.draftId),
-    validateDomainDraft(project.id, target.draftId),
-  ])
-  if (report.systemId !== target.systemId || (target.revision != null && preview.preview.draft.revision < target.revision))
-    throw new Error('DEVTOOLS_RETURN_DRAFT_SCOPE_MISMATCH')
-  setDraftPreview(preview)
-  setValidation(report)
+  await acceptWorkingCopyHandoff(workingCopyId, target.revision ?? 0)
 }
 
 async function invalidateWorkspaceQueries(queryClient: ReturnType<typeof useQueryClient>, projectId: string, systemId: string) {
@@ -642,22 +705,6 @@ async function invalidateWorkspaceQueries(queryClient: ReturnType<typeof useQuer
     queryClient.invalidateQueries({ queryKey: ['domain-xls', projectId] }),
     queryClient.invalidateQueries({ queryKey: ['domain-xls-sheet', projectId] }),
   ])
-}
-
-function draftMessage(t: ReturnType<typeof useTranslation>['t'], preview: DomainDraftConfirmation, validation: DomainValidationReport | null) {
-  if (validation?.valid === true)
-    return t('studio.devtools.draft.valid', { count: preview.preview.changes.length })
-  if (validation?.valid === false)
-    return validation.diagnostics[0] ?? t('studio.devtools.draft.invalid')
-  return t('studio.devtools.draft.pending', { count: preview.preview.changes.length })
-}
-
-function draftMessageClass(validation: DomainValidationReport | null) {
-  if (validation?.valid === true)
-    return 'block truncate text-[9px] text-success'
-  if (validation?.valid === false)
-    return 'block truncate text-[9px] text-danger'
-  return 'block truncate text-[9px] text-muted'
 }
 
 function fileTreeButtonClass(selected: boolean) {

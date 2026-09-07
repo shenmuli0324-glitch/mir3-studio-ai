@@ -2,12 +2,12 @@
 
 //! MIR3 领域 MCP STDIO 服务。
 //!
-//! 仅暴露 996 项目状态、领域索引、知识、Draft 与校验，不重复 Harness 的通用
+//! 仅暴露 996 项目状态、领域索引、知识、工作副本与校验，不重复 Harness 的通用
 //! 文件读取、搜索、编辑器或会话能力。
 
 use mir3_domain::{
     DomainFileQuery, DomainManifest, DomainResourceQuery, DomainResourceRecord, DomainStore,
-    DraftChangeInput, GuiWorkspaceOperateRequest, MapDraftOperation, SafeTextPatch,
+    DraftChangeInput, DraftStatus, GuiWorkspaceOperateRequest, MapDraftOperation, SafeTextPatch,
     SafeXlsDraftPatch,
 };
 use semver::{Version, VersionReq};
@@ -27,8 +27,8 @@ const TOOLS: [&str; 16] = [
     "mir3_resource_query",
     "mir3_resource_get",
     "mir3_dependency_resolve",
-    "mir3_draft_open",
-    "mir3_draft_diff",
+    "mir3_working_copy_open",
+    "mir3_working_copy_inspect",
     "mir3_domain_operate",
     "mir3_capability_list",
     "mir3_capability_describe",
@@ -136,9 +136,15 @@ fn handle_request(store: &DomainStore, project_id: &str, request: &Value) -> Opt
 }
 
 fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> Value {
+    // 旧版 Draft 工具名仅作为隐藏协议兼容入口，不再暴露给新会话。
+    let canonical_name = match name {
+        "mir3_draft_open" => "mir3_working_copy_open",
+        "mir3_draft_diff" => "mir3_working_copy_inspect",
+        _ => name,
+    };
     let Some(input_schema) = tool_definitions()
         .into_iter()
-        .find(|definition| definition.get("name").and_then(Value::as_str) == Some(name))
+        .find(|definition| definition.get("name").and_then(Value::as_str) == Some(canonical_name))
         .and_then(|definition| definition.get("inputSchema").cloned())
     else {
         return tool_failure(&format!("MCP_TOOL_UNKNOWN: {name}"));
@@ -151,7 +157,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
         .and_then(Value::as_str)
         .map(str::trim)
         .unwrap_or_default();
-    let result = match name {
+    let result = match canonical_name {
         "mir3_gui_context" => required_string(&args, "path")
             .and_then(|path| {
                 let token = required_string(&args, "workspaceToken")?;
@@ -325,13 +331,13 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 store.resolve_domain_dependencies(&system_id)
             })
             .map(|graph| json!({"graph": graph})),
-        "mir3_draft_open" => {
+        "mir3_working_copy_open" => {
             let system_id = required_string(&args, "systemId");
             let intent = required_string(&args, "intent");
             system_id
                 .and_then(|system_id| intent.map(|intent| (system_id, intent)))
                 .and_then(|(system_id, intent)| {
-                    store.authorize_task_scope(
+                    let lease = store.authorize_task_scope(
                         project_id,
                         scope_token,
                         Some(&system_id),
@@ -339,6 +345,20 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         None,
                     )?;
                     let description = store.describe_domain_system(project_id, &system_id)?;
+                    // Studio 在发送 AI 任务前已把人工 buffer 同步到共享副本。
+                    // 工具被重复调用时必须返回该副本，不能再分叉出第二个事务。
+                    for working_copy_id in &lease.draft_ids {
+                        let Ok(manifest) = store.draft_domain_manifest(project_id, working_copy_id)
+                        else {
+                            continue;
+                        };
+                        let Ok(draft) = store.get_draft(project_id, working_copy_id) else {
+                            continue;
+                        };
+                        if manifest.system_id == system_id && draft.status == DraftStatus::Open {
+                            return Ok((system_id, draft));
+                        }
+                    }
                     let draft = store.open_draft(project_id, &intent)?;
                     store.bind_draft_domain(
                         project_id,
@@ -353,18 +373,21 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 .map(|(system_id, draft)| {
                     json!({
                         "systemId": system_id,
+                        "workingCopyId": draft.id,
                         "draftId": draft.id,
                         "revision": draft.revision,
                         "validation": Value::Null,
                         "changedResources": [],
+                        "workingCopy": draft,
                         "draft": draft
                     })
                 })
         }
-        "mir3_draft_diff" => required_string(&args, "draftId").and_then(|draft_id| {
+        "mir3_working_copy_inspect" => required_working_copy_id(&args).and_then(|draft_id| {
             store.authorize_task_scope(project_id, scope_token, None, None, Some(&draft_id))?;
             let preview = store.preview_draft(project_id, &draft_id)?;
             Ok(json!({
+                "workingCopyId": draft_id,
                 "draftId": draft_id,
                 "revision": preview.draft.revision,
                 "status": preview.draft.status,
@@ -373,7 +396,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
             }))
         }),
         "mir3_domain_operate" => {
-            let draft_id = required_string(&args, "draftId");
+            let draft_id = required_working_copy_id(&args);
             let capability_id = required_string(&args, "capabilityId");
             draft_id
                 .and_then(|draft_id| capability_id.map(|capability_id| (draft_id, capability_id)))
@@ -650,7 +673,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                             "targetEngine":target_engine
                         }));
                     }
-                    let draft_id = required_string(&args, "draftId")?;
+                    let draft_id = required_working_copy_id(&args)?;
                     let pinned = store.validate_draft_capability(
                         project_id,
                         &draft_id,
@@ -705,7 +728,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                         &args,
                     );
                 }
-                let draft_id = required_string(&args, "draftId")?;
+                let draft_id = required_working_copy_id(&args)?;
                 let scoped = store.validate_user_capability_version_for_draft(
                     project_id,
                     &draft_id,
@@ -774,6 +797,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 Ok(json!({
                     "capabilityId":capability_id,
                     "version":requested_version,
+                    "workingCopyId":draft_id,
                     "draftId":draft_id,
                     "results":results,
                 }))
@@ -781,12 +805,19 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
         }
         "mir3_validate" => store.validate_project(project_id).and_then(|project| {
             let system_id = args.get("systemId").and_then(Value::as_str);
-            let draft = args.get("draftId").and_then(Value::as_str);
-            store.authorize_task_scope(project_id, scope_token, system_id, None, draft)?;
+            let draft = optional_working_copy_id(&args)?;
+            store.authorize_task_scope(
+                project_id,
+                scope_token,
+                system_id,
+                None,
+                draft.as_deref(),
+            )?;
             let domain = system_id
                 .map(|system_id| store.validate_domain_system(project_id, system_id))
                 .transpose()?;
             let draft_validation = draft
+                .as_deref()
                 .map(|draft_id| store.validate_domain_draft(project_id, draft_id))
                 .transpose()?;
             if let (Some(system_id), Some(report)) = (system_id, draft_validation.as_ref()) {
@@ -798,6 +829,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 }
             }
             let draft_preview = draft
+                .as_deref()
                 .map(|draft_id| store.preview_draft(project_id, draft_id))
                 .transpose()?;
             let valid = project.status != mir3_domain::ProjectStatus::Missing
@@ -820,6 +852,7 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
             Ok(json!({
                 "valid": valid,
                 "systemId": system_id,
+                "workingCopyId": draft,
                 "draftId": draft,
                 "revision": revision,
                 "validation": draft_validation.clone(),
@@ -948,9 +981,9 @@ fn invoke_global_user_capability(
     capability: &mir3_domain::UserCapability,
     args: &Value,
 ) -> Result<Value, String> {
-    if args.get("draftId").is_some() {
+    if optional_working_copy_id(args)?.is_some() {
         return Err(
-            "GLOBAL_CAPABILITY_COMPOSITE_REQUIRED: global workflows do not accept draftId"
+            "GLOBAL_CAPABILITY_COMPOSITE_REQUIRED: global workflows do not accept workingCopyId"
                 .to_string(),
         );
     }
@@ -1213,22 +1246,22 @@ fn tool_definitions() -> Vec<Value> {
             with_project_read(system_schema()),
         ),
         tool(
-            "mir3_draft_open",
-            "为指定系统创建外置 Draft；不会修改正式项目。",
+            "mir3_working_copy_open",
+            "取得指定系统的共享工作副本；修改只进入 Studio 私有事务区，不直接写正式项目。",
             with_scope(
                 json!({"type":"object","properties":{"systemId":{"type":"string"},"intent":{"type":"string","minLength":1}},"required":["systemId","intent"],"additionalProperties":false}),
             ),
         ),
         tool(
-            "mir3_draft_diff",
-            "返回作用域内 Draft 的稳定预览、统一 Diff、内容哈希和当前 revision。",
+            "mir3_working_copy_inspect",
+            "返回作用域内工作副本的变更摘要、可选 Diff、内容哈希和当前 revision。",
             with_scope(
-                json!({"type":"object","properties":{"draftId":{"type":"string","minLength":1}},"required":["draftId"],"additionalProperties":false}),
+                working_copy_id_schema(),
             ),
         ),
         tool(
             "mir3_domain_operate",
-            "按领域包白名单向外置 Draft 写入安全结构化操作。",
+            "按领域包白名单向共享工作副本写入安全结构化操作。",
             with_scope(operation_schema()),
         ),
         tool(
@@ -1247,16 +1280,16 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "mir3_capability_invoke",
-            "在外置 Draft 中调用一个安全领域能力。",
+            "在共享工作副本中调用一个安全领域能力。",
             with_scope(
-                json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"},"systemId":{"type":"string"},"draftId":{"type":"string"},"compositeId":{"type":"string"},"params":{"type":"object"}},"required":["capabilityId","params"],"additionalProperties":false}),
+                json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"},"systemId":{"type":"string"},"workingCopyId":{"type":"string"},"draftId":{"type":"string"},"compositeId":{"type":"string"},"params":{"type":"object"}},"required":["capabilityId","params"],"additionalProperties":false}),
             ),
         ),
         tool(
             "mir3_validate",
-            "执行项目、领域和可选 Draft 校验。",
+            "执行项目、领域和可选工作副本校验。",
             with_scope(
-                json!({"type":"object","properties":{"systemId":{"type":"string"},"draftId":{"type":"string"}},"additionalProperties":false}),
+                json!({"type":"object","properties":{"systemId":{"type":"string"},"workingCopyId":{"type":"string"},"draftId":{"type":"string"}},"additionalProperties":false}),
             ),
         ),
     ]
@@ -1288,7 +1321,11 @@ fn system_schema() -> Value {
 }
 
 fn operation_schema() -> Value {
-    json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"},"draftId":{"type":"string"},"params":{"type":"object"}},"required":["capabilityId","draftId","params"],"additionalProperties":false})
+    json!({"type":"object","properties":{"capabilityId":{"type":"string"},"version":{"type":"string"},"workingCopyId":{"type":"string"},"draftId":{"type":"string"},"params":{"type":"object"}},"required":["capabilityId","params"],"oneOf":[{"required":["workingCopyId"]},{"required":["draftId"]}],"additionalProperties":false})
+}
+
+fn working_copy_id_schema() -> Value {
+    json!({"type":"object","properties":{"workingCopyId":{"type":"string","minLength":1},"draftId":{"type":"string","minLength":1}},"oneOf":[{"required":["workingCopyId"]},{"required":["draftId"]}],"additionalProperties":false})
 }
 
 fn with_scope(mut schema: Value) -> Value {
@@ -1347,6 +1384,35 @@ fn required_string(args: &Value, key: &str) -> Result<String, String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| format!("MCP_ARGUMENT_INVALID: {key} is required"))
+}
+
+/// 工作副本 ID 是新协议名；Draft ID 仅用于读取旧会话和旧插件请求。
+fn required_working_copy_id(args: &Value) -> Result<String, String> {
+    optional_working_copy_id(args)?
+        .ok_or_else(|| "MCP_ARGUMENT_INVALID: workingCopyId is required".to_string())
+}
+
+fn optional_working_copy_id(args: &Value) -> Result<Option<String>, String> {
+    let working_copy_id = args
+        .get("workingCopyId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let legacy_draft_id = args
+        .get("draftId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if working_copy_id.is_some() && legacy_draft_id.is_some() && working_copy_id != legacy_draft_id
+    {
+        return Err(
+            "MCP_ARGUMENT_CONFLICT: workingCopyId and legacy draftId identify different working copies"
+                .to_string(),
+        );
+    }
+    Ok(working_copy_id.or(legacy_draft_id))
 }
 
 fn validate_requested_version(args: &Value, actual: &str) -> Result<(), String> {
@@ -1546,7 +1612,7 @@ fn execute_manifest_operation(
     Ok(result)
 }
 
-/// 工具结果显式携带可验证的 Draft 交接字段，避免 Studio 从自由文本或内部步骤猜测状态。
+/// 工具结果显式携带可验证的工作副本交接字段，避免 Studio 从自由文本猜测状态。
 fn enrich_draft_handoff_result(
     store: &DomainStore,
     project_id: &str,
@@ -1578,6 +1644,7 @@ fn enrich_draft_handoff_result(
     let object = result
         .as_object_mut()
         .expect("new result envelope is an object");
+    object.insert("workingCopyId".into(), Value::String(draft_id.to_string()));
     object.insert("draftId".into(), Value::String(draft_id.to_string()));
     object.insert("systemId".into(), Value::String(system_id.to_string()));
     object.insert("revision".into(), Value::from(revision));
@@ -3090,6 +3157,7 @@ fn apply_safe_operation(
         let result = store.safe_xls_patch(project_id, &request)?;
         return Ok(json!({
             "preview": result.preview,
+            "workingCopyId": result.draft_id,
             "draftId": result.draft_id,
             "revision": result.revision,
             "sha256": result.sha256
@@ -3282,6 +3350,7 @@ fn apply_safe_operation(
     )?;
     Ok(json!({
         "preview": result.preview,
+        "workingCopyId": result.draft_id,
         "draftId": result.draft_id,
         "revision": result.revision,
         "sha256": result.sha256
@@ -3401,18 +3470,23 @@ mod tests {
                 .and_then(Value::as_u64),
             Some(MCP_MAX_QUERY_ITEMS as u64)
         );
-        let draft_diff = definitions
+        let working_copy_inspect = definitions
             .iter()
-            .find(|definition| definition["name"] == "mir3_draft_diff")
+            .find(|definition| definition["name"] == "mir3_working_copy_inspect")
             .unwrap();
         assert_eq!(
-            draft_diff.pointer("/inputSchema/additionalProperties"),
+            working_copy_inspect.pointer("/inputSchema/additionalProperties"),
             Some(&json!(false))
         );
         assert_eq!(
-            draft_diff.pointer("/inputSchema/required"),
-            Some(&json!(["draftId", "scopeToken"]))
+            working_copy_inspect.pointer("/inputSchema/required"),
+            Some(&json!(["scopeToken"]))
         );
+        assert!(working_copy_inspect
+            .pointer("/inputSchema/properties/workingCopyId")
+            .is_some());
+        assert!(!names.contains(&"mir3_draft_open"));
+        assert!(!names.contains(&"mir3_draft_diff"));
     }
 
     #[test]
@@ -3987,7 +4061,7 @@ mod tests {
         let unscoped_write = call_tool(
             &store,
             &project.id,
-            "mir3_draft_open",
+            "mir3_working_copy_open",
             json!({"systemId":"quest","intent":"must fail"}),
         );
         assert!(tool_error(&unscoped_write).contains("scopeToken"));
@@ -4193,11 +4267,23 @@ mod tests {
                 mir3_domain::now_millis() + 60_000,
             )
             .unwrap();
+        let reopened = call_tool(
+            &store,
+            &project.id,
+            "mir3_working_copy_open",
+            json!({"scopeToken":lease.token.clone(),"systemId":"quest","intent":"reuse shared working copy"}),
+        );
+        assert_eq!(reopened["isError"], false);
+        assert_eq!(
+            reopened.pointer("/structuredContent/workingCopyId"),
+            Some(&json!(draft.id))
+        );
+        assert_eq!(store.list_drafts(&project.id).unwrap().len(), 1);
         let result = call_tool(
             &store,
             &project.id,
-            "mir3_draft_diff",
-            json!({"scopeToken":lease.token.clone(),"draftId":draft.id}),
+            "mir3_working_copy_inspect",
+            json!({"scopeToken":lease.token.clone(),"workingCopyId":draft.id}),
         );
         assert_eq!(result["isError"], false);
         assert_eq!(

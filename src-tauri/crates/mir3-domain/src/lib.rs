@@ -16,6 +16,7 @@ mod safe_files;
 mod scan;
 mod store;
 mod systems;
+mod working_copy;
 
 pub use draft::*;
 pub use fixtures::*;
@@ -30,3 +31,4 @@ pub use safe_files::*;
 pub use scan::*;
 pub use store::*;
 pub use systems::*;
+pub use working_copy::*;

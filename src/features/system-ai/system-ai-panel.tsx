@@ -1,5 +1,5 @@
 import type { AiConversationMessage, AiPendingInteraction } from './ai-conversation-panel'
-import type { DomainDraftHandoff } from './ai-handoff'
+import type { DomainWorkingCopyHandoff } from './ai-handoff'
 import type { CapabilityResolution, DomainManifest, DomainMemory, TaskReceipt, TaskScopeLease } from '@/features/devtools/domain/types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
@@ -10,11 +10,11 @@ import { DEV_TOOLS } from '@/features/devtools/devtool-registry'
 import { associateDomainDraftComposite, bindSystemSession, getSystemSession, issueTaskScope, listDomainMemories, listDomainSystems, listTaskReceipts, openDomainDraft, resolveUserCapabilities, revokeTaskScope, revokeTaskScopes } from '@/features/devtools/domain/api'
 import { bridgeRequestId, ensureHarnessProjectActive, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
 import { AiConversationPanel } from './ai-conversation-panel'
-import { draftHandoffs, includeGlobalTaskDraft, markGlobalTaskMcpDisabled, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask } from './ai-handoff'
+import { includeGlobalTaskWorkingCopy, markGlobalTaskMcpDisabled, matchesTaskIdentity, registeredGlobalTask, registerGlobalTask, requestGlobalWorkbench, unregisterGlobalTask, workingCopyHandoffs } from './ai-handoff'
 import { compensateGlobalDraftSetup } from './global-draft-compensation'
 import { appendScopedUserRequest, buildGlobalTaskHandoff, projectTaskMessages, taskGoalFromMessages } from './global-task-handoff'
 import { retireSourceTaskScope } from './global-task-recovery'
-import { currentScopeLease, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from './scope-lease-manager'
+import { currentScopeLease, includeScopeLeaseWorkingCopy, manageScopeLease, stopScopeLease } from './scope-lease-manager'
 import { assertSystemTaskScopeLease, buildSystemTaskRenewalContract, buildSystemTaskScopeContract, systemTaskSafetyInstructions } from './system-task-scope'
 
 type AiMessage = AiConversationMessage
@@ -29,14 +29,17 @@ interface SessionSnapshot {
   promptError?: string | null
 }
 
-export function SystemAiPanel({ project, manifest, selectedPath, selectedResourceId, draftId, onDraftHandoff }: {
+interface SystemAiPanelProps {
   project: Mir3Project
   manifest: DomainManifest
   selectedPath?: string | null
   selectedResourceId?: string | null
-  draftId?: string | null
-  onDraftHandoff?: (handoff: DomainDraftHandoff) => Promise<void>
-}) {
+  workingCopyId?: string | null
+  ensureWorkingCopy?: () => Promise<{ workingCopyId: string, revision: number }>
+  onWorkingCopyHandoff?: (handoff: DomainWorkingCopyHandoff) => Promise<void>
+}
+
+export function SystemAiPanel({ project, manifest, selectedPath, selectedResourceId, workingCopyId, ensureWorkingCopy, onWorkingCopyHandoff }: SystemAiPanelProps) {
   const { t } = useTranslation()
   const projectRoot = project.root
   const projectWorkspaceRoot = project.activeWorkspaceRoot
@@ -51,7 +54,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
   const [messages, setMessages] = useState<AiMessage[]>([])
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [scopeDraftId, setScopeDraftId] = useState<string | null>(null)
+  const [scopeWorkingCopyId, setScopeWorkingCopyId] = useState<string | null>(null)
   const [activeMemories, setActiveMemories] = useState<DomainMemory[]>([])
   const [reusableReceipts, setReusableReceipts] = useState<TaskReceipt[]>([])
   const [resolvedCapabilities, setResolvedCapabilities] = useState<CapabilityResolution[]>([])
@@ -108,9 +111,9 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         setConnected(true)
       const globalTask = registeredGlobalTask(message)
       if (globalTask) {
-        for (const handoff of draftHandoffs(message, globalTask)) {
-          includeGlobalTaskDraft(globalTask, handoff.draftId)
-          includeScopeLeaseDraft(globalTask, handoff.draftId)
+        for (const handoff of workingCopyHandoffs(message, globalTask)) {
+          includeGlobalTaskWorkingCopy(globalTask, handoff.workingCopyId)
+          includeScopeLeaseWorkingCopy(globalTask, handoff.workingCopyId)
         }
       }
       if (globalTask && message.type === 'mir3/globalSession.cancelled') {
@@ -176,11 +179,11 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         setRunning(false)
       if (message.type === 'mir3/systemSession.cancelled' || message.type === 'mir3/systemSession.completed')
         void stopScopeLease(identity)
-      for (const handoff of draftHandoffs(message, identity)) {
-        includeScopeLeaseDraft(identity, handoff.draftId)
-        setScopeDraftId(handoff.draftId)
-        if (onDraftHandoff)
-          void onDraftHandoff(handoff).catch(reason => setError(String(reason)))
+      for (const handoff of workingCopyHandoffs(message, identity)) {
+        includeScopeLeaseWorkingCopy(identity, handoff.workingCopyId)
+        setScopeWorkingCopyId(handoff.workingCopyId)
+        if (onWorkingCopyHandoff)
+          void onWorkingCopyHandoff(handoff).catch(reason => setError(String(reason)))
       }
       if (message.type === 'mir3/systemSession.snapshot') {
         if (message.sessionId)
@@ -205,7 +208,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       if (activeSessionId)
         void stopScopeLease({ projectId: project.id, taskId, sessionId: activeSessionId })
     }
-  }, [manifest.systemId, onDraftHandoff, project.id, taskId])
+  }, [manifest.systemId, onWorkingCopyHandoff, project.id, taskId])
 
   useEffect(() => {
     if (!connected || !sessionId || resumedSessionRef.current === sessionId)
@@ -246,9 +249,24 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       setError(String(reason))
       return
     }
+    let activeWorkingCopyId = workingCopyId ?? null
+    let activeWorkingRevision: number | null = null
+    if (ensureWorkingCopy) {
+      try {
+        const prepared = await ensureWorkingCopy()
+        if (!prepared.workingCopyId || !Number.isSafeInteger(prepared.revision) || prepared.revision < 0)
+          throw new Error('SYSTEM_WORKING_COPY_INVALID: synchronized Working Copy is invalid')
+        activeWorkingCopyId = prepared.workingCopyId
+        activeWorkingRevision = prepared.revision
+      }
+      catch (reason) {
+        setError(String(reason))
+        return
+      }
+    }
     if (globalWriteSystems.length > 0) {
       setInput('')
-      await openGlobalTask(content)
+      await openGlobalTask(content, activeWorkingCopyId)
       return
     }
     if (sessionId && !sessionReady) {
@@ -268,18 +286,18 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     }
     const leaseIdentity = { projectId: project.id, taskId, sessionId: activeSessionId }
     let activeLease = currentScopeLease(leaseIdentity)
-    if (!activeLease || scopeDraftId !== (draftId ?? null)) {
+    if (!activeLease || scopeWorkingCopyId !== activeWorkingCopyId) {
       try {
         if (activeLease)
           await stopScopeLease(leaseIdentity)
         const manifests = await listDomainSystems()
-        const contract = buildSystemTaskScopeContract(manifest, taskId, draftId, manifests)
+        const contract = buildSystemTaskScopeContract(manifest, taskId, activeWorkingCopyId, manifests)
         const issued = await issueTaskScope(
           project.id,
           contract.taskId,
           contract.readSystems,
           [contract.systemId],
-          contract.draftIds,
+          contract.workingCopyIds,
           contract.pluginVersions,
         )
         try {
@@ -289,8 +307,8 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
           await revokeTaskScope(project.id, issued.token).catch(() => {})
           throw reason
         }
-        manageSystemLease(activeLease, leaseIdentity, project, manifest, draftId, reason => setError(String(reason)))
-        setScopeDraftId(draftId ?? null)
+        manageSystemLease(activeLease, leaseIdentity, project, manifest, activeWorkingCopyId, reason => setError(String(reason)))
+        setScopeWorkingCopyId(activeWorkingCopyId)
       }
       catch (reason) {
         setError(String(reason))
@@ -306,13 +324,13 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         systemId: manifest.systemId,
         sessionId: activeSessionId,
         pluginVersion: manifest.version,
-        draftId,
+        draftId: activeWorkingCopyId,
         status: 'active',
         updatedAt: now,
       })
       const posted = postSessionMessage('mir3/systemSession.create', project.id, manifest.systemId, taskId, activeSessionId, {
         cwd: project.activeWorkspaceRoot,
-        prompt: scopedPrompt(content, manifest, project, selectedPath, selectedResourceId, draftId, activeScopeToken, activeMemories, reusableReceipts, resolvedCapabilities),
+        prompt: scopedPrompt(content, manifest, project, selectedPath, selectedResourceId, activeWorkingCopyId, activeWorkingRevision, activeScopeToken, activeMemories, reusableReceipts, resolvedCapabilities),
       })
       if (!posted) {
         void stopScopeLease(leaseIdentity)
@@ -321,7 +339,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       return
     }
     const posted = postSessionMessage('mir3/systemSession.prompt', project.id, manifest.systemId, taskId, activeSessionId, {
-      content: scopedPrompt(content, manifest, project, selectedPath, selectedResourceId, draftId, activeScopeToken, activeMemories, reusableReceipts, resolvedCapabilities),
+      content: scopedPrompt(content, manifest, project, selectedPath, selectedResourceId, activeWorkingCopyId, activeWorkingRevision, activeScopeToken, activeMemories, reusableReceipts, resolvedCapabilities),
       mode: 'queue',
     })
     if (!posted) {
@@ -342,7 +360,7 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
     }
   }
 
-  async function openGlobalTask(content: string) {
+  async function openGlobalTask(content: string, activeWorkingCopyId: string | null) {
     setGlobalPending(true)
     setError(null)
     const createdDraftIds: string[] = []
@@ -364,10 +382,10 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
       const draftIds: string[] = []
       for (const systemId of writeSystems) {
         const version = pluginVersions[systemId]
-        if (systemId === manifest.systemId && draftId) {
-          await associateDomainDraftComposite(project.id, draftId, systemId, version, compositeId)
-          associatedDraft = { draftId, systemId, pluginVersion: version, compositeId }
-          draftIds.push(draftId)
+        if (systemId === manifest.systemId && activeWorkingCopyId) {
+          await associateDomainDraftComposite(project.id, activeWorkingCopyId, systemId, version, compositeId)
+          associatedDraft = { draftId: activeWorkingCopyId, systemId, pluginVersion: version, compositeId }
+          draftIds.push(activeWorkingCopyId)
           continue
         }
         const draft = await openDomainDraft(
@@ -441,12 +459,14 @@ export function SystemAiPanel({ project, manifest, selectedPath, selectedResourc
         ...handoff,
         scopeToken: lease.token,
         compositeId,
+        workingCopyIds: lease.draftIds,
         returnTo: {
           view: 'devtools',
           projectId: project.id,
           systemId: manifest.systemId,
           resourceId: selectedResourceId,
-          draftId,
+          workingCopyId: activeWorkingCopyId,
+          draftId: activeWorkingCopyId,
         },
       }
       const posted = postHarnessBridge({
@@ -647,7 +667,7 @@ function manageSystemLease(
   identity: { projectId: string, taskId: string, sessionId: string },
   project: Mir3Project,
   manifest: DomainManifest,
-  draftId?: string | null,
+  workingCopyId?: string | null,
   onError?: (reason: unknown) => void,
 ): void {
   manageScopeLease({
@@ -660,7 +680,7 @@ function manageSystemLease(
         contract.taskId,
         contract.readSystems,
         [contract.systemId],
-        contract.draftIds,
+        contract.workingCopyIds,
         contract.pluginVersions,
       )
       let renewed: TaskScopeLease
@@ -678,7 +698,7 @@ function manageSystemLease(
         identity.taskId,
         identity.sessionId,
         {
-          content: `[MIR3 Scope Renewal] scopeToken=${renewed.token}; draft=${draftId ?? 'none'}; expiresAt=${renewed.expiresAt}.`,
+          content: `[MIR3 Scope Renewal] scopeToken=${renewed.token}; workingCopy=${workingCopyId ?? 'none'}; expiresAt=${renewed.expiresAt}.`,
           mode: 'steer',
         },
       )
@@ -762,21 +782,22 @@ function scopedPrompt(
   project: Mir3Project,
   selectedPath?: string | null,
   selectedResourceId?: string | null,
-  draftId?: string | null,
+  workingCopyId?: string | null,
+  workingRevision?: number | null,
   scopeToken?: string,
   memories: DomainMemory[] = [],
   receipts: TaskReceipt[] = [],
   capabilities: CapabilityResolution[] = [],
 ) {
   const context = [
-    `[MIR3 System Scope] project=${project.id}; system=${manifest.systemId}; plugin=${manifest.version}; writeSystems=${manifest.systemId}; readSystems=${[manifest.systemId, ...manifest.dependencies].join(',')}; draft=${draftId ?? 'none'}; selectedFile=${selectedPath ?? 'none'}; selectedResource=${selectedResourceId ?? 'none'}; scopeToken=${scopeToken ?? 'none'}.`,
+    `[MIR3 System Scope] project=${project.id}; system=${manifest.systemId}; plugin=${manifest.version}; writeSystems=${manifest.systemId}; readSystems=${[manifest.systemId, ...manifest.dependencies].join(',')}; workingCopy=${workingCopyId ?? 'none'}; workingRevision=${workingRevision ?? 'unknown'}; selectedFile=${selectedPath ?? 'none'}; selectedResource=${selectedResourceId ?? 'none'}; scopeToken=${scopeToken ?? 'none'}.`,
     systemTaskSafetyInstructions(manifest),
   ]
   if (memories.length > 0)
     context.push(`[Activated domain memories]\n${memories.slice(0, 8).map(memory => `- ${memory.summary}`).join('\n')}`)
   if (receipts.length > 0) {
     context.push(`[Relevant task receipts]\n${receipts.slice(0, 6).map(receipt => (
-      `- id=${receipt.id}; status=${receipt.status}; draft=${receipt.draftId ?? 'none'}; summary=${receipt.summary.slice(0, 160)}`
+      `- id=${receipt.id}; status=${receipt.status}; workingCopy=${receipt.draftId ?? 'none'}; summary=${receipt.summary.slice(0, 160)}`
     )).join('\n')}`)
   }
   if (capabilities.length > 0) {

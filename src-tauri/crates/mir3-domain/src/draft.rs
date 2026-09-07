@@ -1705,7 +1705,7 @@ fn validate_relative_path(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn safe_project_target(root: &Path, relative: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_project_target(root: &Path, relative: &str) -> Result<PathBuf, String> {
     validate_relative_path(relative)?;
     let canonical_root =
         fs::canonicalize(root).map_err(|e| format!("PROJECT_PATH_INVALID: {e}"))?;
@@ -1789,7 +1789,7 @@ fn sync_directory_io(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn hash_bytes(bytes: &[u8]) -> String {
+pub(crate) fn hash_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     format!("{:x}", hasher.finalize())

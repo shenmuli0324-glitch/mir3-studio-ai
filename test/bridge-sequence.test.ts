@@ -280,6 +280,7 @@ describe('bridge protocol v2 sequence contract', () => {
 
     const structured = harness.posts.find(message => message.type === 'mir3/systemSession.snapshot' && message.payload?.domainResults?.length > 0)
     expect(structured?.payload.domainResults).toEqual([{
+      workingCopyId: 'draft-1',
       draftId: 'draft-1',
       revision: 7,
       systemId: 'shop',

@@ -1614,6 +1614,16 @@ impl DomainStore {
         project_id: &str,
         snapshot_id: &str,
     ) -> Result<Snapshot, String> {
+        self.restore_snapshot_with_governance_and_inverse(project_id, snapshot_id)
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    /// 保存节点撤回除目标快照外还需要反向快照，以便把“撤回”本身追加为可再次撤回的节点。
+    pub fn restore_snapshot_with_governance_and_inverse(
+        &self,
+        project_id: &str,
+        snapshot_id: &str,
+    ) -> Result<(Snapshot, Snapshot), String> {
         let _project_mutation = self.reserve_composite_mutation(project_id)?;
         let snapshot = self
             .list_snapshots(project_id)?
@@ -1681,9 +1691,10 @@ impl DomainStore {
             project_capabilities,
             shared_capabilities,
         };
+        let inverse_snapshot = journal.inverse_snapshot.clone();
         let journal_path = self.persist_snapshot_governance_journal(&journal)?;
         self.complete_snapshot_governance_restore(&journal_path, &journal)?;
-        Ok(snapshot)
+        Ok((snapshot, inverse_snapshot))
     }
 
     fn complete_snapshot_governance_restore(
@@ -7074,7 +7085,10 @@ mod tests {
                 }],
             )
             .unwrap_err();
-        assert!(competing.starts_with("DRAFT_MUTATION_RESERVED:"));
+        assert!(
+            competing.starts_with("DRAFT_MUTATION_RESERVED:"),
+            "unexpected competing mutation error: {competing}"
+        );
         release.wait();
         assert_eq!(worker.join().unwrap().unwrap().draft.revision, 1);
         *store.governance_copy_test_gate.lock().unwrap() = None;
@@ -7119,7 +7133,10 @@ mod tests {
                 }],
             )
             .unwrap_err();
-        assert!(competing.starts_with("DRAFT_MUTATION_RESERVED:"));
+        assert!(
+            competing.starts_with("DRAFT_MUTATION_RESERVED:"),
+            "unexpected competing mutation error: {competing}"
+        );
         release.wait();
         assert_eq!(
             worker.join().unwrap().unwrap().id,

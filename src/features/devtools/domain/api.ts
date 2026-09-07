@@ -4,18 +4,24 @@ import type {
   CompositeDraftApplyInput,
   CompositeDraftApplyResult,
   CompositeDraftReview,
+  DomainCompositeWorkingSaveResult,
   DomainDependencyGraph,
   DomainDraft,
   DomainDraftConfirmation,
+  DomainDraftPreview,
   DomainFileRecord,
   DomainManifest,
   DomainMemory,
   DomainPackState,
   DomainPackUpdateCheck,
   DomainResourceRecord,
+  DomainSaveNode,
   DomainSnapshot,
   DomainSystemDescription,
   DomainValidationReport,
+  DomainWorkingCopy,
+  DomainWorkingRestoreResult,
+  DomainWorkingSaveResult,
   GlobalCapabilityCompileRequest,
   LegacyDraftCloneRequest,
   SafeTextOpen,
@@ -107,6 +113,49 @@ export function patchDomainText(projectId: string, opened: SafeTextOpen, newCont
       newline: opened.newline,
     },
   })
+}
+
+export function openDomainWorkingCopy(projectId: string, systemId: string, pluginVersion: string, intent?: string) {
+  return invoke<DomainWorkingCopy>('domain_working_copy_open', { projectId, systemId, pluginVersion, intent })
+}
+
+export function openDomainWorkingText(projectId: string, relativePath: string, workingCopyId?: string | null) {
+  return invoke<SafeTextOpen>('domain_working_file_open', { projectId, relativePath, workingCopyId })
+}
+
+export function patchDomainWorkingText(projectId: string, workingCopyId: string, opened: SafeTextOpen, newContent: string) {
+  return invoke<SafeTextPatchResult>('domain_working_text_patch', {
+    projectId,
+    workingCopyId,
+    operation: {
+      relativePath: opened.relativePath,
+      expectedRevision: opened.revision,
+      expectedSha256: opened.sha256,
+      originalContent: opened.content,
+      newContent,
+      newline: opened.newline,
+    },
+  })
+}
+
+export function previewDomainWorkingCopy(projectId: string, workingCopyId: string) {
+  return invoke<DomainDraftPreview>('domain_working_copy_preview', { projectId, workingCopyId })
+}
+
+export function saveDomainWorkingCopy(projectId: string, workingCopyId: string, expectedRevision: number, confirmed = false) {
+  return invoke<DomainWorkingSaveResult>('domain_working_save', { projectId, workingCopyId, expectedRevision, confirmed })
+}
+
+export function listDomainSaveNodes(projectId: string, systemId?: string | null, limit = 100) {
+  return invoke<DomainSaveNode[]>('domain_save_node_list', { projectId, systemId, limit })
+}
+
+export function restoreDomainSaveNode(projectId: string, nodeId: string) {
+  return invoke<DomainWorkingRestoreResult>('domain_save_node_restore', { projectId, nodeId })
+}
+
+export function saveDomainWorkingCopies(projectId: string, compositeId: string, workingCopies: Array<{ workingCopyId: string, expectedRevision: number }>, confirmed: boolean) {
+  return invoke<DomainCompositeWorkingSaveResult>('domain_working_composite_save', { projectId, compositeId, workingCopies, confirmed })
 }
 
 export function openDomainXls(projectId: string, relativePath: string) {

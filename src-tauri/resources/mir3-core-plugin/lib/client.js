@@ -1024,7 +1024,7 @@ window.__ModuleLoader__.load({
           const projected = projectDomainResult(candidate, nodeSystemId)
           if (!projected)
             continue
-          results.set(`${projected.systemId}\u241F${projected.draftId}`, projected)
+          results.set(`${projected.systemId}\u241F${projected.workingCopyId}`, projected)
         }
       }
       return [...results.values()]
@@ -1035,10 +1035,10 @@ window.__ModuleLoader__.load({
         return null
       const draft = value.draft && typeof value.draft === 'object' ? value.draft : null
       const previewDraft = value.preview?.draft && typeof value.preview.draft === 'object' ? value.preview.draft : null
-      const draftId = value.draftId || draft?.id || previewDraft?.id
+      const workingCopyId = value.workingCopyId || value.draftId || draft?.id || previewDraft?.id
       const revision = value.revision ?? draft?.revision ?? previewDraft?.revision
       const systemId = value.systemId || fallbackSystemId
-      if (typeof draftId !== 'string' || typeof systemId !== 'string' || !Number.isSafeInteger(revision) || revision < 0)
+      if (typeof workingCopyId !== 'string' || typeof systemId !== 'string' || !Number.isSafeInteger(revision) || revision < 0)
         return null
       const validation = projectValidation(value.validation || value.draftValidation || value.report)
       const changedResources = uniqueStrings([
@@ -1047,7 +1047,8 @@ window.__ModuleLoader__.load({
         typeof value.resourceId === 'string' ? value.resourceId : null,
       ].filter(Boolean))
       return {
-        draftId,
+        workingCopyId,
+        draftId: workingCopyId,
         revision,
         systemId,
         validation,

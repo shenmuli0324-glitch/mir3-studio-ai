@@ -42,47 +42,6 @@ export interface IndexStats {
   lastScanAt?: number | null
 }
 
-export interface Draft {
-  id: string
-  intent: string
-  revision: number
-  status: 'open' | 'applied' | 'discarded'
-  createdAt: number
-  updatedAt: number
-}
-
-export interface DraftChangePreview {
-  path: string
-  deleted: boolean
-  baseSha256?: string | null
-  newSha256?: string | null
-  unifiedDiff?: string | null
-}
-
-export interface DraftPreview {
-  draft: Draft
-  changes: DraftChangePreview[]
-  diffHash: string
-}
-
-export interface DraftConfirmation {
-  preview: DraftPreview
-  confirmationToken: string
-}
-
-export interface SnapshotFile {
-  path: string
-  existed: boolean
-  sha256?: string | null
-}
-
-export interface Snapshot {
-  id: string
-  draftId?: string | null
-  files: SnapshotFile[]
-  createdAt: number
-}
-
 export interface KnowledgeRecord {
   id: string
   status: KnowledgeStatus

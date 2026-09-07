@@ -1,4 +1,5 @@
-import type { Draft, DraftConfirmation, IndexStats, KnowledgeRecord, KnowledgeStatus, Snapshot } from './types'
+import type { IndexStats, KnowledgeRecord, KnowledgeStatus } from './types'
+import type { DomainSaveNode, DomainWorkingRestoreResult } from '@/features/devtools/domain/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import { invalidateProjectQueries } from './use-mir3-projects'
@@ -11,14 +12,9 @@ export function useProjectDetails(projectId?: string) {
     queryFn: () => invoke<IndexStats>('index_stats', { projectId }),
     enabled,
   })
-  const drafts = useQuery({
-    queryKey: ['mir3-drafts', projectId],
-    queryFn: () => invoke<Draft[]>('draft_list', { projectId }),
-    enabled,
-  })
-  const snapshots = useQuery({
-    queryKey: ['mir3-snapshots', projectId],
-    queryFn: () => invoke<Snapshot[]>('snapshot_list', { projectId }),
+  const saveNodes = useQuery({
+    queryKey: ['domain-save-nodes', projectId],
+    queryFn: () => invoke<DomainSaveNode[]>('domain_save_node_list', { projectId, systemId: null, limit: 100 }),
     enabled,
   })
   const knowledge = useQuery({
@@ -29,20 +25,8 @@ export function useProjectDetails(projectId?: string) {
     }),
     enabled,
   })
-  const preview = useMutation({
-    mutationFn: (draftId: string) => invoke<DraftConfirmation>('draft_preview', { projectId, draftId }),
-  })
-  const apply = useMutation({
-    mutationFn: ({ draftId, confirmationToken }: { draftId: string, confirmationToken: string }) =>
-      invoke<Snapshot>('draft_apply', { projectId, draftId, confirmationToken }),
-    onSuccess: () => invalidateProjectQueries(queryClient),
-  })
-  const discard = useMutation({
-    mutationFn: (draftId: string) => invoke<Draft>('draft_discard', { projectId, draftId }),
-    onSuccess: () => invalidateProjectQueries(queryClient),
-  })
   const restore = useMutation({
-    mutationFn: (snapshotId: string) => invoke<Snapshot>('snapshot_restore', { projectId, snapshotId }),
+    mutationFn: (nodeId: string) => invoke<DomainWorkingRestoreResult>('domain_save_node_restore', { projectId, nodeId }),
     onSuccess: () => invalidateProjectQueries(queryClient),
   })
   const setKnowledgeStatus = useMutation({
@@ -52,17 +36,12 @@ export function useProjectDetails(projectId?: string) {
   })
   return {
     stats: stats.data ?? null,
-    drafts: drafts.data ?? [],
-    snapshots: snapshots.data ?? [],
+    saveNodes: saveNodes.data ?? [],
     knowledge: knowledge.data ?? [],
-    loading: stats.isLoading || drafts.isLoading || snapshots.isLoading || knowledge.isLoading,
-    previewDraft: preview.mutateAsync,
-    preview: preview.data ?? null,
-    applyDraft: apply.mutateAsync,
-    discardDraft: discard.mutateAsync,
-    restoreSnapshot: restore.mutateAsync,
+    loading: stats.isLoading || saveNodes.isLoading || knowledge.isLoading,
+    restoreSaveNode: restore.mutateAsync,
     setKnowledgeStatus: setKnowledgeStatus.mutateAsync,
-    busy: preview.isPending || apply.isPending || discard.isPending || restore.isPending || setKnowledgeStatus.isPending,
-    error: stats.error || drafts.error || snapshots.error || knowledge.error || preview.error || apply.error || discard.error || restore.error || setKnowledgeStatus.error,
+    busy: restore.isPending || setKnowledgeStatus.isPending,
+    error: stats.error || saveNodes.error || knowledge.error || restore.error || setKnowledgeStatus.error,
   }
 }

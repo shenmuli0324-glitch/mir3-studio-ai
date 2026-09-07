@@ -1,5 +1,10 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.3.4 - 2026-09-07
+
+- 33 个领域系统统一使用人工与 AI 共享的 Working Copy，系统会话在发送前等待 Studio 同步当前编辑内容，避免分叉修改。
+- 领域结果优先投影 `workingCopyId`，同时保留旧 `draftId` 字段兼容已归档会话；正式项目仍只能由 Studio 的保存节点流程写入。
+
 ## 1.3.3 - 2026-09-01
 
 - Windows 首次加载时等待 Studio 完成项目作用域握手，避免插件晚于 iframe 挂载时新建会话或选择目录立即报 `PROJECT_SCOPE_UNAVAILABLE`。

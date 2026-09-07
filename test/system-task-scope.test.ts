@@ -14,13 +14,14 @@ describe('system task scope', () => {
       systemId: 'npc',
       pluginVersion: '1.3.1',
       readSystems: ['npc', 'item', 'shop'],
+      workingCopyIds: ['draft-npc'],
       draftIds: ['draft-npc'],
       pluginVersions: { npc: '1.3.1', item: '1.4.0', shop: '1.5.0' },
     })
     expect(assertSystemTaskScopeLease(lease(contract), contract).writeSystems).toEqual(['npc'])
   })
 
-  it('fails closed when a lease adds dependency write access or changes the Draft version', () => {
+  it('fails closed when a lease adds dependency write access or changes the Working Copy version', () => {
     const contract = buildSystemTaskScopeContract(npc, 'task-npc', 'draft-npc', manifests)
     expect(() => assertSystemTaskScopeLease({
       ...lease(contract),
@@ -32,10 +33,10 @@ describe('system task scope', () => {
     }, contract)).toThrow('SYSTEM_SCOPE_LEASE_VERSION_MISMATCH')
   })
 
-  it('renews with the original Drafts and refuses a current-system version change', () => {
+  it('renews with the original Working Copy and refuses a current-system version change', () => {
     const contract = buildSystemTaskScopeContract(npc, 'task-npc', 'draft-npc', manifests)
     const previous = lease(contract)
-    expect(buildSystemTaskRenewalContract(npc, 'task-npc', previous).draftIds).toEqual(['draft-npc'])
+    expect(buildSystemTaskRenewalContract(npc, 'task-npc', previous).workingCopyIds).toEqual(['draft-npc'])
     expect(() => buildSystemTaskRenewalContract(
       { ...npc, version: '1.3.2' },
       'task-npc',
@@ -49,7 +50,8 @@ describe('system task scope', () => {
     expect(instructions).toContain('Dependencies (item,shop) are reference-only')
     expect(instructions).toContain('Unknown, generated, shared-without-ownership, and dependency files are read-only')
     expect(instructions).toContain('Never write project files through shell, terminal, generic filesystem, or editor tools')
-    expect(instructions).toContain('scoped MIR3 MCP Draft tools')
+    expect(instructions).toContain('scoped MIR3 working-copy tools')
+    expect(instructions).toContain('Studio owns Save, save nodes, conflict checks, and restore')
   })
 
   it('keeps the cross-system write selector inside the composer and closed by default', () => {

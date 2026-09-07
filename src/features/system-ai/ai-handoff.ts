@@ -2,7 +2,9 @@ import type { GlobalTaskHandoff } from './global-task-handoff'
 import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
 import { parseGlobalTaskHandoff, sanitizeTaskSemanticText } from './global-task-handoff'
 
-export interface DomainDraftHandoff {
+export interface DomainWorkingCopyHandoff {
+  workingCopyId: string
+  /** @deprecated 仅用于兼容旧会话载荷，解析后始终与 workingCopyId 相同。 */
   draftId: string
   revision: number
   systemId: string
@@ -19,6 +21,8 @@ export interface DevtoolsReturnTarget {
   projectId: string
   systemId: string
   resourceId?: string | null
+  workingCopyId?: string | null
+  /** @deprecated 仅用于兼容旧会话载荷。 */
   draftId?: string | null
 }
 
@@ -101,12 +105,12 @@ export function unregisterGlobalTask(identity: Pick<AiTaskIdentity, 'projectId' 
   persistGlobalTasks()
 }
 
-export function includeGlobalTaskDraft(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>, draftId: string): void {
+export function includeGlobalTaskWorkingCopy(identity: Pick<AiTaskIdentity, 'projectId' | 'taskId' | 'sessionId'>, workingCopyId: string): void {
   const task = globalTasks.get(taskKey(identity))
-  if (!task || task.draftIds.includes(draftId))
+  if (!task || task.draftIds.includes(workingCopyId))
     return
-  task.draftIds = [...task.draftIds, draftId]
-  task.handoff.references.draftIds = [...task.handoff.references.draftIds, draftId]
+  task.draftIds = [...task.draftIds, workingCopyId]
+  task.handoff.references.draftIds = [...task.handoff.references.draftIds, workingCopyId]
   task.updatedAt = Date.now()
   persistGlobalTasks()
 }
@@ -167,14 +171,14 @@ export function matchesTaskIdentity(message: Mir3BridgeEnvelope, identity: AiTas
     && identity.allowedSystems.includes(message.systemId)
 }
 
-export function draftHandoffs(message: Mir3BridgeEnvelope, identity: AiTaskIdentity): DomainDraftHandoff[] {
+export function workingCopyHandoffs(message: Mir3BridgeEnvelope, identity: AiTaskIdentity): DomainWorkingCopyHandoff[] {
   if (!matchesTaskIdentity(message, identity) || !isSnapshotOrComplete(message.type))
     return []
   const payload = asRecord(message.payload)
   const values = Array.isArray(payload?.domainResults) ? payload.domainResults : []
   const writableSystems = identity.allowedWriteSystems ?? identity.allowedSystems
   return values.flatMap((value) => {
-    const handoff = parseDraftHandoff(value, writableSystems)
+    const handoff = parseWorkingCopyHandoff(value, writableSystems)
     return handoff ? [handoff] : []
   })
 }
@@ -186,7 +190,7 @@ export function returnTarget(message: Mir3BridgeEnvelope, identity: AiTaskIdenti
   return parseReturnTarget(payload?.returnTo, identity.projectId, identity.allowedSystems)
 }
 
-export function isGlobalDraftEvent(type: string): boolean {
+export function isGlobalWorkingCopyEvent(type: string): boolean {
   return type === 'mir3/globalSession.snapshot' || type === 'mir3/globalSession.resumed' || type === 'mir3/globalSession.completed'
     || type === 'mir3/globalSession.cancelled' || type === 'mir3/bridge.error'
 }
@@ -212,7 +216,7 @@ export function isCompletedGlobalTask(message: Mir3BridgeEnvelope): boolean {
 
 export async function verifyDevtoolsTarget(
   target: DevtoolsReturnTarget,
-  handoffs: DomainDraftHandoff[],
+  handoffs: DomainWorkingCopyHandoff[],
   verification: DevtoolsTargetVerification,
 ): Promise<VerifiedDevtoolsTarget | null> {
   if (!verification.isKnownSystem(target.systemId))
@@ -224,13 +228,14 @@ export async function verifyDevtoolsTarget(
       return null
     relativePath = resource.files[0].path
   }
-  const reportedDraft = handoffs.find(handoff => handoff.systemId === target.systemId && (!target.draftId || handoff.draftId === target.draftId))
-  const draftId = target.draftId ?? reportedDraft?.draftId ?? null
-  let revision: number | null = reportedDraft?.revision ?? null
-  if (draftId) {
+  const requestedWorkingCopyId = target.workingCopyId ?? target.draftId
+  const reportedWorkingCopy = handoffs.find(handoff => handoff.systemId === target.systemId && (!requestedWorkingCopyId || handoff.workingCopyId === requestedWorkingCopyId))
+  const workingCopyId = requestedWorkingCopyId ?? reportedWorkingCopy?.workingCopyId ?? null
+  let revision: number | null = reportedWorkingCopy?.revision ?? null
+  if (workingCopyId) {
     const [preview, validation] = await Promise.all([
-      verification.previewDraft(target.projectId, draftId),
-      verification.validateDraft(target.projectId, draftId),
+      verification.previewDraft(target.projectId, workingCopyId),
+      verification.validateDraft(target.projectId, workingCopyId),
     ])
     if (validation.systemId !== target.systemId || (revision != null && preview.preview.draft.revision < revision))
       return null
@@ -238,21 +243,22 @@ export async function verifyDevtoolsTarget(
   }
   return {
     ...target,
-    draftId,
+    workingCopyId,
+    draftId: workingCopyId,
     relativePath,
     revision,
     nonce: verification.nonce(),
   }
 }
 
-function parseDraftHandoff(value: unknown, allowedSystems: string[]): DomainDraftHandoff | null {
+function parseWorkingCopyHandoff(value: unknown, allowedSystems: string[]): DomainWorkingCopyHandoff | null {
   const record = asRecord(value)
   if (!record)
     return null
-  const draftId = portableIdentifier(record.draftId, 160)
+  const workingCopyId = portableIdentifier(record.workingCopyId ?? record.draftId, 160)
   const systemId = portableIdentifier(record.systemId, 64)
   const revision = record.revision
-  if (!draftId || !systemId || !allowedSystems.includes(systemId) || !Number.isSafeInteger(revision) || Number(revision) < 0)
+  if (!workingCopyId || !systemId || !allowedSystems.includes(systemId) || !Number.isSafeInteger(revision) || Number(revision) < 0)
     return null
   const validationRecord = asRecord(record.validation)
   const diagnostics = validationRecord && Array.isArray(validationRecord.diagnostics)
@@ -268,7 +274,8 @@ function parseDraftHandoff(value: unknown, allowedSystems: string[]): DomainDraf
       }).slice(0, 10_000)
     : []
   return {
-    draftId,
+    workingCopyId,
+    draftId: workingCopyId,
     revision: Number(revision),
     systemId,
     validation,
@@ -285,15 +292,17 @@ function parseReturnTarget(value: unknown, projectId: string, allowedSystems: st
   if (!systemId || !allowedSystems.includes(systemId))
     return null
   const resourceId = portableIdentifier(record.resourceId, 256)
-  const draftId = portableIdentifier(record.draftId, 160)
-  if ((record.resourceId != null && !resourceId) || (record.draftId != null && !draftId))
+  const rawWorkingCopyId = record.workingCopyId ?? record.draftId
+  const workingCopyId = portableIdentifier(rawWorkingCopyId, 160)
+  if ((record.resourceId != null && !resourceId) || (rawWorkingCopyId != null && !workingCopyId))
     return null
   return {
     view: 'devtools',
     projectId,
     systemId,
     resourceId,
-    draftId,
+    workingCopyId,
+    draftId: workingCopyId,
   }
 }
 

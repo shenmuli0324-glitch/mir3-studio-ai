@@ -14,7 +14,7 @@ use crate::safe_files::CachedXlsWorkbook;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 #[cfg(test)]
 type TestBarrierGate = Arc<Mutex<Option<(Arc<std::sync::Barrier>, Arc<std::sync::Barrier>)>>>;
@@ -104,6 +104,12 @@ impl DomainStore {
             store.read_only_reason = Some(Arc::from(error));
         } else if let Err(error) = store.recover_snapshot_governance_journals() {
             store.read_only_reason = Some(Arc::from(error));
+        } else if let Err(error) = store.recover_domain_save_nodes() {
+            // 另一实例正在持有项目事务锁时属于瞬时竞争，不能把整个领域内核永久降级为只读。
+            // 持锁实例会完成当前事务；若其异常退出，下一次启动仍会执行保存节点恢复。
+            if !error.starts_with("DRAFT_MUTATION_RESERVED:") {
+                store.read_only_reason = Some(Arc::from(error));
+            }
         }
         Ok(store)
     }
@@ -821,6 +827,26 @@ CREATE TABLE IF NOT EXISTS draft_domains(
   legacy INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS domain_working_copies(
+  system_id TEXT PRIMARY KEY,
+  draft_id TEXT NOT NULL UNIQUE,
+  plugin_version TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(draft_id) REFERENCES drafts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS domain_save_nodes(
+  id TEXT PRIMARY KEY,
+  system_id TEXT,
+  origin TEXT NOT NULL,
+  snapshot_id TEXT NOT NULL,
+  restored_from_node_id TEXT,
+  manifest TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(snapshot_id) REFERENCES snapshots(id)
+);
+CREATE INDEX IF NOT EXISTS idx_domain_save_nodes_system
+  ON domain_save_nodes(system_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS domain_governance_migrations(
   id TEXT PRIMARY KEY,
   system_id TEXT NOT NULL,
@@ -1037,7 +1063,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_v2_migration_creates_recoverable_backups() {
+    fn schema_v3_migration_creates_recoverable_backups() {
         let base = std::env::temp_dir().join(format!("mir3-migration-{}", std::process::id()));
         let project = base.join("项目/木立");
         let data = base.join("data");
@@ -1102,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_less_legacy_project_migrates_to_v2() {
+    fn metadata_less_legacy_project_migrates_to_v3() {
         let base = std::env::temp_dir().join(format!(
             "mir3-metadata-less-migration-{}-{}",
             std::process::id(),
@@ -1135,7 +1161,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(schema, "2");
+        assert_eq!(schema, "3");
         let scope_table: String = reopened
             .project_connection(&imported.id)
             .unwrap()

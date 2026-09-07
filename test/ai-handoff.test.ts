@@ -1,11 +1,11 @@
 import type { TaskScopeLease } from '../src/features/devtools/domain/types'
 import type { Mir3BridgeEnvelope } from '../src/features/projects/workspace-bridge'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { draftHandoffs, isCompletedGlobalTask, isGlobalDraftEvent, isGlobalTerminalEvent, registeredGlobalTask, registerGlobalTask, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget } from '../src/features/system-ai/ai-handoff'
+import { isCompletedGlobalTask, isGlobalTerminalEvent, isGlobalWorkingCopyEvent, registeredGlobalTask, registerGlobalTask, returnTarget, unregisterGlobalTask, verifyDevtoolsTarget, workingCopyHandoffs } from '../src/features/system-ai/ai-handoff'
 import { buildGlobalTaskHandoff } from '../src/features/system-ai/global-task-handoff'
-import { currentScopeLease, hasPendingScopeRevocation, includeScopeLeaseDraft, manageScopeLease, stopScopeLease } from '../src/features/system-ai/scope-lease-manager'
+import { currentScopeLease, hasPendingScopeRevocation, includeScopeLeaseWorkingCopy, manageScopeLease, stopScopeLease } from '../src/features/system-ai/scope-lease-manager'
 
-describe('aI Draft handoff contract', () => {
+describe('aI Working Copy handoff contract', () => {
   const identity = {
     projectId: 'project-1',
     systemId: 'shop',
@@ -29,12 +29,13 @@ describe('aI Draft handoff contract', () => {
     void stopScopeLease(identity, false)
   })
 
-  it('accepts structured Draft results only for the exact task identity and allowed domain', () => {
+  it('accepts structured Working Copy results only for the exact task identity and allowed domain', () => {
     const message = envelope({
-      domainResults: [{ draftId: 'draft-1', revision: 3, systemId: 'shop', validation: { valid: true, diagnostics: [] }, changedResources: ['shop:item:1'] }],
-      returnTo: { view: 'devtools', projectId: 'project-1', systemId: 'shop', resourceId: 'shop:item:1', draftId: 'draft-1' },
+      domainResults: [{ workingCopyId: 'draft-1', revision: 3, systemId: 'shop', validation: { valid: true, diagnostics: [] }, changedResources: ['shop:item:1'] }],
+      returnTo: { view: 'devtools', projectId: 'project-1', systemId: 'shop', resourceId: 'shop:item:1', workingCopyId: 'draft-1' },
     })
-    expect(draftHandoffs(message, identity)).toEqual([{
+    expect(workingCopyHandoffs(message, identity)).toEqual([{
+      workingCopyId: 'draft-1',
       draftId: 'draft-1',
       revision: 3,
       systemId: 'shop',
@@ -42,12 +43,12 @@ describe('aI Draft handoff contract', () => {
       changedResources: ['shop:item:1'],
       resourceId: null,
     }])
-    expect(returnTarget(message, identity)).toMatchObject({ systemId: 'shop', resourceId: 'shop:item:1', draftId: 'draft-1' })
+    expect(returnTarget(message, identity)).toMatchObject({ systemId: 'shop', resourceId: 'shop:item:1', workingCopyId: 'draft-1' })
 
-    expect(draftHandoffs({ ...message, sessionId: 'global-session-wrong' }, identity)).toEqual([])
-    expect(draftHandoffs({ ...message, projectId: 'project-other' }, identity)).toEqual([])
-    expect(draftHandoffs({ ...message, systemId: 'map' }, identity)).toEqual([])
-    expect(draftHandoffs(envelope({ domainResults: [{ draftId: 'draft-readonly', revision: 1, systemId: 'item' }] }), identity)).toEqual([])
+    expect(workingCopyHandoffs({ ...message, sessionId: 'global-session-wrong' }, identity)).toEqual([])
+    expect(workingCopyHandoffs({ ...message, projectId: 'project-other' }, identity)).toEqual([])
+    expect(workingCopyHandoffs({ ...message, systemId: 'map' }, identity)).toEqual([])
+    expect(workingCopyHandoffs(envelope({ domainResults: [{ workingCopyId: 'draft-readonly', revision: 1, systemId: 'item' }] }), identity)).toEqual([])
   })
 
   it('fails closed for traversal, foreign projects, and unregistered global tasks', () => {
@@ -76,16 +77,17 @@ describe('aI Draft handoff contract', () => {
       nonce: () => 'verified-nonce',
     }
     const verified = await verifyDevtoolsTarget(target!, [{
+      workingCopyId: 'draft-1',
       draftId: 'draft-1',
       revision: 4,
       systemId: 'shop',
       changedResources: ['shop:item:1'],
     }], verification)
     expect(verified).toMatchObject({ relativePath: 'Data/shop.txt', revision: 5, nonce: 'verified-nonce' })
-    expect(isGlobalDraftEvent('mir3/globalSession.snapshot')).toBe(true)
-    expect(isGlobalDraftEvent('mir3/globalSession.completed')).toBe(true)
-    expect(isGlobalDraftEvent('mir3/globalSession.cancelled')).toBe(true)
-    expect(isGlobalDraftEvent('mir3/bridge.error')).toBe(true)
+    expect(isGlobalWorkingCopyEvent('mir3/globalSession.snapshot')).toBe(true)
+    expect(isGlobalWorkingCopyEvent('mir3/globalSession.completed')).toBe(true)
+    expect(isGlobalWorkingCopyEvent('mir3/globalSession.cancelled')).toBe(true)
+    expect(isGlobalWorkingCopyEvent('mir3/bridge.error')).toBe(true)
     expect(isGlobalTerminalEvent('mir3/globalSession.snapshot')).toBe(false)
     expect(isGlobalTerminalEvent('mir3/globalSession.completed')).toBe(true)
     expect(isGlobalTerminalEvent('mir3/globalSession.cancelled')).toBe(true)
@@ -128,7 +130,7 @@ describe('aI Draft handoff contract', () => {
       cancelSchedule() {},
     })
     expect(currentScopeLease(identity)?.token).toBe('token-1')
-    includeScopeLeaseDraft(identity, 'draft-from-ai')
+    includeScopeLeaseWorkingCopy(identity, 'draft-from-ai')
     scheduled[0]()
     await vi.waitFor(() => expect(renew).toHaveBeenCalledTimes(1))
     expect(renew.mock.calls[0][0].draftIds).toContain('draft-from-ai')

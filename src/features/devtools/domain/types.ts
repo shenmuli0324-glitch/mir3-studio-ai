@@ -249,6 +249,58 @@ export interface DomainDraftConfirmation {
   confirmationToken: string
 }
 
+/**
+ * 领域编辑器对外只暴露工作副本；底层存储实现可以继续复用 Draft 事务。
+ */
+export interface DomainWorkingCopy {
+  id: string
+  systemId: string
+  pluginVersion: string
+  revision: number
+  dirty: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export type DomainSaveNodeOrigin = 'studio' | 'external' | 'restore'
+
+export interface DomainSaveNode {
+  schemaVersion: number
+  id: string
+  projectId: string
+  systemId?: string | null
+  systemIds: string[]
+  origin: DomainSaveNodeOrigin
+  restoredFromNodeId?: string | null
+  previousNodeId?: string | null
+  snapshotId: string
+  workingCopyIds: string[]
+  createdAt: number
+  files: Array<{
+    path: string
+    beforeExisted: boolean
+    beforeSha256?: string | null
+    afterExisted: boolean
+    afterSha256?: string | null
+  }>
+}
+
+export interface DomainWorkingSaveResult {
+  saveNode: DomainSaveNode
+  validation: DomainValidationReport
+}
+
+export interface DomainWorkingRestoreResult {
+  saveNode: DomainSaveNode
+  restoredSnapshot?: DomainSnapshot | null
+}
+
+export interface DomainCompositeWorkingSaveResult {
+  saveNode: DomainSaveNode
+  validations: DomainValidationReport[]
+  applyResult: CompositeDraftApplyResult
+}
+
 export interface LegacyDraftCloneRequest {
   legacyDraftId: string
   systemId: string

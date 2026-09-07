@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
 import type { Mir3Project, ScanState } from './types'
-import { ClockArrowRotateLeft, FolderOpen, Play, ShieldCheck } from '@gravity-ui/icons'
+import { ClockArrowRotateLeft, FolderOpen } from '@gravity-ui/icons'
 import { Button, Chip } from '@heroui/react'
 import { useOverlay } from '@overlastic/react'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { Modal as ConfirmationModal } from '@/components/modal'
@@ -67,26 +66,10 @@ function ActiveProjectPanels({ project, scan }: { project: Mir3Project, scan: Sc
   const { t } = useTranslation()
   const details = useProjectDetails(project.id)
   const [confirmationHolder, openConfirmation] = useOverlay(ConfirmationModal, { type: 'holder' })
-  const [confirmation, setConfirmation] = useState<Awaited<ReturnType<typeof details.previewDraft>> | null>(null)
-
-  async function handlePreview(draftId: string) {
-    setConfirmation(await details.previewDraft(draftId))
-  }
-
-  async function handleApply() {
-    if (!confirmation)
-      return
-    await details.applyDraft({
-      draftId: confirmation.preview.draft.id,
-      confirmationToken: confirmation.confirmationToken,
-    })
-    setConfirmation(null)
-  }
-
-  async function handleRestore(snapshotId: string) {
+  async function handleRestore(nodeId: string) {
     if (!await confirmSnapshotRestore())
       return
-    await details.restoreSnapshot(snapshotId)
+    await details.restoreSaveNode(nodeId)
   }
 
   async function confirmSnapshotRestore(): Promise<boolean> {
@@ -134,64 +117,27 @@ function ActiveProjectPanels({ project, scan }: { project: Mir3Project, scan: Sc
             <PathRow label={t('studio.project.current_workspace')} value={project.activeWorkspaceRoot} />
           </div>
         </SectionPanel>
-        <SectionPanel title={t('studio.project.drafts_title')} description={t('studio.project.drafts_desc')}>
-          <If cond={details.drafts.length > 0} else={<PanelEmpty icon={<ShieldCheck className="size-4" />} text={t('studio.project.drafts_empty')} />}>
+        <SectionPanel title={t('studio.project.save_nodes_title')} description={t('studio.project.save_nodes_desc')}>
+          <If cond={details.saveNodes.length > 0} else={<PanelEmpty icon={<ClockArrowRotateLeft className="size-4" />} text={t('studio.project.save_nodes_empty')} />}>
             <div className="divide-y divide-line">
-              {details.drafts.map(draft => (
-                <div className="flex items-center gap-3 px-5 py-3" key={draft.id}>
+              {details.saveNodes.map((node, index) => (
+                <div className="flex items-center gap-3 px-5 py-3" key={node.id}>
                   <div className="min-w-0 flex-1">
-                    <strong className="block truncate text-xs text-ink">{draft.intent}</strong>
+                    <strong className="block truncate text-xs text-ink">{t(`studio.project.save_node_origin.${node.origin}`)}</strong>
                     <small className="text-[11px] text-muted">
-                      {draft.id}
-                      {' '}
-                      · r
-                      {draft.revision}
+                      {t('studio.project.save_node_files', { count: node.files?.length ?? 0 })}
+                      {' · '}
+                      {new Date(node.createdAt).toLocaleString()}
                     </small>
                   </div>
-                  <Chip size="sm">{draft.status}</Chip>
-                  <Button size="sm" variant="ghost" isDisabled={draft.status !== 'open'} onPress={() => void handlePreview(draft.id)}>{t('studio.project.preview')}</Button>
+                  <If cond={index === 0}>
+                    <Button size="sm" variant="ghost" onPress={() => void handleRestore(node.id)}>{t('studio.project.restore_previous_save')}</Button>
+                  </If>
                 </div>
               ))}
             </div>
           </If>
         </SectionPanel>
-        <SectionPanel title={t('studio.project.snapshots_title')} description={t('studio.project.snapshots_desc')}>
-          <If cond={details.snapshots.length > 0} else={<PanelEmpty icon={<ClockArrowRotateLeft className="size-4" />} text={t('studio.project.snapshots_empty')} />}>
-            <div className="divide-y divide-line">
-              {details.snapshots.map(snapshot => (
-                <div className="flex items-center gap-3 px-5 py-3" key={snapshot.id}>
-                  <div className="min-w-0 flex-1">
-                    <strong className="block truncate text-xs text-ink">{snapshot.id}</strong>
-                    <small className="text-[11px] text-muted">{t('studio.project.snapshot_files', { count: snapshot.files.length })}</small>
-                  </div>
-                  <Button size="sm" variant="ghost" onPress={() => void handleRestore(snapshot.id)}>{t('studio.project.restore')}</Button>
-                </div>
-              ))}
-            </div>
-          </If>
-        </SectionPanel>
-        <If cond={confirmation != null}>
-          <section className="col-span-2 overflow-hidden rounded-2xl border border-accent/30 bg-panel max-[980px]:col-span-1">
-            <header className="flex items-center justify-between border-b border-line px-5 py-4">
-              <div>
-                <strong className="text-sm text-ink">{t('studio.project.preview_title')}</strong>
-                <p className="mt-1 text-xs text-muted">{t('studio.project.preview_desc')}</p>
-              </div>
-              <Button size="sm" variant="primary" isPending={details.busy} onPress={() => void handleApply()}>
-                <Play className="size-4" />
-                {t('studio.project.apply')}
-              </Button>
-            </header>
-            <div className="max-h-96 overflow-auto p-4">
-              {confirmation?.preview.changes.map(change => (
-                <div className="mb-4" key={change.path}>
-                  <strong className="mb-2 block text-xs text-ink">{change.path}</strong>
-                  <pre className="overflow-auto rounded-xl bg-canvas p-4 text-[11px] leading-5 text-muted">{change.unifiedDiff ?? t('studio.project.binary_change')}</pre>
-                </div>
-              ))}
-            </div>
-          </section>
-        </If>
       </div>
       {confirmationHolder}
     </>

@@ -70,13 +70,14 @@ export function currentScopeLease(identity: ScopeLeaseIdentity): TaskScopeLease 
   return managed.lease
 }
 
-export function includeScopeLeaseDraft(identity: ScopeLeaseIdentity, draftId: string): void {
+export function includeScopeLeaseWorkingCopy(identity: ScopeLeaseIdentity, workingCopyId: string): void {
   const managed = leases.get(leaseKey(identity))
-  if (!managed || !managed.active || managed.lease.draftIds.includes(draftId))
+  if (!managed || !managed.active || managed.lease.draftIds.includes(workingCopyId))
     return
-  managed.lease = { ...managed.lease, draftIds: [...managed.lease.draftIds, draftId] }
+  managed.lease = { ...managed.lease, draftIds: [...managed.lease.draftIds, workingCopyId] }
 }
 
+/** @deprecated 仅供旧会话交接代码过渡使用。 */
 export function hasPendingScopeRevocation(identity: ScopeLeaseIdentity): boolean {
   const prefix = `${leaseKey(identity)}\u241F`
   return [...pendingRevocations.keys()].some(key => key.startsWith(prefix))
