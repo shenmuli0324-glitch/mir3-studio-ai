@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 - 2026-09-07
+
+- Added manifest v2 evidence-backed file bindings and removed fuzzy keyword ownership from the generated example.
+
 ## 1.3.1 - 2026-08-27
 
 - 领域包依赖闭包改为同时包含显式依赖与字段 Schema 的引用系统。

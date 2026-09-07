@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2 - 2026-09-07
+
+- Replaced fuzzy path and content ownership with evidence-backed official file bindings.
+- Scoped system discovery to active runtime files; unverified custom systems now remain empty until explicitly bound.
+
 ## 1.3.1
 
 - Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.

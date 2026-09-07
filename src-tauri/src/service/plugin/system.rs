@@ -795,16 +795,19 @@ fn validate_domain_pack(source: &Path) -> Result<DomainPackDescriptor, String> {
                 .to_string(),
         );
     }
-    if [
-        descriptor.manifest_schema_version,
-        descriptor.resource_schema_version,
-        descriptor.capability_schema_version,
-        descriptor.memory_schema_version,
-    ]
-    .iter()
-    .any(|version| *version != 1)
+    if !matches!(descriptor.manifest_schema_version, 1 | 2)
+        || [
+            descriptor.resource_schema_version,
+            descriptor.capability_schema_version,
+            descriptor.memory_schema_version,
+        ]
+        .iter()
+        .any(|version| *version != 1)
     {
-        return Err("DOMAIN_PACK_SCHEMA_UNSUPPORTED: only schema v1 is supported".to_string());
+        return Err(
+            "DOMAIN_PACK_SCHEMA_UNSUPPORTED: manifest schema v1/v2 and capability schemas v1 are supported"
+                .to_string(),
+        );
     }
     let package: Value = serde_json::from_str(
         &fs::read_to_string(source.join("package.json"))

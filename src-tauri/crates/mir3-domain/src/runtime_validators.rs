@@ -474,6 +474,7 @@ pub fn validate_required_engine_evidence(
         let satisfied = match requirement.as_str() {
             "project-directory-layout" => evidence.project_directory_layout,
             "owned-selector-or-content-fingerprint" => evidence.owned_projection,
+            "official-file-binding" => evidence.owned_projection,
             "resource-schema-validation" => {
                 evidence.resource_schema_valid && evidence.resource_schema_checked > 0
             }

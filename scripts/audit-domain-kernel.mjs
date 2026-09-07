@@ -41,7 +41,7 @@ for (const file of [
 }
 if (existsSync(join(sdkRoot, 'package.json'))) {
   const sdkPackage = JSON.parse(readFileSync(join(sdkRoot, 'package.json'), 'utf8'))
-  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.3.1')
+  if (sdkPackage.name !== '@mir3-studio/domain-plugin-sdk' || sdkPackage.version !== '1.3.2')
     failures.push('Domain Plugin SDK package identity or SemVer is invalid')
   if (sdkPackage.exports?.['./contract'] !== './contract.mjs')
     failures.push('Domain Plugin SDK contract export is missing')
@@ -186,7 +186,7 @@ for (const pack of registry.packs) {
   if (pack.supportedEngineRange === '*'
     || pack.engineCompatibility?.strategy !== 'evidence-gated-auto-generalization-v1'
     || JSON.stringify(pack.engineCompatibility?.versionAliases) !== JSON.stringify(['semver', 'v-prefixed-semver', 'major-minor'])
-    || JSON.stringify(pack.engineCompatibility?.requiredEvidence) !== JSON.stringify(['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'])
+    || JSON.stringify(pack.engineCompatibility?.requiredEvidence) !== JSON.stringify(['project-directory-layout', 'official-file-binding', 'resource-schema-validation'])
     || pack.engineCompatibility?.unknownVersionPolicy !== 'readonly'
     || pack.engineCompatibility?.incompatibleVersionPolicy !== 'readonly') {
     failures.push(`${pack.systemId}: engine compatibility must be evidence-gated and fail read-only`)
@@ -197,10 +197,18 @@ for (const pack of registry.packs) {
     failures.push(`${pack.systemId}: unsupported renderer ${pack.renderer}`)
   if (!pack.fileProjection?.keywords?.length)
     failures.push(`${pack.systemId}: file projection keywords are required`)
-  if (!pack.fileProjection?.ownedSelectors?.length)
-    failures.push(`${pack.systemId}: ownedSelectors are required for real-file discovery`)
-  if (!pack.fileProjection?.contentFingerprints?.length)
-    failures.push(`${pack.systemId}: content fingerprints are required`)
+  if (pack.manifestSchemaVersion !== 2 || !Array.isArray(pack.fileProjection?.bindings))
+    failures.push(`${pack.systemId}: manifest v2 evidence-backed bindings are required`)
+  if ((pack.fileProjection?.ownedSelectors || []).length || (pack.fileProjection?.contentFingerprints || []).length)
+    failures.push(`${pack.systemId}: fuzzy ownership selectors and fingerprints must be empty`)
+  for (const binding of pack.fileProjection?.bindings || []) {
+    if (!binding.id || binding.systemId !== pack.systemId || !binding.pathPattern || !['direct', 'shared', 'reference'].includes(binding.relation)
+      || !['readwrite', 'readonly'].includes(binding.access)
+      || !['officialDoc', 'officialForum'].includes(binding.evidence?.kind)
+      || !binding.evidence?.ref || !binding.evidence?.version) {
+      failures.push(`${pack.systemId}: invalid official file binding ${binding.id || '<missing>'}`)
+    }
+  }
   if (!pack.fileProjection?.pathAliases?.some(alias => alias.from === 'client' && alias.to === '客户端')
     || !pack.fileProjection?.pathAliases?.some(alias => alias.from === 'engine' && alias.to === '引擎')) {
     failures.push(`${pack.systemId}: client/engine path aliases are incomplete`)
@@ -360,7 +368,7 @@ for (const pack of registry.packs) {
     systemId: pack.systemId,
     version: pack.version,
     engine: pack.supportedEngineRange,
-    files: pack.fileProjection.ownedSelectors.length,
+    files: pack.fileProjection.bindings.length,
     fingerprints: pack.fileProjection.contentFingerprints.length,
     resources: pack.resources.resourceTypes.length,
     mappings: pack.resources.mappings.length,
@@ -624,7 +632,14 @@ function auditSemanticContract(pack, directory, failures, semanticFingerprints, 
   const properties = schema.properties || {}
   const required = schema.required || []
   const validators = new Map((pack.validators || []).map(validator => [validator.kind, validator]))
-  const requiredValidatorKinds = ['syntax', 'schema', 'uniqueness', 'range', 'reference-integrity', 'client-engine-consistency', 'runtime-diagnostics']
+  const projectedRoots = new Set((pack.fileProjection?.bindings || [])
+    .filter(binding => binding.relation !== 'reference')
+    .map(binding => binding.root))
+  const hasClientEngineProjection = projectedRoots.has('clientDev')
+    && [...projectedRoots].some(root => root === 'engineData' || root === 'engineRuntime')
+  const requiredValidatorKinds = ['syntax', 'schema', 'uniqueness', 'range', 'reference-integrity', 'runtime-diagnostics']
+  if (hasClientEngineProjection)
+    requiredValidatorKinds.push('client-engine-consistency')
 
   if (schema.type !== 'object' || schema.additionalProperties !== false || Object.keys(properties).length < 4)
     failures.push(`${pack.systemId}: resource schema must be a closed object with at least four fields`)
@@ -647,8 +662,10 @@ function auditSemanticContract(pack, directory, failures, semanticFingerprints, 
     failures.push(`${pack.systemId}: range validator has no concrete field limits`)
   if (!references?.references?.length || references.references.some(rule => !properties[rule.field] || !rule.systemId))
     failures.push(`${pack.systemId}: reference validator has no concrete cross-system references`)
-  if (!consistency?.matchBy || !consistency?.compareFields?.length || consistency.compareFields.some(field => !properties[field]))
+  if (hasClientEngineProjection && (!consistency?.matchBy || !consistency?.compareFields?.length || consistency.compareFields.some(field => !properties[field])))
     failures.push(`${pack.systemId}: client/engine consistency validator is incomplete`)
+  if (!hasClientEngineProjection && consistency)
+    failures.push(`${pack.systemId}: client/engine consistency cannot be required without both official projections`)
   if (!runtime?.rule || runtime.severity !== 'error')
     failures.push(`${pack.systemId}: runtime diagnostics rule is incomplete`)
   else if (runtimeRules.has(runtime.rule))

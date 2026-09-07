@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "skill",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "magic",
       "技能"
     ],
-    "ownedSelectors": [
-      "skill",
-      "magic",
-      "技能"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "buff"
@@ -64,18 +60,87 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
+    "contentFingerprints": [],
+    "bindings": [
       {
-        "contains": "skill",
-        "caseSensitive": false
+        "id": "skill-table",
+        "root": "engineData",
+        "pathPattern": "cfg_magic.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "skill",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       },
       {
-        "contains": "magic",
-        "caseSensitive": false
+        "id": "skill-custom",
+        "root": "engineData",
+        "pathPattern": "cfg_magiccustom.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "skill",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       },
       {
-        "contains": "技能",
-        "caseSensitive": false
+        "id": "skill-info",
+        "root": "engineData",
+        "pathPattern": "cfg_magicinfo.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "skill",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "skill-presentation",
+        "root": "engineData",
+        "pathPattern": "cfg_skill_present.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "skill",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "skill-upgrade",
+        "root": "engineData",
+        "pathPattern": "cfg_upskilllv.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "skill",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       }
     ],
     "pathAliases": [
@@ -97,7 +162,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -693,7 +759,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -788,7 +854,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -896,7 +962,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -974,7 +1040,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1075,7 +1141,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1138,16 +1204,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "skill.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "skillId",
-      "compareFields": [
-        "skillId",
-        "skillLevel"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "skill.runtime",

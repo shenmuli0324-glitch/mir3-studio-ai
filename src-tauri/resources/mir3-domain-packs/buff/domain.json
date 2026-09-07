@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "buff",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "status_effect",
       "状态"
     ],
-    "ownedSelectors": [
-      "buff",
-      "status_effect",
-      "状态"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "skill"
@@ -64,18 +60,23 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
+    "contentFingerprints": [],
+    "bindings": [
       {
-        "contains": "buff",
-        "caseSensitive": false
-      },
-      {
-        "contains": "status_effect",
-        "caseSensitive": false
-      },
-      {
-        "contains": "状态",
-        "caseSensitive": false
+        "id": "buff-table",
+        "root": "engineData",
+        "pathPattern": "cfg_buff.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "buff",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       }
     ],
     "pathAliases": [
@@ -97,7 +98,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -800,7 +802,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -899,7 +901,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1000,7 +1002,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1104,7 +1106,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1209,7 +1211,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1294,7 +1296,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1351,16 +1353,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "buff.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "buffId",
-      "compareFields": [
-        "buffId",
-        "stackMode"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "buff.runtime",

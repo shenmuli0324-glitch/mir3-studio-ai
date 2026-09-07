@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "vip",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -42,10 +42,7 @@
       "vip",
       "贵族"
     ],
-    "ownedSelectors": [
-      "vip",
-      "贵族"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "first_charge"
@@ -68,16 +65,8 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
-      {
-        "contains": "vip",
-        "caseSensitive": false
-      },
-      {
-        "contains": "贵族",
-        "caseSensitive": false
-      }
-    ],
+    "contentFingerprints": [],
+    "bindings": [],
     "pathAliases": [
       {
         "from": "client",
@@ -97,7 +86,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -687,7 +677,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -792,7 +782,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -890,7 +880,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -982,7 +972,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1069,7 +1059,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1131,16 +1121,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "vip.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "vipLevel",
-      "compareFields": [
-        "vipLevel",
-        "requiredPoints"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "vip.runtime",

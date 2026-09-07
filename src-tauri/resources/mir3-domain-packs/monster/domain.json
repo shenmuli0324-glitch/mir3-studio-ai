@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "monster",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -44,12 +44,7 @@
       "monitems",
       "怪物"
     ],
-    "ownedSelectors": [
-      "monster",
-      "mongen",
-      "monitems",
-      "怪物"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "map"
@@ -66,22 +61,167 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
+    "contentFingerprints": [],
+    "bindings": [
       {
-        "contains": "monster",
-        "caseSensitive": false
+        "id": "monster-table",
+        "root": "engineData",
+        "pathPattern": "cfg_monster.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       },
       {
-        "contains": "mongen",
-        "caseSensitive": false
+        "id": "monster-attacks",
+        "root": "engineData",
+        "pathPattern": "cfg_monattack.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       },
       {
-        "contains": "monitems",
-        "caseSensitive": false
+        "id": "monster-spawns",
+        "root": "engineData",
+        "pathPattern": "cfg_mongen.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       },
       {
-        "contains": "怪物",
-        "caseSensitive": false
+        "id": "monster-drops",
+        "root": "engineData",
+        "pathPattern": "cfg_monitems*.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "monster-intro",
+        "root": "engineData",
+        "pathPattern": "cfg_monster_intro.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "monster-pet-level",
+        "root": "engineData",
+        "pathPattern": "cfg_petlevel.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "monster-slave-level",
+        "root": "engineData",
+        "pathPattern": "cfg_slavelvupatts.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "monster-model-table",
+        "root": "engineData",
+        "pathPattern": "cfg_model_info.xls",
+        "relation": "reference",
+        "access": "readonly",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialForum",
+          "ref": "https://mir3.996m2.com/thread-9845-1-1.html",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "monster-client-models",
+        "root": "clientDev",
+        "pathPattern": "anim/monster/**",
+        "relation": "reference",
+        "access": "readonly",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialForum",
+          "ref": "https://mir3.996m2.com/thread-9845-1-1.html",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "monster-atlas",
+        "root": "clientDev",
+        "pathPattern": "data_config/ModelAtlasSplitConfigs.txt",
+        "relation": "reference",
+        "access": "readonly",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "monster",
+        "evidence": {
+          "kind": "officialForum",
+          "ref": "https://mir3.996m2.com/thread-9845-1-1.html",
+          "version": "2026.08.06"
+        }
       }
     ],
     "pathAliases": [
@@ -103,7 +243,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -789,7 +930,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -884,7 +1025,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -978,7 +1119,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1075,7 +1216,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1175,7 +1316,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1261,7 +1402,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1323,16 +1464,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "monster.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "monsterId",
-      "compareFields": [
-        "monsterId",
-        "combatLevel"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "monster.runtime",

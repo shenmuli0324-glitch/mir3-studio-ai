@@ -5,14 +5,14 @@ use mir3_domain::{
     CapabilityCompileRequest, CapabilityPromotionRequest, CapabilityResolution,
     CapabilityRollbackRequest, CompositeApplyResult, CompositeDraftConfirmation,
     DomainCompositeWorkingSaveResult, DomainDependencyGraph, DomainFileQuery, DomainFileRecord,
-    DomainManifest, DomainMemory, DomainResourceQuery, DomainResourceRecord, DomainSaveNode,
-    DomainSystemDescription, DomainValidationReport, DomainWorkingCopy, DomainWorkingCopyRevision,
-    DomainWorkingRestoreResult, DomainWorkingSaveResult, DomainWorkingXlsOpen, Draft, DraftPreview,
-    GlobalCapabilityCompileRequest, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
-    KnowledgeRecord, KnowledgeStatus, LegacyDraftCloneRequest, Mir3Project, SafeTextOpen,
-    SafeTextPatch, SafeTextPatchResult, SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet,
-    SafeXlsWorkbook, Snapshot, SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability,
-    WorkspaceDirectory,
+    DomainManifest, DomainMemory, DomainProjectBinding, DomainResourceQuery, DomainResourceRecord,
+    DomainSaveNode, DomainSystemDescription, DomainValidationReport, DomainWorkingCopy,
+    DomainWorkingCopyRevision, DomainWorkingRestoreResult, DomainWorkingSaveResult,
+    DomainWorkingXlsOpen, Draft, DraftPreview, GlobalCapabilityCompileRequest, IndexQuery,
+    IndexRecord, IndexStats, KnowledgeFilter, KnowledgeRecord, KnowledgeStatus,
+    LegacyDraftCloneRequest, Mir3Project, SafeTextOpen, SafeTextPatch, SafeTextPatchResult,
+    SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet, SafeXlsWorkbook, Snapshot,
+    SystemSessionBinding, TaskReceipt, TaskScopeLease, UserCapability, WorkspaceDirectory,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -195,6 +195,18 @@ pub fn domain_file_query(
 }
 
 #[tauri::command]
+pub fn domain_reference_query(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    query: DomainFileQuery,
+) -> Result<Vec<DomainFileRecord>, String> {
+    service
+        .store()
+        .query_domain_references(&project_id, &system_id, &query)
+}
+
+#[tauri::command]
 pub fn domain_unclaimed_file_query(
     service: State<'_, ProjectService>,
     project_id: String,
@@ -203,6 +215,41 @@ pub fn domain_unclaimed_file_query(
     service
         .store()
         .query_unclaimed_domain_files(&project_id, &query)
+}
+
+#[tauri::command]
+pub fn domain_binding_list(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+) -> Result<Vec<DomainProjectBinding>, String> {
+    service
+        .store()
+        .list_domain_project_bindings(&project_id, &system_id)
+}
+
+#[tauri::command]
+pub fn domain_binding_add(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    path: String,
+) -> Result<DomainProjectBinding, String> {
+    service
+        .store()
+        .add_domain_project_binding(&project_id, &system_id, &path)
+}
+
+#[tauri::command]
+pub fn domain_binding_remove(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    system_id: String,
+    binding_id: String,
+) -> Result<(), String> {
+    service
+        .store()
+        .remove_domain_project_binding(&project_id, &system_id, &binding_id)
 }
 
 #[tauri::command]

@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "enhance",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "strengthen",
       "强化"
     ],
-    "ownedSelectors": [
-      "enhance",
-      "strengthen",
-      "强化"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "equipment"
@@ -64,18 +60,23 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
+    "contentFingerprints": [],
+    "bindings": [
       {
-        "contains": "enhance",
-        "caseSensitive": false
-      },
-      {
-        "contains": "strengthen",
-        "caseSensitive": false
-      },
-      {
-        "contains": "强化",
-        "caseSensitive": false
+        "id": "enhance-weapon-level",
+        "root": "engineData",
+        "pathPattern": "cfg_weaponlv.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "enhance",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       }
     ],
     "pathAliases": [
@@ -97,7 +98,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -705,7 +707,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -819,7 +821,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -913,7 +915,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1014,7 +1016,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1099,7 +1101,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1157,16 +1159,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "enhance.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "enhanceTier",
-      "compareFields": [
-        "enhanceTier",
-        "equipmentClass"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "enhance.runtime",

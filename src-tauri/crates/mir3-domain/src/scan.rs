@@ -5,7 +5,7 @@ use encoding_rs::GBK;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -85,6 +85,16 @@ pub struct DevelopmentFileDecision {
     pub owner_systems: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct ProjectFileBinding {
+    id: String,
+    system_id: String,
+    path: String,
+    relation: String,
+    access: String,
+    scope_json: String,
+}
+
 impl DomainStore {
     /// 增量扫描项目；不写项目目录，只更新外置 SQLite 索引。
     pub fn scan_project<F>(&self, project_id: &str, cancelled: F) -> Result<ScanSummary, String>
@@ -104,6 +114,39 @@ impl DomainStore {
         let mut categories = BTreeMap::new();
         let mut was_cancelled = false;
         let registry = self.runtime_domain_registry()?;
+        let projection_rule_version = crate::systems::file_projection_rule_version(&registry);
+        let projection_rule_current = transaction
+            .query_row(
+                "SELECT value FROM metadata WHERE key='file_projection_rule_version'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| format!("INDEX_PROJECTION_VERSION_READ_FAILED: {e}"))?
+            .as_deref()
+            == Some(projection_rule_version.as_str());
+        let project_bindings = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id,system_id,path,relation,access,scope_json
+                     FROM domain_project_bindings ORDER BY system_id,path",
+                )
+                .map_err(|e| format!("INDEX_PROJECT_BINDING_LIST_FAILED: {e}"))?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok(ProjectFileBinding {
+                        id: row.get(0)?,
+                        system_id: row.get(1)?,
+                        path: row.get(2)?,
+                        relation: row.get(3)?,
+                        access: row.get(4)?,
+                        scope_json: row.get(5)?,
+                    })
+                })
+                .map_err(|e| format!("INDEX_PROJECT_BINDING_LIST_FAILED: {e}"))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("INDEX_PROJECT_BINDING_LIST_FAILED: {e}"))?
+        };
 
         for entry in WalkDir::new(&root)
             .follow_links(false)
@@ -149,6 +192,33 @@ impl DomainStore {
                 .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
                 .map(|value| value.as_millis().min(i64::MAX as u128) as i64)
                 .unwrap_or_default();
+            let unchanged = transaction
+                .query_row(
+                    "SELECT size,modified_at,content IS NOT NULL FROM files WHERE path=?1",
+                    [&relative_string],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, i64>(1)?,
+                            row.get::<_, bool>(2)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(|e| format!("INDEX_FAST_PATH_READ_FAILED: {e}"))?;
+            if projection_rule_current
+                && unchanged.is_some_and(|(size, previous_modified_at, _)| {
+                    size == metadata.len() as i64 && previous_modified_at == modified_at
+                })
+            {
+                if unchanged.is_some_and(|(_, _, indexed)| indexed) {
+                    indexed_text_files += 1;
+                }
+                seen.insert(relative_string);
+                scanned_files += 1;
+                *categories.entry(category_name).or_insert(0) += 1;
+                continue;
+            }
             // XLS 是结构化二开文件：读取完整工作簿并建立全部单元格索引，不受普通
             // 文本 2 MiB 阈值限制。其他二进制资源仍只记录元数据，避免无意义 I/O。
             let (sha256, content) = if is_editable_xls_extension(extension.as_deref()) {
@@ -167,14 +237,29 @@ impl DomainStore {
             } else {
                 (None, None)
             };
-            if development_file_decision(
+            #[allow(unused_mut)]
+            let mut development_decision = development_file_decision(
                 &registry,
                 &relative_string,
                 extension.as_deref(),
                 content.as_deref(),
-            )
-            .is_none()
-            {
+            );
+            #[cfg(test)]
+            if development_decision.is_none() && self.trusted_fixture_engine_override {
+                let owner_systems = crate::systems::trusted_fixture_projection_system_ids(
+                    &registry,
+                    &relative_string,
+                    extension.as_deref(),
+                );
+                if !owner_systems.is_empty() {
+                    development_decision = Some(DevelopmentFileDecision {
+                        path: relative_string.clone(),
+                        access: DevelopmentFileAccess::Editable,
+                        owner_systems,
+                    });
+                }
+            }
+            if development_decision.is_none() {
                 continue;
             }
             if content.is_some() {
@@ -196,6 +281,79 @@ impl DomainStore {
                     ],
                 )
                 .map_err(|e| format!("INDEX_WRITE_FAILED: {e}"))?;
+            transaction
+                .execute(
+                    "DELETE FROM file_system_projection WHERE path=?1",
+                    [&relative_string],
+                )
+                .map_err(|e| format!("INDEX_PROJECTION_DELETE_FAILED: {e}"))?;
+            for binding in crate::systems::projected_file_bindings(&registry, &relative_string) {
+                let scope = serde_json::to_string(&binding.scope)
+                    .map_err(|e| format!("INDEX_PROJECTION_SERIALIZE_FAILED: {e}"))?;
+                let evidence = serde_json::to_string(&binding.evidence)
+                    .map_err(|e| format!("INDEX_PROJECTION_SERIALIZE_FAILED: {e}"))?;
+                transaction
+                    .execute(
+                        "INSERT INTO file_system_projection(path,system_id,relation,access,binding_id,scope_json,evidence_json,rule_version,source_sha256)
+                         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                        params![
+                            relative_string,
+                            binding.system_id,
+                            binding.relation,
+                            binding.access,
+                            binding.binding_id,
+                            scope,
+                            evidence,
+                            binding.rule_version,
+                            sha256,
+                        ],
+                    )
+                    .map_err(|e| format!("INDEX_PROJECTION_WRITE_FAILED: {e}"))?;
+            }
+            #[cfg(test)]
+            if self.trusted_fixture_engine_override {
+                for system_id in crate::systems::trusted_fixture_projection_system_ids(
+                    &registry,
+                    &relative_string,
+                    extension.as_deref(),
+                ) {
+                    let binding_id = format!("test-fixture:{system_id}");
+                    transaction
+                        .execute(
+                            "INSERT OR IGNORE INTO file_system_projection(path,system_id,relation,access,binding_id,scope_json,evidence_json,rule_version,source_sha256)
+                             VALUES(?1,?2,'direct','readwrite',?3,'{\"type\":\"wholeFile\"}','{\"kind\":\"projectBinding\",\"ref\":\"trusted-test-fixture\",\"version\":\"test\"}','test',?4)",
+                            params![relative_string, system_id, binding_id, sha256],
+                        )
+                        .map_err(|e| format!("INDEX_TEST_PROJECTION_WRITE_FAILED: {e}"))?;
+                }
+            }
+            for binding in project_bindings
+                .iter()
+                .filter(|binding| binding.path.eq_ignore_ascii_case(&relative_string))
+            {
+                let evidence = serde_json::json!({
+                    "kind":"projectBinding",
+                    "ref":binding.id,
+                    "version":"project"
+                })
+                .to_string();
+                transaction
+                    .execute(
+                        "INSERT INTO file_system_projection(path,system_id,relation,access,binding_id,scope_json,evidence_json,rule_version,source_sha256)
+                         VALUES(?1,?2,?3,?4,?5,?6,?7,'project',?8)",
+                        params![
+                            relative_string,
+                            binding.system_id,
+                            binding.relation,
+                            binding.access,
+                            binding.id,
+                            binding.scope_json,
+                            evidence,
+                            sha256,
+                        ],
+                    )
+                    .map_err(|e| format!("INDEX_PROJECT_PROJECTION_WRITE_FAILED: {e}"))?;
+            }
             seen.insert(relative_string);
             scanned_files += 1;
             *categories.entry(category_name).or_insert(0) += 1;
@@ -220,6 +378,13 @@ impl DomainStore {
                         .map_err(|e| format!("INDEX_DELETE_FAILED: {e}"))?;
                 }
             }
+            transaction
+                .execute(
+                    "INSERT INTO metadata(key,value) VALUES('file_projection_rule_version',?1)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    [projection_rule_version],
+                )
+                .map_err(|e| format!("INDEX_PROJECTION_VERSION_WRITE_FAILED: {e}"))?;
         }
         transaction
             .commit()
@@ -237,6 +402,26 @@ impl DomainStore {
             completed_at,
             cancelled: was_cancelled,
         })
+    }
+
+    /// 老项目升级或领域规则变化后，在第一次领域查询前自动重建一次投影。
+    pub(crate) fn ensure_file_system_projection(&self, project_id: &str) -> Result<(), String> {
+        let registry = self.runtime_domain_registry()?;
+        let expected = crate::systems::file_projection_rule_version(&registry);
+        let actual = self
+            .project_connection(project_id)?
+            .query_row(
+                "SELECT value FROM metadata WHERE key='file_projection_rule_version'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| format!("INDEX_PROJECTION_VERSION_READ_FAILED: {e}"))?;
+        if actual.as_deref() == Some(expected.as_str()) {
+            return Ok(());
+        }
+        self.scan_project(project_id, || false)?;
+        Ok(())
     }
 
     pub fn index_stats(&self, project_id: &str) -> Result<IndexStats, String> {
@@ -351,6 +536,7 @@ impl DomainStore {
         project_id: &str,
         relative_path: &str,
     ) -> Result<Option<DevelopmentFileDecision>, String> {
+        self.ensure_file_system_projection(project_id)?;
         let registry = self.runtime_domain_registry()?;
         let extension = Path::new(relative_path)
             .extension()
@@ -377,12 +563,38 @@ impl DomainStore {
         } else {
             None
         };
-        Ok(development_file_decision(
-            &registry,
-            &normalized,
-            extension,
-            content.as_deref(),
-        ))
+        let mut decision =
+            development_file_decision(&registry, &normalized, extension, content.as_deref());
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT system_id,access FROM file_system_projection
+                 WHERE lower(path)=lower(?1) ORDER BY system_id,binding_id",
+            )
+            .map_err(|error| format!("DEVELOPMENT_FILE_PROJECTION_READ_FAILED: {error}"))?;
+        let projections = statement
+            .query_map([&normalized], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| format!("DEVELOPMENT_FILE_PROJECTION_READ_FAILED: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("DEVELOPMENT_FILE_PROJECTION_READ_FAILED: {error}"))?;
+        if let Some(decision) = decision.as_mut() {
+            decision.owner_systems = projections
+                .iter()
+                .map(|(system_id, _)| system_id.clone())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            if !projections.is_empty() {
+                decision.access = if projections.iter().any(|(_, access)| access == "readwrite") {
+                    DevelopmentFileAccess::Editable
+                } else {
+                    DevelopmentFileAccess::Reference
+                };
+            }
+        }
+        Ok(decision)
     }
 }
 
@@ -407,6 +619,9 @@ fn ignored_entry(entry: &DirEntry, root: &Path) -> bool {
     let depth = relative.components().count();
     if depth == 1 {
         return normalized != "客户端" && normalized != "引擎";
+    }
+    if normalized.starts_with("引擎/") && !normalized.starts_with("引擎/mir200") {
+        return true;
     }
     normalized.starts_with("客户端/")
         && normalized != "客户端/dev"
@@ -437,7 +652,7 @@ fn development_file_extension_candidate(
     }
     let normalized = relative_path.replace('\\', "/").to_lowercase();
     let in_client_dev = normalized.starts_with("客户端/dev/");
-    let in_engine = normalized.starts_with("引擎/");
+    let in_engine = normalized.starts_with("引擎/mir200/");
     if !in_client_dev && !in_engine {
         return false;
     }
@@ -469,9 +684,10 @@ fn development_file_decision(
     }
     let normalized = relative_path.replace('\\', "/");
     let client_development_file = normalized.to_lowercase().starts_with("客户端/dev/");
+    let engine_runtime_file = normalized.to_lowercase().starts_with("引擎/mir200/");
     let owner_systems =
         crate::systems::projection_system_ids(registry, &normalized, extension, content);
-    if !client_development_file && owner_systems.is_empty() {
+    if !client_development_file && !engine_runtime_file && owner_systems.is_empty() {
         return None;
     }
     let editable = is_editable_xls_extension(extension)
@@ -485,8 +701,11 @@ fn development_file_decision(
                 })
         })
         || extension.is_some_and(|value| {
-            client_development_file
-                && matches!(value.to_ascii_lowercase().as_str(), "txt" | "lua" | "map")
+            (client_development_file || engine_runtime_file)
+                && matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "txt" | "lua" | "ini" | "map"
+                )
         });
     Some(DevelopmentFileDecision {
         path: normalized,
@@ -742,7 +961,7 @@ mod tests {
             now_millis()
         ));
         let project_root = base.join("完整表格项目");
-        let relative = "引擎/Mir200/Envir/Shop/完整商品表.xls";
+        let relative = "引擎/Mir200/Envir/Data/cfg_store.xls";
         let target = project_root.join(relative);
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
@@ -818,7 +1037,8 @@ mod tests {
         ));
         let project_root = base.join("大型项目");
         fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
-        let item_root = project_root.join("引擎/Mir200/Envir/Item");
+        fs::create_dir_all(project_root.join("引擎")).unwrap();
+        let item_root = project_root.join("客户端/dev/Item");
         fs::create_dir_all(&item_root).unwrap();
         for group in 0..101 {
             let directory = item_root.join(format!("group-{group:03}"));
@@ -860,9 +1080,8 @@ mod tests {
         assert_eq!(bounded.len(), 200);
 
         let first_page = store
-            .query_domain_files(
+            .query_unclaimed_domain_files(
                 &project.id,
-                "item",
                 &DomainFileQuery {
                     text: String::new(),
                     limit: Some(125),
@@ -871,9 +1090,8 @@ mod tests {
             )
             .unwrap();
         let last_page = store
-            .query_domain_files(
+            .query_unclaimed_domain_files(
                 &project.id,
-                "item",
                 &DomainFileQuery {
                     text: String::new(),
                     limit: Some(125),
@@ -882,9 +1100,8 @@ mod tests {
             )
             .unwrap();
         let clamped = store
-            .query_domain_files(
+            .query_unclaimed_domain_files(
                 &project.id,
-                "item",
                 &DomainFileQuery {
                     text: String::new(),
                     limit: Some(usize::MAX),

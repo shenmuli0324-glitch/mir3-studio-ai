@@ -137,7 +137,7 @@ describe('studio shell contract', () => {
     expect(domainView).not.toContain('studio.devtools.controls.plugin_version')
     expect(domainView).not.toContain('<DomainConfiguration manifest={manifest} />')
     expect(domainView).not.toContain('<ResourceRenderer')
-    expect(domainView).not.toContain('queryUnclaimedDomainFiles')
+    expect(domainView).toContain('queryUnclaimedDomainFiles(project!.id, deferredSearch, 100)')
     expect(domainView).not.toContain('queryDomainResources')
     expect(domainView).not.toContain('getDomainResource')
     expect(domainView).not.toContain('resolveDomainDependencies')

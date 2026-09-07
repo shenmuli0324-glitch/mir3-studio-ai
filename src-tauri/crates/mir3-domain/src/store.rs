@@ -14,7 +14,7 @@ use crate::safe_files::CachedXlsWorkbook;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 #[cfg(test)]
 type TestBarrierGate = Arc<Mutex<Option<(Arc<std::sync::Barrier>, Arc<std::sync::Barrier>)>>>;
@@ -700,6 +700,33 @@ CREATE TABLE IF NOT EXISTS files(
 );
 CREATE INDEX IF NOT EXISTS idx_files_category ON files(category);
 CREATE INDEX IF NOT EXISTS idx_files_role ON files(role);
+CREATE TABLE IF NOT EXISTS file_system_projection(
+  path TEXT NOT NULL,
+  system_id TEXT NOT NULL,
+  relation TEXT NOT NULL,
+  access TEXT NOT NULL,
+  binding_id TEXT NOT NULL,
+  scope_json TEXT NOT NULL,
+  evidence_json TEXT NOT NULL,
+  rule_version TEXT NOT NULL,
+  source_sha256 TEXT,
+  PRIMARY KEY(path,system_id,binding_id),
+  FOREIGN KEY(path) REFERENCES files(path) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_file_system_projection_lookup
+  ON file_system_projection(system_id,relation,path);
+CREATE TABLE IF NOT EXISTS domain_project_bindings(
+  id TEXT PRIMARY KEY,
+  system_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  relation TEXT NOT NULL,
+  access TEXT NOT NULL,
+  scope_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(system_id,path)
+);
+CREATE INDEX IF NOT EXISTS idx_domain_project_bindings_system
+  ON domain_project_bindings(system_id,path);
 CREATE TABLE IF NOT EXISTS knowledge(
   id TEXT PRIMARY KEY,
   status TEXT NOT NULL,
@@ -1181,7 +1208,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_less_legacy_project_migrates_to_v3() {
+    fn metadata_less_legacy_project_migrates_to_v4() {
         let base = std::env::temp_dir().join(format!(
             "mir3-metadata-less-migration-{}-{}",
             std::process::id(),
@@ -1214,7 +1241,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(schema, "3");
+        assert_eq!(schema, "4");
         let scope_table: String = reopened
             .project_connection(&imported.id)
             .unwrap()
@@ -1327,8 +1354,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].access, "readonly");
+        assert!(files.is_empty());
         assert!(reopened
             .describe_domain_system(&imported.id, "quest")
             .unwrap()

@@ -41,6 +41,8 @@ function installSystemSessionPolicy(ctx) {
       throw new Error(`${violation}: use mir3_resource_query or an official read capability`)
     if (violation === 'MIR3_XLS_MCP_REQUIRED')
       throw new Error(`${violation}: BIFF .xls must be read through mir3_resource_get`)
+    if (violation === 'MIR3_SYSTEM_FILE_MCP_REQUIRED')
+      throw new Error(`${violation}: managed sessions must read files through scoped MIR3 MCP resources`)
     if (violation === 'MIR3_GENERIC_SHELL_DISABLED')
       throw new Error(`${violation}: managed MIR3 sessions must inspect and modify project data through scoped MIR3 MCP tools`)
     if (violation === 'MIR3_PROJECT_SCOPE_UNAVAILABLE' || violation === 'MIR3_PROJECT_SESSION_OUTSIDE_SCOPE')

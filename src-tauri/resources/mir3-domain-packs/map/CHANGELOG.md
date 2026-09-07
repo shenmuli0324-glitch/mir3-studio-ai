@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.3 - 2026-09-07
+
+- Replaced fuzzy path and content ownership with evidence-backed official file bindings.
+- Scoped system discovery to active runtime files; unverified custom systems now remain empty until explicitly bound.
+
 ## 1.3.2
 
 - Added real 1.8 `cfg_mapinfo.xls` header discovery, comment-row filtering, and stable transition identities.

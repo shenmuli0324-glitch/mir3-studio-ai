@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "crafting",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -45,14 +45,7 @@
       "合成",
       "配方"
     ],
-    "ownedSelectors": [
-      "crafting",
-      "craft",
-      "compose",
-      "recipe",
-      "合成",
-      "配方"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "item"
@@ -69,28 +62,8 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
-      {
-        "contains": "craft",
-        "caseSensitive": false
-      },
-      {
-        "contains": "compose",
-        "caseSensitive": false
-      },
-      {
-        "contains": "recipe",
-        "caseSensitive": false
-      },
-      {
-        "contains": "合成",
-        "caseSensitive": false
-      },
-      {
-        "contains": "配方",
-        "caseSensitive": false
-      }
-    ],
+    "contentFingerprints": [],
+    "bindings": [],
     "pathAliases": [
       {
         "from": "client",
@@ -110,7 +83,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -703,7 +677,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -798,7 +772,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -884,7 +858,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -978,7 +952,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1078,7 +1052,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1140,16 +1114,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "crafting.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "recipeId",
-      "compareFields": [
-        "recipeId",
-        "outputItemId"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "crafting.runtime",

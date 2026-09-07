@@ -340,7 +340,7 @@ describe('mir3 managed-session policy', () => {
     expect(developmentWriteViolation('/project', { id: 'mir3-system-write-test', header: { cwd: '/project' } }, { path: '/project/引擎/Data/file.txt' })).toBe('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED')
   })
 
-  it('exposes only real second-development files and routes BIFF workbooks through MCP', () => {
+  it('routes every managed-session file lookup through the scoped MIR3 projection', () => {
     const session = { id: 'mir3-system-filter-test', header: { cwd: '/project' } }
     const agent = { session }
     expect(isDevelopmentFilePath('/project/客户端/dev/main.LUA', '/project')).toBe(true)
@@ -351,14 +351,14 @@ describe('mir3 managed-session policy', () => {
     expect(isDevelopmentFilePath('/project/客户端/game.txt', '/project')).toBe(false)
     expect(isDevelopmentFilePath('/project/game.exe', '/project')).toBe(false)
     expect(isDevelopmentFilePath('/outside/main.lua', '/project')).toBe(false)
-    expect(developmentReadViolation('/project', session, '客户端/dev/main.lua')).toBeNull()
-    expect(developmentReadViolation('/project', session, '引擎/Data/config.xls')).toBe('MIR3_XLS_MCP_REQUIRED')
-    expect(developmentReadViolation('/project', session, '引擎/Data/config.xlsx')).toBe('MIR3_NON_DEVELOPMENT_FILE_SKIPPED')
-    expect(developmentReadViolation('/project', session, '客户端/game.txt')).toBe('MIR3_NON_DEVELOPMENT_FILE_SKIPPED')
-    expect(developmentReadViolation('/project', session, '../outside.txt')).toBe('MIR3_PROJECT_READ_OUTSIDE_SCOPE')
+    expect(developmentReadViolation('/project', session, '客户端/dev/main.lua')).toBe('MIR3_SYSTEM_FILE_MCP_REQUIRED')
+    expect(developmentReadViolation('/project', session, '引擎/Data/config.xls')).toBe('MIR3_SYSTEM_FILE_MCP_REQUIRED')
+    expect(developmentReadViolation('/project', session, '引擎/Data/config.xlsx')).toBe('MIR3_SYSTEM_FILE_MCP_REQUIRED')
+    expect(developmentReadViolation('/project', session, '客户端/game.txt')).toBe('MIR3_SYSTEM_FILE_MCP_REQUIRED')
+    expect(developmentReadViolation('/project', session, '../outside.txt')).toBe('MIR3_SYSTEM_FILE_MCP_REQUIRED')
     expect(developmentToolViolation('/project', { name: 'glob', arguments: { pattern: '*' }, agent })).toBe('MIR3_DEVELOPMENT_SEARCH_REQUIRED')
     expect(developmentToolViolation('/project', { name: 'grep', arguments: { pattern: 'secret' }, agent })).toBe('MIR3_DEVELOPMENT_SEARCH_REQUIRED')
-    expect(developmentToolViolation('/project', { name: 'read', arguments: { file_path: '引擎/Data/a.txt' }, agent })).toBeNull()
+    expect(developmentToolViolation('/project', { name: 'read', arguments: { file_path: '引擎/Data/a.txt' }, agent })).toBe('MIR3_SYSTEM_FILE_MCP_REQUIRED')
     expect(developmentToolViolation('/project', { name: 'read_image', arguments: { file_path: 'Data/a.png' }, agent })).toBe('MIR3_NON_DEVELOPMENT_FILE_SKIPPED')
     expect(developmentToolViolation('/project', { name: 'bash', arguments: { command: 'find .' }, agent })).toBe('MIR3_GENERIC_SHELL_DISABLED')
     expect(developmentToolViolation('/project', { name: 'pwsh', arguments: { command: 'Get-ChildItem' }, agent })).toBe('MIR3_GENERIC_SHELL_DISABLED')
@@ -370,11 +370,7 @@ describe('mir3 managed-session policy', () => {
       { path: '引擎/Data/config.xls', kind: 'file' },
       { path: '引擎/Data/config.xlsx', kind: 'file' },
       { path: '客户端/game.exe', kind: 'file' },
-    ])).toEqual([
-      { path: '客户端', kind: 'directory' },
-      { path: '客户端/dev/main.lua', kind: 'file' },
-      { path: '引擎/Data/config.xls', kind: 'file' },
-    ])
+    ])).toEqual([])
     expect(developmentToolViolation('/project', {
       name: 'read',
       arguments: { file_path: '引擎/Data/a.txt' },

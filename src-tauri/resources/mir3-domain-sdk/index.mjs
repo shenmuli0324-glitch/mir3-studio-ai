@@ -39,7 +39,7 @@ export function validateDomainManifestContract(manifest) {
     throw new Error('DOMAIN_SDK_CLASSIFICATION_INVALID: category and positive integer complexity are required')
   }
   validateKernelPrimitives(manifest.requiredKernelPrimitives)
-  validateProjection(manifest.fileProjection, manifest.dependencies)
+  validateProjection(manifest.fileProjection, manifest.dependencies, manifest.systemId)
   validateResources(manifest.resources, manifest.systemId, manifest.dependencies)
   validatePresentation(manifest)
   validateDocumentationAndFixtures(manifest)
@@ -67,7 +67,7 @@ export function validateDomainFixtureContract(fixtures) {
 function validateEngineCompatibility(compatibility) {
   if (compatibility?.strategy !== 'evidence-gated-auto-generalization-v1'
     || JSON.stringify(compatibility?.versionAliases) !== JSON.stringify(['semver', 'v-prefixed-semver', 'major-minor'])
-    || JSON.stringify(compatibility?.requiredEvidence) !== JSON.stringify(['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'])
+    || JSON.stringify(compatibility?.requiredEvidence) !== JSON.stringify(['project-directory-layout', 'official-file-binding', 'resource-schema-validation'])
     || compatibility?.unknownVersionPolicy !== 'readonly'
     || compatibility?.incompatibleVersionPolicy !== 'readonly') {
     throw new Error('DOMAIN_SDK_ENGINE_COMPATIBILITY_INVALID: aliases and evidence must fail read-only')
@@ -75,7 +75,9 @@ function validateEngineCompatibility(compatibility) {
 }
 
 function validateSchemaVersions(manifest) {
-  for (const key of ['manifestSchemaVersion', 'resourceSchemaVersion', 'capabilitySchemaVersion', 'memorySchemaVersion']) {
+  if (manifest.manifestSchemaVersion !== 2)
+    throw new Error('DOMAIN_SDK_SCHEMA_VERSION_INVALID: manifestSchemaVersion')
+  for (const key of ['resourceSchemaVersion', 'capabilitySchemaVersion', 'memorySchemaVersion']) {
     if (manifest[key] !== 1)
       throw new Error(`DOMAIN_SDK_SCHEMA_VERSION_INVALID: ${key}`)
   }
@@ -88,8 +90,8 @@ function validateKernelPrimitives(primitives) {
   }
 }
 
-function validateProjection(projection, dependencies) {
-  if (!projection || !nonEmptyArray(projection.keywords) || !nonEmptyArray(projection.ownedSelectors) || !nonEmptyArray(projection.contentFingerprints)
+function validateProjection(projection, dependencies, systemId) {
+  if (!projection || !nonEmptyArray(projection.keywords) || !Array.isArray(projection.ownedSelectors) || !Array.isArray(projection.contentFingerprints)
     || !nonEmptyArray(projection.pathAliases) || !nonEmptyArray(projection.roles)
     || projection.roles.some(role => !fileRoles.has(role)) || [...fileRoles].some(role => !projection.roles.includes(role))
     || !Array.isArray(projection.excludes) || !Array.isArray(projection.editableExtensions)
@@ -99,6 +101,10 @@ function validateProjection(projection, dependencies) {
     || projection.unknownFormatPolicy !== 'readonly') {
     throw new Error('DOMAIN_SDK_FILE_PROJECTION_INVALID: selectors, fingerprints, aliases, roles and readonly fallback are required')
   }
+  if (!Array.isArray(projection.bindings)
+    || projection.bindings.some(binding => !validFileBinding(binding, systemId))) {
+    throw new Error('DOMAIN_SDK_FILE_BINDING_INVALID: official bindings must declare path, scope, access and evidence')
+  }
   if (!Array.isArray(dependencies) || new Set(dependencies).size !== dependencies.length
     || dependencies.some(systemId => !/^[a-z][a-z0-9_]*$/.test(systemId))) {
     throw new Error('DOMAIN_SDK_DEPENDENCIES_INVALID: dependencies must be an array')
@@ -106,6 +112,19 @@ function validateProjection(projection, dependencies) {
   const selectors = (projection.dependencySelectors || []).map(selector => selector.systemId).sort()
   if (JSON.stringify(selectors) !== JSON.stringify([...dependencies].sort()))
     throw new Error('DOMAIN_SDK_DEPENDENCY_SELECTOR_INVALID: dependency selectors must match dependencies')
+}
+
+function validFileBinding(binding, systemId) {
+  return typeof binding?.id === 'string' && binding.id.length > 0
+    && binding.systemId === systemId
+    && ['clientDev', 'engineData', 'engineRuntime'].includes(binding.root)
+    && typeof binding.pathPattern === 'string' && binding.pathPattern.length > 0
+    && ['direct', 'shared', 'reference'].includes(binding.relation)
+    && ['readwrite', 'readonly'].includes(binding.access)
+    && ['wholeFile', 'xls', 'script'].includes(binding.scope?.type)
+    && ['officialDoc', 'officialForum', 'projectBinding'].includes(binding.evidence?.kind)
+    && typeof binding.evidence.ref === 'string' && binding.evidence.ref.length > 0
+    && typeof binding.evidence.version === 'string' && binding.evidence.version.length > 0
 }
 
 function validateResources(resources, systemId) {

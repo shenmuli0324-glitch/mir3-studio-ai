@@ -365,17 +365,17 @@ fn validate_release_metadata(
     }
     VersionReq::parse(&release.supported_engine_range)
         .map_err(|error| format!("DOMAIN_PACK_UPDATE_ENGINE_RANGE_INVALID: {error}"))?;
-    if [
-        release.manifest_schema_version,
-        release.resource_schema_version,
-        release.capability_schema_version,
-        release.memory_schema_version,
-    ]
-    .iter()
-    .any(|version| *version != SUPPORTED_PACK_SCHEMA_VERSION)
+    if !matches!(release.manifest_schema_version, 1 | 2)
+        || [
+            release.resource_schema_version,
+            release.capability_schema_version,
+            release.memory_schema_version,
+        ]
+        .iter()
+        .any(|version| *version != SUPPORTED_PACK_SCHEMA_VERSION)
     {
         return Err(
-            "DOMAIN_PACK_UPDATE_SCHEMA_UNSUPPORTED: manifest/resource/capability/memory must be v1"
+            "DOMAIN_PACK_UPDATE_SCHEMA_UNSUPPORTED: manifest must be v1/v2 and resource/capability/memory must be v1"
                 .to_string(),
         );
     }
@@ -559,19 +559,36 @@ fn validate_staged_descriptor(root: &Path, release: &RemoteRelease) -> Result<()
             .map_err(|error| format!("DOMAIN_PACK_UPDATE_MANIFEST_READ_FAILED: {error}"))?,
     )
     .map_err(|error| format!("DOMAIN_PACK_UPDATE_MANIFEST_INVALID: {error}"))?;
-    if descriptor.system_id != release.system_id
-        || descriptor.version != release.version
-        || descriptor.kernel_api_range != release.kernel_api_range
-        || descriptor.supported_engine_range != release.supported_engine_range
-        || descriptor.manifest_schema_version != release.manifest_schema_version
-        || descriptor.resource_schema_version != release.resource_schema_version
-        || descriptor.capability_schema_version != release.capability_schema_version
-        || descriptor.memory_schema_version != release.memory_schema_version
-    {
-        return Err(
-            "DOMAIN_PACK_UPDATE_MANIFEST_MISMATCH: signed metadata differs from domain.json"
-                .to_string(),
-        );
+    let mut mismatches = Vec::new();
+    if descriptor.system_id != release.system_id {
+        mismatches.push("systemId");
+    }
+    if descriptor.version != release.version {
+        mismatches.push("version");
+    }
+    if descriptor.kernel_api_range != release.kernel_api_range {
+        mismatches.push("kernelApiRange");
+    }
+    if descriptor.supported_engine_range != release.supported_engine_range {
+        mismatches.push("supportedEngineRange");
+    }
+    if descriptor.manifest_schema_version != release.manifest_schema_version {
+        mismatches.push("manifestSchemaVersion");
+    }
+    if descriptor.resource_schema_version != release.resource_schema_version {
+        mismatches.push("resourceSchemaVersion");
+    }
+    if descriptor.capability_schema_version != release.capability_schema_version {
+        mismatches.push("capabilitySchemaVersion");
+    }
+    if descriptor.memory_schema_version != release.memory_schema_version {
+        mismatches.push("memorySchemaVersion");
+    }
+    if !mismatches.is_empty() {
+        return Err(format!(
+            "DOMAIN_PACK_UPDATE_MANIFEST_MISMATCH: signed metadata differs from domain.json: {}",
+            mismatches.join(", ")
+        ));
     }
     Ok(())
 }
@@ -691,6 +708,7 @@ mod tests {
         let release = signed_release(
             "level",
             version,
+            2,
             &format!("https://updates.example/packs/level-{version}.zip"),
             &archive,
             &key,
@@ -726,8 +744,14 @@ mod tests {
         let key = test_key();
         let config = test_config(&key);
         let bytes = b"fixture";
-        let mut release =
-            signed_release("map", "1.0.1", "https://evil.example/map.zip", bytes, &key);
+        let mut release = signed_release(
+            "map",
+            "1.0.1",
+            1,
+            "https://evil.example/map.zip",
+            bytes,
+            &key,
+        );
         let error = validate_release_metadata(&release, &config).unwrap_err();
         assert!(error.starts_with("DOMAIN_PACK_UPDATE_HOST_DENIED:"));
 
@@ -745,6 +769,7 @@ mod tests {
         let baseline = signed_release(
             "level",
             "1.0.1",
+            1,
             "https://updates.example/level.zip",
             archive,
             &key,
@@ -806,6 +831,7 @@ mod tests {
     fn signed_release(
         system_id: &str,
         version: &str,
+        manifest_schema_version: u32,
         archive_url: &str,
         archive: &[u8],
         key: &Ed25519KeyPair,
@@ -815,7 +841,7 @@ mod tests {
             version: version.to_string(),
             kernel_api_range: "^1.0.0".to_string(),
             supported_engine_range: ">=1.0.0".to_string(),
-            manifest_schema_version: 1,
+            manifest_schema_version,
             resource_schema_version: 1,
             capability_schema_version: 1,
             memory_schema_version: 1,

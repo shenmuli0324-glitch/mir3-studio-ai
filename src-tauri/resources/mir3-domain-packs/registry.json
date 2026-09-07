@@ -4,7 +4,7 @@
     {
       "kind": "domain",
       "systemId": "map",
-      "version": "1.3.2",
+      "version": "1.3.3",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -16,13 +16,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -46,11 +46,7 @@
           "/map/",
           ".map"
         ],
-        "ownedSelectors": [
-          "mapinfo",
-          "/map/",
-          ".map"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "npc"
@@ -73,10 +69,119 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "mapId=",
-            "caseSensitive": false
+            "id": "map-info",
+            "root": "engineData",
+            "pathPattern": "cfg_mapinfo.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "map-startpoint",
+            "root": "engineData",
+            "pathPattern": "cfg_startpoint.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "map-music",
+            "root": "engineData",
+            "pathPattern": "cfg_mapmusic.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "map-background",
+            "root": "engineData",
+            "pathPattern": "cfg_mapbginfo.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "map-name",
+            "root": "engineData",
+            "pathPattern": "cfg_mapname.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "map-binary",
+            "root": "engineRuntime",
+            "pathPattern": "map/**/*.map",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "map-text",
+            "root": "engineRuntime",
+            "pathPattern": "Envir/MapInfo.txt",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "map",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -99,6 +204,7 @@
         "editableExtensions": [
           "txt",
           "lua",
+          "ini",
           "map"
         ],
         "structuredExtensions": [
@@ -1103,7 +1209,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1207,7 +1313,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1313,7 +1419,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1568,7 +1674,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1684,7 +1790,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1794,7 +1900,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1881,7 +1987,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.2",
+          "version": "1.3.3",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -1942,16 +2048,6 @@
           ]
         },
         {
-          "id": "map.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "mapId",
-          "compareFields": [
-            "width",
-            "height"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "map.runtime",
           "kind": "runtime-diagnostics",
           "rule": "map.bounds-contain-spawns",
@@ -1968,7 +2064,7 @@
     {
       "kind": "domain",
       "systemId": "npc",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -1980,13 +2076,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -2011,12 +2107,7 @@
           "merchant",
           "商人"
         ],
-        "ownedSelectors": [
-          "npc",
-          "market_def",
-          "merchant",
-          "商人"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "map"
@@ -2036,22 +2127,71 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "npc",
-            "caseSensitive": false
+            "id": "npc-list",
+            "root": "engineData",
+            "pathPattern": "cfg_npclist.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "npc",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "market_def",
-            "caseSensitive": false
+            "id": "npc-market",
+            "root": "engineRuntime",
+            "pathPattern": "Envir/Market_Def/**",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "npc",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "merchant",
-            "caseSensitive": false
+            "id": "npc-definitions",
+            "root": "engineRuntime",
+            "pathPattern": "Envir/Npc_def/**",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "npc",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "商人",
-            "caseSensitive": false
+            "id": "npc-root-list",
+            "root": "engineRuntime",
+            "pathPattern": "Envir/Npcs.txt",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "npc",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -2073,7 +2213,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -2883,7 +3024,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -2964,7 +3105,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3067,7 +3208,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3154,7 +3295,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3261,7 +3402,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3362,7 +3503,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3469,7 +3610,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -3533,16 +3674,6 @@
           ]
         },
         {
-          "id": "npc.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "npcId",
-          "compareFields": [
-            "npcId",
-            "scriptPath"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "npc.runtime",
           "kind": "runtime-diagnostics",
           "rule": "npc.script-entry-resolves",
@@ -3559,7 +3690,7 @@
     {
       "kind": "domain",
       "systemId": "monster",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -3571,13 +3702,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -3602,12 +3733,7 @@
           "monitems",
           "怪物"
         ],
-        "ownedSelectors": [
-          "monster",
-          "mongen",
-          "monitems",
-          "怪物"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "map"
@@ -3624,22 +3750,167 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "monster",
-            "caseSensitive": false
+            "id": "monster-table",
+            "root": "engineData",
+            "pathPattern": "cfg_monster.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "mongen",
-            "caseSensitive": false
+            "id": "monster-attacks",
+            "root": "engineData",
+            "pathPattern": "cfg_monattack.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "monitems",
-            "caseSensitive": false
+            "id": "monster-spawns",
+            "root": "engineData",
+            "pathPattern": "cfg_mongen.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "怪物",
-            "caseSensitive": false
+            "id": "monster-drops",
+            "root": "engineData",
+            "pathPattern": "cfg_monitems*.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "monster-intro",
+            "root": "engineData",
+            "pathPattern": "cfg_monster_intro.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "monster-pet-level",
+            "root": "engineData",
+            "pathPattern": "cfg_petlevel.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "monster-slave-level",
+            "root": "engineData",
+            "pathPattern": "cfg_slavelvupatts.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "monster-model-table",
+            "root": "engineData",
+            "pathPattern": "cfg_model_info.xls",
+            "relation": "reference",
+            "access": "readonly",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialForum",
+              "ref": "https://mir3.996m2.com/thread-9845-1-1.html",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "monster-client-models",
+            "root": "clientDev",
+            "pathPattern": "anim/monster/**",
+            "relation": "reference",
+            "access": "readonly",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialForum",
+              "ref": "https://mir3.996m2.com/thread-9845-1-1.html",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "monster-atlas",
+            "root": "clientDev",
+            "pathPattern": "data_config/ModelAtlasSplitConfigs.txt",
+            "relation": "reference",
+            "access": "readonly",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "monster",
+            "evidence": {
+              "kind": "officialForum",
+              "ref": "https://mir3.996m2.com/thread-9845-1-1.html",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -3661,7 +3932,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -4347,7 +4619,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4442,7 +4714,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4536,7 +4808,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4633,7 +4905,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4733,7 +5005,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4819,7 +5091,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -4883,16 +5155,6 @@
           ]
         },
         {
-          "id": "monster.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "monsterId",
-          "compareFields": [
-            "monsterId",
-            "combatLevel"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "monster.runtime",
           "kind": "runtime-diagnostics",
           "rule": "monster.drop-weight-positive",
@@ -4909,7 +5171,7 @@
     {
       "kind": "domain",
       "systemId": "equipment",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -4921,13 +5183,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -4951,11 +5213,7 @@
           "equip",
           "装备"
         ],
-        "ownedSelectors": [
-          "equipment",
-          "equip",
-          "装备"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -4981,18 +5239,119 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "equipment",
-            "caseSensitive": false
+            "id": "equipment-table",
+            "root": "engineData",
+            "pathPattern": "cfg_equip.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "equip",
-            "caseSensitive": false
+            "id": "equipment-suit",
+            "root": "engineData",
+            "pathPattern": "cfg_suit.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "装备",
-            "caseSensitive": false
+            "id": "equipment-suit-extended",
+            "root": "engineData",
+            "pathPattern": "cfg_suitex.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "equipment-score",
+            "root": "engineData",
+            "pathPattern": "cfg_att_score.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "equipment-random-attribute",
+            "root": "engineData",
+            "pathPattern": "cfg_goodattset.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "equipment-luck",
+            "root": "engineData",
+            "pathPattern": "cfg_luck.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "equipment-obsolete-show",
+            "root": "engineData",
+            "pathPattern": "cfg_show_equip.xls",
+            "relation": "reference",
+            "access": "readonly",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "equipment",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -5014,7 +5373,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -5644,7 +6004,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5749,7 +6109,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5860,7 +6220,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -5948,7 +6308,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6058,7 +6418,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6117,16 +6477,6 @@
           ]
         },
         {
-          "id": "equipment.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "equipmentId",
-          "compareFields": [
-            "equipmentId",
-            "slot"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "equipment.runtime",
           "kind": "runtime-diagnostics",
           "rule": "equipment.slot-matches-item-mode",
@@ -6143,7 +6493,7 @@
     {
       "kind": "domain",
       "systemId": "item",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -6155,13 +6505,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -6186,12 +6536,7 @@
           "物品",
           "道具"
         ],
-        "ownedSelectors": [
-          "item",
-          "cfg_item",
-          "物品",
-          "道具"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "equipment"
@@ -6208,22 +6553,87 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "item",
-            "caseSensitive": false
+            "id": "item-table",
+            "root": "engineData",
+            "pathPattern": "cfg_item.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "item",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "cfg_item",
-            "caseSensitive": false
+            "id": "item-box",
+            "root": "engineData",
+            "pathPattern": "cfg_box.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "item",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "物品",
-            "caseSensitive": false
+            "id": "item-drop-set",
+            "root": "engineData",
+            "pathPattern": "cfg_dropset.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "item",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "道具",
-            "caseSensitive": false
+            "id": "item-pick",
+            "root": "engineData",
+            "pathPattern": "cfg_pick_set.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "item",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "item-purity",
+            "root": "engineData",
+            "pathPattern": "cfg_purity_color.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "item",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -6245,7 +6655,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -6878,7 +7289,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -6982,7 +7393,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7092,7 +7503,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7177,7 +7588,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7287,7 +7698,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -7346,16 +7757,6 @@
           ]
         },
         {
-          "id": "item.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "itemId",
-          "compareFields": [
-            "itemId",
-            "engineStdMode"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "item.runtime",
           "kind": "runtime-diagnostics",
           "rule": "item.icon-resource-exists",
@@ -7372,7 +7773,7 @@
     {
       "kind": "domain",
       "systemId": "level",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -7384,13 +7785,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -7415,12 +7816,7 @@
           "等级",
           "经验"
         ],
-        "ownedSelectors": [
-          "level",
-          "exp",
-          "等级",
-          "经验"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "monster"
@@ -7437,22 +7833,39 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "level",
-            "caseSensitive": false
+            "id": "level-table",
+            "root": "engineData",
+            "pathPattern": "cfg_level.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "level",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "exp",
-            "caseSensitive": false
-          },
-          {
-            "contains": "等级",
-            "caseSensitive": false
-          },
-          {
-            "contains": "经验",
-            "caseSensitive": false
+            "id": "level-experience",
+            "root": "engineRuntime",
+            "pathPattern": "Envir/Exps.ini",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "level",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -7474,7 +7887,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -8126,7 +8540,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8221,7 +8635,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8313,7 +8727,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8408,7 +8822,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8498,7 +8912,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8583,7 +8997,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -8647,16 +9061,6 @@
           ]
         },
         {
-          "id": "level.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "level",
-          "compareFields": [
-            "level",
-            "requiredExperience"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "level.runtime",
           "kind": "runtime-diagnostics",
           "rule": "level.experience-monotonic",
@@ -8673,7 +9077,7 @@
     {
       "kind": "domain",
       "systemId": "rebirth",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -8685,13 +9089,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -8715,11 +9119,7 @@
           "reincarnation",
           "转生"
         ],
-        "ownedSelectors": [
-          "rebirth",
-          "reincarnation",
-          "转生"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "level"
@@ -8742,20 +9142,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "rebirth",
-            "caseSensitive": false
-          },
-          {
-            "contains": "reincarnation",
-            "caseSensitive": false
-          },
-          {
-            "contains": "转生",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -8775,7 +9163,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -9390,7 +9779,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9493,7 +9882,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9596,7 +9985,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9693,7 +10082,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9781,7 +10170,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -9850,16 +10239,6 @@
           ]
         },
         {
-          "id": "rebirth.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "rebirthTier",
-          "compareFields": [
-            "rebirthTier",
-            "minimumLevel"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "rebirth.runtime",
           "kind": "runtime-diagnostics",
           "rule": "rebirth.minimum-level-reachable",
@@ -9876,7 +10255,7 @@
     {
       "kind": "domain",
       "systemId": "title",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -9888,13 +10267,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -9917,10 +10296,7 @@
           "title",
           "称号"
         ],
-        "ownedSelectors": [
-          "title",
-          "称号"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "buff"
@@ -9937,16 +10313,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "title",
-            "caseSensitive": false
-          },
-          {
-            "contains": "称号",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -9966,7 +10334,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -10557,7 +10926,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10651,7 +11020,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10751,7 +11120,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10850,7 +11219,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10935,7 +11304,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -10994,16 +11363,6 @@
           ]
         },
         {
-          "id": "title.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "titleId",
-          "compareFields": [
-            "titleId",
-            "displayLabel"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "title.runtime",
           "kind": "runtime-diagnostics",
           "rule": "title.permanent-duration-zero",
@@ -11020,7 +11379,7 @@
     {
       "kind": "domain",
       "systemId": "buff",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -11032,13 +11391,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -11062,11 +11421,7 @@
           "status_effect",
           "状态"
         ],
-        "ownedSelectors": [
-          "buff",
-          "status_effect",
-          "状态"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "skill"
@@ -11083,18 +11438,23 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "buff",
-            "caseSensitive": false
-          },
-          {
-            "contains": "status_effect",
-            "caseSensitive": false
-          },
-          {
-            "contains": "状态",
-            "caseSensitive": false
+            "id": "buff-table",
+            "root": "engineData",
+            "pathPattern": "cfg_buff.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "buff",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -11116,7 +11476,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -11819,7 +12180,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -11918,7 +12279,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12019,7 +12380,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12123,7 +12484,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12228,7 +12589,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12313,7 +12674,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -12372,16 +12733,6 @@
           ]
         },
         {
-          "id": "buff.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "buffId",
-          "compareFields": [
-            "buffId",
-            "stackMode"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "buff.runtime",
           "kind": "runtime-diagnostics",
           "rule": "buff.stack-mode-capacity-compatible",
@@ -12398,7 +12749,7 @@
     {
       "kind": "domain",
       "systemId": "skill",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -12410,13 +12761,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -12440,11 +12791,7 @@
           "magic",
           "技能"
         ],
-        "ownedSelectors": [
-          "skill",
-          "magic",
-          "技能"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "buff"
@@ -12461,18 +12808,87 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "skill",
-            "caseSensitive": false
+            "id": "skill-table",
+            "root": "engineData",
+            "pathPattern": "cfg_magic.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "skill",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "magic",
-            "caseSensitive": false
+            "id": "skill-custom",
+            "root": "engineData",
+            "pathPattern": "cfg_magiccustom.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "skill",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "技能",
-            "caseSensitive": false
+            "id": "skill-info",
+            "root": "engineData",
+            "pathPattern": "cfg_magicinfo.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "skill",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "skill-presentation",
+            "root": "engineData",
+            "pathPattern": "cfg_skill_present.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "skill",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
+          },
+          {
+            "id": "skill-upgrade",
+            "root": "engineData",
+            "pathPattern": "cfg_upskilllv.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "skill",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -12494,7 +12910,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -13090,7 +13507,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13185,7 +13602,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13293,7 +13710,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13371,7 +13788,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13472,7 +13889,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -13537,16 +13954,6 @@
           ]
         },
         {
-          "id": "skill.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "skillId",
-          "compareFields": [
-            "skillId",
-            "skillLevel"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "skill.runtime",
           "kind": "runtime-diagnostics",
           "rule": "skill.level-curve-contiguous",
@@ -13563,7 +13970,7 @@
     {
       "kind": "domain",
       "systemId": "enhance",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -13575,13 +13982,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -13605,11 +14012,7 @@
           "strengthen",
           "强化"
         ],
-        "ownedSelectors": [
-          "enhance",
-          "strengthen",
-          "强化"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "equipment"
@@ -13626,18 +14029,23 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "enhance",
-            "caseSensitive": false
-          },
-          {
-            "contains": "strengthen",
-            "caseSensitive": false
-          },
-          {
-            "contains": "强化",
-            "caseSensitive": false
+            "id": "enhance-weapon-level",
+            "root": "engineData",
+            "pathPattern": "cfg_weaponlv.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "enhance",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -13659,7 +14067,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -14267,7 +14676,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14381,7 +14790,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14475,7 +14884,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14576,7 +14985,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14661,7 +15070,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -14721,16 +15130,6 @@
           ]
         },
         {
-          "id": "enhance.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "enhanceTier",
-          "compareFields": [
-            "enhanceTier",
-            "equipmentClass"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "enhance.runtime",
           "kind": "runtime-diagnostics",
           "rule": "enhance.probability-budget-valid",
@@ -14747,7 +15146,7 @@
     {
       "kind": "domain",
       "systemId": "crafting",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -14759,13 +15158,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -14791,14 +15190,7 @@
           "合成",
           "配方"
         ],
-        "ownedSelectors": [
-          "crafting",
-          "craft",
-          "compose",
-          "recipe",
-          "合成",
-          "配方"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -14815,28 +15207,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "craft",
-            "caseSensitive": false
-          },
-          {
-            "contains": "compose",
-            "caseSensitive": false
-          },
-          {
-            "contains": "recipe",
-            "caseSensitive": false
-          },
-          {
-            "contains": "合成",
-            "caseSensitive": false
-          },
-          {
-            "contains": "配方",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -14856,7 +15228,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -15449,7 +15822,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15544,7 +15917,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15630,7 +16003,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15724,7 +16097,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15824,7 +16197,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -15888,16 +16261,6 @@
           ]
         },
         {
-          "id": "crafting.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "recipeId",
-          "compareFields": [
-            "recipeId",
-            "outputItemId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "crafting.runtime",
           "kind": "runtime-diagnostics",
           "rule": "crafting.no-self-consuming-cycle",
@@ -15914,7 +16277,7 @@
     {
       "kind": "domain",
       "systemId": "gem",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -15926,13 +16289,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -15957,12 +16320,7 @@
           "宝石",
           "镶嵌"
         ],
-        "ownedSelectors": [
-          "gem",
-          "jewel",
-          "宝石",
-          "镶嵌"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -15982,24 +16340,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "gem",
-            "caseSensitive": false
-          },
-          {
-            "contains": "jewel",
-            "caseSensitive": false
-          },
-          {
-            "contains": "宝石",
-            "caseSensitive": false
-          },
-          {
-            "contains": "镶嵌",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -16019,7 +16361,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -16745,7 +17088,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16858,7 +17201,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -16960,7 +17303,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17060,7 +17403,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17166,7 +17509,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17253,7 +17596,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -17313,16 +17656,6 @@
           ]
         },
         {
-          "id": "gem.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "gemId",
-          "compareFields": [
-            "gemId",
-            "gemTier"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "gem.runtime",
           "kind": "runtime-diagnostics",
           "rule": "gem.tier-chain-contiguous",
@@ -17339,7 +17672,7 @@
     {
       "kind": "domain",
       "systemId": "refine",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -17351,13 +17684,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -17381,11 +17714,7 @@
           "洗炼",
           "精炼"
         ],
-        "ownedSelectors": [
-          "refine",
-          "洗炼",
-          "精炼"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "equipment"
@@ -17399,20 +17728,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "refine",
-            "caseSensitive": false
-          },
-          {
-            "contains": "洗炼",
-            "caseSensitive": false
-          },
-          {
-            "contains": "精炼",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -17432,7 +17749,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -18162,7 +18480,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18268,7 +18586,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18372,7 +18690,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18482,7 +18800,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18592,7 +18910,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18676,7 +18994,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -18742,16 +19060,6 @@
           ]
         },
         {
-          "id": "refine.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "poolId",
-          "compareFields": [
-            "minimumValue",
-            "maximumValue"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "refine.runtime",
           "kind": "runtime-diagnostics",
           "rule": "refine.minimum-not-greater-than-maximum",
@@ -18768,7 +19076,7 @@
     {
       "kind": "domain",
       "systemId": "quest",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -18780,13 +19088,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -18810,11 +19118,7 @@
           "questdiary",
           "任务"
         ],
-        "ownedSelectors": [
-          "quest",
-          "questdiary",
-          "任务"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "npc"
@@ -18837,18 +19141,23 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "quest",
-            "caseSensitive": false
-          },
-          {
-            "contains": "questdiary",
-            "caseSensitive": false
-          },
-          {
-            "contains": "任务",
-            "caseSensitive": false
+            "id": "quest-table",
+            "root": "engineData",
+            "pathPattern": "cfg_newtask.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "quest",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -18870,7 +19179,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -19521,7 +19831,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19622,7 +19932,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19736,7 +20046,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19825,7 +20135,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19932,7 +20242,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -19996,16 +20306,6 @@
           ]
         },
         {
-          "id": "quest.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "questId",
-          "compareFields": [
-            "questId",
-            "nextQuestId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "quest.runtime",
           "kind": "runtime-diagnostics",
           "rule": "quest.chain-acyclic-and-reachable",
@@ -20022,7 +20322,7 @@
     {
       "kind": "domain",
       "systemId": "checkin",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -20034,13 +20334,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -20064,11 +20364,7 @@
           "sign",
           "签到"
         ],
-        "ownedSelectors": [
-          "checkin",
-          "sign",
-          "签到"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -20085,20 +20381,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "checkin",
-            "caseSensitive": false
-          },
-          {
-            "contains": "sign",
-            "caseSensitive": false
-          },
-          {
-            "contains": "签到",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -20118,7 +20402,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -20716,7 +21001,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20819,7 +21104,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -20914,7 +21199,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21015,7 +21300,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21100,7 +21385,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -21165,16 +21450,6 @@
           ]
         },
         {
-          "id": "checkin.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "cycleId",
-          "compareFields": [
-            "cycleId",
-            "dayIndex"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "checkin.runtime",
           "kind": "runtime-diagnostics",
           "rule": "checkin.days-contiguous",
@@ -21191,7 +21466,7 @@
     {
       "kind": "domain",
       "systemId": "online_reward",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -21203,13 +21478,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -21233,11 +21508,7 @@
           "online reward",
           "在线奖励"
         ],
-        "ownedSelectors": [
-          "online_reward",
-          "online reward",
-          "在线奖励"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -21251,20 +21522,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "online_reward",
-            "caseSensitive": false
-          },
-          {
-            "contains": "online reward",
-            "caseSensitive": false
-          },
-          {
-            "contains": "在线奖励",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -21284,7 +21543,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -21963,7 +22223,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22059,7 +22319,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22143,7 +22403,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22242,7 +22502,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22336,7 +22596,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22436,7 +22696,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -22500,16 +22760,6 @@
           ]
         },
         {
-          "id": "online_reward.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "rewardId",
-          "compareFields": [
-            "rewardId",
-            "durationSeconds"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "online_reward.runtime",
           "kind": "runtime-diagnostics",
           "rule": "online-reward.duration-monotonic",
@@ -22526,7 +22776,7 @@
     {
       "kind": "domain",
       "systemId": "limited_event",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -22538,13 +22788,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -22568,11 +22818,7 @@
           "limited event",
           "限时活动"
         ],
-        "ownedSelectors": [
-          "limited_event",
-          "limited event",
-          "限时活动"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "quest"
@@ -22595,20 +22841,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "limited_event",
-            "caseSensitive": false
-          },
-          {
-            "contains": "limited event",
-            "caseSensitive": false
-          },
-          {
-            "contains": "限时活动",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -22628,7 +22862,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -23319,7 +23554,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23416,7 +23651,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23497,7 +23732,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23599,7 +23834,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23702,7 +23937,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23790,7 +24025,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -23854,16 +24089,6 @@
           ]
         },
         {
-          "id": "limited_event.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "eventId",
-          "compareFields": [
-            "startEpochSeconds",
-            "endEpochSeconds"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "limited_event.runtime",
           "kind": "runtime-diagnostics",
           "rule": "limited-event.start-before-end",
@@ -23880,7 +24105,7 @@
     {
       "kind": "domain",
       "systemId": "launch_event",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -23892,13 +24117,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -23922,11 +24147,7 @@
           "open_server",
           "开服活动"
         ],
-        "ownedSelectors": [
-          "launch_event",
-          "open_server",
-          "开服活动"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "checkin"
@@ -23961,20 +24182,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "launch_event",
-            "caseSensitive": false
-          },
-          {
-            "contains": "open_server",
-            "caseSensitive": false
-          },
-          {
-            "contains": "开服活动",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -23994,7 +24203,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -24717,7 +24927,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24818,7 +25028,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -24903,7 +25113,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25009,7 +25219,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25116,7 +25326,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25208,7 +25418,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -25272,16 +25482,6 @@
           ]
         },
         {
-          "id": "launch_event.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "scheduleId",
-          "compareFields": [
-            "scheduleId",
-            "openServerDay"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "launch_event.runtime",
           "kind": "runtime-diagnostics",
           "rule": "launch-event.day-windows-nonoverlapping",
@@ -25298,7 +25498,7 @@
     {
       "kind": "domain",
       "systemId": "first_charge",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -25310,13 +25510,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -25340,11 +25540,7 @@
           "first charge",
           "首充"
         ],
-        "ownedSelectors": [
-          "first_charge",
-          "first charge",
-          "首充"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -25364,20 +25560,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "first_charge",
-            "caseSensitive": false
-          },
-          {
-            "contains": "first charge",
-            "caseSensitive": false
-          },
-          {
-            "contains": "首充",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -25397,7 +25581,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -25998,7 +26183,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26084,7 +26269,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26180,7 +26365,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26281,7 +26466,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26383,7 +26568,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -26447,16 +26632,6 @@
           ]
         },
         {
-          "id": "first_charge.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "tierId",
-          "compareFields": [
-            "tierId",
-            "chargeThreshold"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "first_charge.runtime",
           "kind": "runtime-diagnostics",
           "rule": "first-charge.first-tier-is-minimum",
@@ -26473,7 +26648,7 @@
     {
       "kind": "domain",
       "systemId": "cumulative_charge",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -26485,13 +26660,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -26515,11 +26690,7 @@
           "recharge_total",
           "累计充值"
         ],
-        "ownedSelectors": [
-          "cumulative_charge",
-          "recharge_total",
-          "累计充值"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -26536,20 +26707,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "cumulative_charge",
-            "caseSensitive": false
-          },
-          {
-            "contains": "recharge_total",
-            "caseSensitive": false
-          },
-          {
-            "contains": "累计充值",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -26569,7 +26728,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -27169,7 +27329,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27276,7 +27436,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27370,7 +27530,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27470,7 +27630,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27555,7 +27715,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -27615,16 +27775,6 @@
           ]
         },
         {
-          "id": "cumulative_charge.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "tierId",
-          "compareFields": [
-            "cycleId",
-            "chargeThreshold"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "cumulative_charge.runtime",
           "kind": "runtime-diagnostics",
           "rule": "cumulative-charge.thresholds-strictly-increase",
@@ -27641,7 +27791,7 @@
     {
       "kind": "domain",
       "systemId": "vip",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -27653,13 +27803,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -27682,10 +27832,7 @@
           "vip",
           "贵族"
         ],
-        "ownedSelectors": [
-          "vip",
-          "贵族"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "first_charge"
@@ -27708,16 +27855,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "vip",
-            "caseSensitive": false
-          },
-          {
-            "contains": "贵族",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -27737,7 +27876,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -28327,7 +28467,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28432,7 +28572,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28530,7 +28670,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28622,7 +28762,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28709,7 +28849,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -28773,16 +28913,6 @@
           ]
         },
         {
-          "id": "vip.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "vipLevel",
-          "compareFields": [
-            "vipLevel",
-            "requiredPoints"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "vip.runtime",
           "kind": "runtime-diagnostics",
           "rule": "vip.points-monotonic",
@@ -28799,7 +28929,7 @@
     {
       "kind": "domain",
       "systemId": "shop",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -28811,13 +28941,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -28842,12 +28972,7 @@
           "store",
           "商城"
         ],
-        "ownedSelectors": [
-          "shop",
-          "mall",
-          "store",
-          "商城"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -28870,22 +28995,23 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "shop",
-            "caseSensitive": false
-          },
-          {
-            "contains": "mall",
-            "caseSensitive": false
-          },
-          {
-            "contains": "store",
-            "caseSensitive": false
-          },
-          {
-            "contains": "商城",
-            "caseSensitive": false
+            "id": "shop-table",
+            "root": "engineData",
+            "pathPattern": "cfg_store.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "shop",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -28907,7 +29033,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -29653,7 +29780,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29765,7 +29892,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29853,7 +29980,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -29941,7 +30068,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30054,7 +30181,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30160,7 +30287,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -30229,16 +30356,6 @@
           ]
         },
         {
-          "id": "shop.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "offerId",
-          "compareFields": [
-            "offerId",
-            "shopId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "shop.runtime",
           "kind": "runtime-diagnostics",
           "rule": "shop.sale-window-and-price-valid",
@@ -30255,7 +30372,7 @@
     {
       "kind": "domain",
       "systemId": "recycle",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -30267,13 +30384,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -30297,11 +30414,7 @@
           "recover",
           "回收"
         ],
-        "ownedSelectors": [
-          "recycle",
-          "recover",
-          "回收"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -30318,18 +30431,39 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "recycle",
-            "caseSensitive": false
+            "id": "recycle-table",
+            "root": "engineData",
+            "pathPattern": "cfg_reclaim.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "recycle",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "recover",
-            "caseSensitive": false
-          },
-          {
-            "contains": "回收",
-            "caseSensitive": false
+            "id": "recycle-title",
+            "root": "engineData",
+            "pathPattern": "cfg_sell_type.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "recycle",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -30351,7 +30485,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -31046,7 +31181,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31155,7 +31290,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31224,7 +31359,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31333,7 +31468,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31436,7 +31571,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31521,7 +31656,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -31585,16 +31720,6 @@
           ]
         },
         {
-          "id": "recycle.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "ruleId",
-          "compareFields": [
-            "minimumQuality",
-            "maximumQuality"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "recycle.runtime",
           "kind": "runtime-diagnostics",
           "rule": "recycle.quality-range-ordered",
@@ -31611,7 +31736,7 @@
     {
       "kind": "domain",
       "systemId": "guild",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -31623,13 +31748,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -31653,11 +31778,7 @@
           "clan",
           "行会"
         ],
-        "ownedSelectors": [
-          "guild",
-          "clan",
-          "行会"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "npc"
@@ -31677,18 +31798,55 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "guild",
-            "caseSensitive": false
+            "id": "guild-level",
+            "root": "engineData",
+            "pathPattern": "cfg_guildlevel.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "guild",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "clan",
-            "caseSensitive": false
+            "id": "guild-name",
+            "root": "engineData",
+            "pathPattern": "cfg_guildname.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "guild",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "行会",
-            "caseSensitive": false
+            "id": "guild-practice",
+            "root": "engineData",
+            "pathPattern": "cfg_guildpractice.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "guild",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -31710,7 +31868,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -32382,7 +32541,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32475,7 +32634,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32579,7 +32738,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32670,7 +32829,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32767,7 +32926,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32853,7 +33012,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -32917,16 +33076,6 @@
           ]
         },
         {
-          "id": "guild.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "guildLevel",
-          "compareFields": [
-            "guildLevel",
-            "requiredContribution"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "guild.runtime",
           "kind": "runtime-diagnostics",
           "rule": "guild.members-and-contribution-monotonic",
@@ -32943,7 +33092,7 @@
     {
       "kind": "domain",
       "systemId": "sabac",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -32955,13 +33104,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -32985,11 +33134,7 @@
           "沙巴克",
           "攻城"
         ],
-        "ownedSelectors": [
-          "sabac",
-          "沙巴克",
-          "攻城"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "map"
@@ -33015,18 +33160,55 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "sabac",
-            "caseSensitive": false
+            "id": "sabac-config",
+            "root": "engineRuntime",
+            "pathPattern": "Castle/**/SabukW.txt",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "sabac",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "沙巴克",
-            "caseSensitive": false
+            "id": "sabac-walls",
+            "root": "engineRuntime",
+            "pathPattern": "Castle/**/AttackSabukWall.txt",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "sabac",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           },
           {
-            "contains": "攻城",
-            "caseSensitive": false
+            "id": "sabac-list",
+            "root": "engineRuntime",
+            "pathPattern": "Castle/**/List.txt",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "sabac",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -33048,7 +33230,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -33929,7 +34112,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34029,7 +34212,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34129,7 +34312,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34201,7 +34384,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34304,7 +34487,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34402,7 +34585,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34506,7 +34689,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34595,7 +34778,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -34659,16 +34842,6 @@
           ]
         },
         {
-          "id": "sabac.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "phaseId",
-          "compareFields": [
-            "phaseId",
-            "battleMapId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "sabac.runtime",
           "kind": "runtime-diagnostics",
           "rule": "sabac.phases-ordered-and-regions-contained",
@@ -34685,7 +34858,7 @@
     {
       "kind": "domain",
       "systemId": "ranking",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -34697,13 +34870,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -34727,11 +34900,7 @@
           "rank",
           "排行榜"
         ],
-        "ownedSelectors": [
-          "ranking",
-          "rank",
-          "排行榜"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "level"
@@ -34754,20 +34923,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "ranking",
-            "caseSensitive": false
-          },
-          {
-            "contains": "rank",
-            "caseSensitive": false
-          },
-          {
-            "contains": "排行榜",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -34787,7 +34944,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -35513,7 +35671,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35615,7 +35773,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35719,7 +35877,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35807,7 +35965,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -35914,7 +36072,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36022,7 +36180,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -36081,16 +36239,6 @@
           ]
         },
         {
-          "id": "ranking.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "boardId",
-          "compareFields": [
-            "boardId",
-            "metric"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "ranking.runtime",
           "kind": "runtime-diagnostics",
           "rule": "ranking.settlement-within-cycle",
@@ -36107,7 +36255,7 @@
     {
       "kind": "domain",
       "systemId": "resource_production",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -36119,13 +36267,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -36149,11 +36297,7 @@
           "production",
           "资源生产"
         ],
-        "ownedSelectors": [
-          "resource_production",
-          "production",
-          "资源生产"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "map"
@@ -36173,20 +36317,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "resource_production",
-            "caseSensitive": false
-          },
-          {
-            "contains": "production",
-            "caseSensitive": false
-          },
-          {
-            "contains": "资源生产",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -36206,7 +36338,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -36945,7 +37078,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37048,7 +37181,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37149,7 +37282,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37256,7 +37389,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37363,7 +37496,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37451,7 +37584,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -37520,16 +37653,6 @@
           ]
         },
         {
-          "id": "resource_production.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "pointId",
-          "compareFields": [
-            "pointId",
-            "mapId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "resource_production.runtime",
           "kind": "runtime-diagnostics",
           "rule": "production.point-inside-map-and-rate-positive",
@@ -37546,7 +37669,7 @@
     {
       "kind": "domain",
       "systemId": "manor",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -37558,13 +37681,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -37587,10 +37710,7 @@
           "manor",
           "庄园"
         ],
-        "ownedSelectors": [
-          "manor",
-          "庄园"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "map"
@@ -37616,16 +37736,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "manor",
-            "caseSensitive": false
-          },
-          {
-            "contains": "庄园",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -37645,7 +37757,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -38436,7 +38549,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38534,7 +38647,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38634,7 +38747,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38706,7 +38819,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38809,7 +38922,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -38913,7 +39026,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39003,7 +39116,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39067,16 +39180,6 @@
           ]
         },
         {
-          "id": "manor.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "manorId",
-          "compareFields": [
-            "manorId",
-            "mapId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "manor.runtime",
           "kind": "runtime-diagnostics",
           "rule": "manor.entry-and-exit-loop-reachable",
@@ -39093,7 +39196,7 @@
     {
       "kind": "domain",
       "systemId": "hero_soul",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -39105,13 +39208,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -39135,11 +39238,7 @@
           "hero soul",
           "英雄之魂"
         ],
-        "ownedSelectors": [
-          "hero_soul",
-          "hero soul",
-          "英雄之魂"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "item"
@@ -39162,20 +39261,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "hero_soul",
-            "caseSensitive": false
-          },
-          {
-            "contains": "hero soul",
-            "caseSensitive": false
-          },
-          {
-            "contains": "英雄之魂",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -39195,7 +39282,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -39807,7 +39895,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -39908,7 +39996,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40010,7 +40098,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40106,7 +40194,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40194,7 +40282,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -40254,16 +40342,6 @@
           ]
         },
         {
-          "id": "hero_soul.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "routeId",
-          "compareFields": [
-            "routeId",
-            "nodeId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "hero_soul.runtime",
           "kind": "runtime-diagnostics",
           "rule": "hero-soul.route-acyclic-and-affordable",
@@ -40280,7 +40358,7 @@
     {
       "kind": "domain",
       "systemId": "talent",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -40292,13 +40370,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -40321,10 +40399,7 @@
           "talent",
           "天赋"
         ],
-        "ownedSelectors": [
-          "talent",
-          "天赋"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "skill"
@@ -40344,16 +40419,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "talent",
-            "caseSensitive": false
-          },
-          {
-            "contains": "天赋",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -40373,7 +40440,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -41256,7 +41324,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41357,7 +41425,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41458,7 +41526,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41528,7 +41596,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41633,7 +41701,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41732,7 +41800,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41837,7 +41905,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41923,7 +41991,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -41983,16 +42051,6 @@
           ]
         },
         {
-          "id": "talent.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "nodeId",
-          "compareFields": [
-            "treeId",
-            "nodeId"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "talent.runtime",
           "kind": "runtime-diagnostics",
           "rule": "talent.graph-acyclic-and-budget-valid",
@@ -42009,7 +42067,7 @@
     {
       "kind": "domain",
       "systemId": "season",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -42021,13 +42079,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -42050,10 +42108,7 @@
           "season",
           "赛季"
         ],
-        "ownedSelectors": [
-          "season",
-          "赛季"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "ranking"
@@ -42076,16 +42131,8 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
-          {
-            "contains": "season",
-            "caseSensitive": false
-          },
-          {
-            "contains": "赛季",
-            "caseSensitive": false
-          }
-        ],
+        "contentFingerprints": [],
+        "bindings": [],
         "pathAliases": [
           {
             "from": "client",
@@ -42105,7 +42152,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -42863,7 +42911,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -42960,7 +43008,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43041,7 +43089,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43112,7 +43160,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43214,7 +43262,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43317,7 +43365,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43405,7 +43453,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -43469,16 +43517,6 @@
           ]
         },
         {
-          "id": "season.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "seasonId",
-          "compareFields": [
-            "seasonId",
-            "startEpochSeconds"
-          ],
-          "missingProjection": "error"
-        },
-        {
           "id": "season.runtime",
           "kind": "runtime-diagnostics",
           "rule": "season.window-and-settlement-ordered",
@@ -43495,7 +43533,7 @@
     {
       "kind": "domain",
       "systemId": "cross_server",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kernelApiRange": "^1.0.0",
       "supportedEngineRange": ">=1.0.0",
       "engineCompatibility": {
@@ -43507,13 +43545,13 @@
         ],
         "requiredEvidence": [
           "project-directory-layout",
-          "owned-selector-or-content-fingerprint",
+          "official-file-binding",
           "resource-schema-validation"
         ],
         "unknownVersionPolicy": "readonly",
         "incompatibleVersionPolicy": "readonly"
       },
-      "manifestSchemaVersion": 1,
+      "manifestSchemaVersion": 2,
       "resourceSchemaVersion": 1,
       "capabilitySchemaVersion": 1,
       "memorySchemaVersion": 1,
@@ -43537,11 +43575,7 @@
           "cross server",
           "跨服"
         ],
-        "ownedSelectors": [
-          "cross_server",
-          "cross server",
-          "跨服"
-        ],
+        "ownedSelectors": [],
         "dependencySelectors": [
           {
             "systemId": "season"
@@ -43564,18 +43598,23 @@
           "**/node_modules/**",
           "**/.mir3-studio/**"
         ],
-        "contentFingerprints": [
+        "contentFingerprints": [],
+        "bindings": [
           {
-            "contains": "cross_server",
-            "caseSensitive": false
-          },
-          {
-            "contains": "cross server",
-            "caseSensitive": false
-          },
-          {
-            "contains": "跨服",
-            "caseSensitive": false
+            "id": "cross-server-values",
+            "root": "engineData",
+            "pathPattern": "cfg_kuafuval.xls",
+            "relation": "direct",
+            "access": "readwrite",
+            "scope": {
+              "type": "wholeFile"
+            },
+            "systemId": "cross_server",
+            "evidence": {
+              "kind": "officialDoc",
+              "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+              "version": "2026.08.06"
+            }
           }
         ],
         "pathAliases": [
@@ -43597,7 +43636,8 @@
         ],
         "editableExtensions": [
           "txt",
-          "lua"
+          "lua",
+          "ini"
         ],
         "structuredExtensions": [
           "xls"
@@ -44423,7 +44463,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44530,7 +44570,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44601,7 +44641,7 @@
             "validationRequired": true,
             "confirmationRequired": false
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44713,7 +44753,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44818,7 +44858,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -44929,7 +44969,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -45016,7 +45056,7 @@
             "validationRequired": true,
             "confirmationRequired": true
           },
-          "version": "1.3.1",
+          "version": "1.3.2",
           "previewRequired": true,
           "validationRequired": true,
           "confirmationRequired": true
@@ -45068,17 +45108,6 @@
               "required": true
             }
           ]
-        },
-        {
-          "id": "cross_server.client-engine",
-          "kind": "client-engine-consistency",
-          "matchBy": "routeId",
-          "compareFields": [
-            "routeId",
-            "sourceShard",
-            "targetShard"
-          ],
-          "missingProjection": "error"
         },
         {
           "id": "cross_server.runtime",

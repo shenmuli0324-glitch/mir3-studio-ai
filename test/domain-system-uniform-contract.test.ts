@@ -28,7 +28,7 @@ describe('33-system simplified workspace contract', () => {
     expect(view).toContain('openDomainWorkingCopy(')
     expect(view).toContain('saveDomainWorkingCopy(')
     expect(view).toContain('restoreDomainSaveNode(')
-    expect(view).not.toContain('queryUnclaimedDomainFiles')
+    expect(view).toContain('queryUnclaimedDomainFiles(project!.id, deferredSearch, 100)')
     expect(view).not.toContain('queryDomainResources')
     expect(view).not.toContain('getDomainResource')
     expect(view).not.toContain('resolveDomainDependencies')
@@ -39,7 +39,7 @@ describe('33-system simplified workspace contract', () => {
     expect(view).toContain('<DirectoryTree')
     expect(view).toContain('<FileSourceWorkspace')
     expect(view).toContain('buildFileTree(')
-    expect(view).toContain('file.ownership === \'owned\'')
+    expect(view).toContain('queryDomainReferences(')
     expect(view).toContain('file.ownership === \'shared\'')
   })
 
@@ -60,7 +60,7 @@ describe('33-system simplified workspace contract', () => {
     expect(view).toContain('savingFlowRef.current = true')
   })
 
-  it('keeps owned-selector evidence in every domain package', () => {
+  it('keeps evidence-backed exact bindings and permits intentionally empty systems', () => {
     const packRoot = new URL('src-tauri/resources/mir3-domain-packs/', root)
     const registry = JSON.parse(source('src-tauri/resources/mir3-domain-packs/registry.json')) as {
       packs: Array<{ systemId: string }>
@@ -78,14 +78,27 @@ describe('33-system simplified workspace contract', () => {
         fileProjection?: {
           ownedSelectors?: string[]
           contentFingerprints?: unknown[]
+          bindings?: Array<{ id: string, pathPattern: string, evidence: { kind: string, ref: string, version: string } }>
           unknownFormatPolicy?: string
         }
       }
       expect(manifest.systemId).toBe(systemId)
-      expect(manifest.fileProjection?.ownedSelectors?.length).toBeGreaterThan(0)
-      expect(manifest.fileProjection?.contentFingerprints?.length).toBeGreaterThan(0)
+      expect(manifest.fileProjection?.ownedSelectors).toEqual([])
+      expect(manifest.fileProjection?.contentFingerprints).toEqual([])
+      expect(manifest.fileProjection?.bindings).toBeInstanceOf(Array)
+      for (const binding of manifest.fileProjection?.bindings ?? []) {
+        expect(binding.id).not.toBe('')
+        expect(binding.pathPattern).not.toBe('')
+        expect(['officialDoc', 'officialForum']).toContain(binding.evidence.kind)
+        expect(binding.evidence.ref).not.toBe('')
+        expect(binding.evidence.version).not.toBe('')
+      }
       expect(manifest.fileProjection?.unknownFormatPolicy).toBe('readonly')
     }
+    const equipment = JSON.parse(source('src-tauri/resources/mir3-domain-packs/equipment/domain.json'))
+    expect(equipment.fileProjection.bindings.map((binding: { pathPattern: string }) => binding.pathPattern)).toContain('cfg_equip.xls')
+    const rebirth = JSON.parse(source('src-tauri/resources/mir3-domain-packs/rebirth/domain.json'))
+    expect(rebirth.fileProjection.bindings).toEqual([])
   })
 
   it('issues a system conversation lease with only the current system writable', () => {

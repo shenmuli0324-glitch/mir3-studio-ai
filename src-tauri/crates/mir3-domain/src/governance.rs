@@ -5459,7 +5459,7 @@ mod tests {
             body: serde_json::json!({"minimum":1}),
             status: "candidate".to_string(),
             source_task_id: "task-1".to_string(),
-            plugin_version: "1.3.1".to_string(),
+            plugin_version: "1.3.2".to_string(),
             created_at: now,
             updated_at: now,
         };
@@ -5490,7 +5490,7 @@ mod tests {
             summary: "批量价格规则".to_string(),
             status: "note".to_string(),
             draft_id: None,
-            plugin_versions: serde_json::json!({"domain":"1.3.1"}),
+            plugin_versions: serde_json::json!({"domain":"1.3.2"}),
             evidence: serde_json::json!({"diffHash":"abc"}),
             created_at: now,
         };
@@ -5527,7 +5527,7 @@ mod tests {
             .project_connection(&project.id)
             .unwrap()
             .execute(
-                "UPDATE domain_memories SET plugin_version='1.3.1' WHERE id=?1",
+                "UPDATE domain_memories SET plugin_version='1.3.2' WHERE id=?1",
                 [&proposed_id],
             )
             .unwrap();
@@ -5539,7 +5539,7 @@ mod tests {
                 &["shop".to_string(), "item".to_string()],
                 &["shop".to_string()],
                 &[],
-                serde_json::json!({"shop":"1.3.1","item":"1.3.1"}),
+                serde_json::json!({"shop":"1.3.2","item":"1.3.2"}),
                 now + 60_000,
             )
             .unwrap();
@@ -5576,7 +5576,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             &[],
-            serde_json::json!({"shop":"1.3.1"}),
+            serde_json::json!({"shop":"1.3.2"}),
             now + TASK_SCOPE_MAX_TTL_MILLIS + 60_000,
         );
         assert!(too_long
@@ -5590,7 +5590,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             std::slice::from_ref(&unscoped.id),
-            serde_json::json!({"shop":"1.3.1"}),
+            serde_json::json!({"shop":"1.3.2"}),
             now + 60_000,
         );
         assert!(unscoped_lease
@@ -5599,7 +5599,7 @@ mod tests {
 
         let foreign = store.open_draft(&project.id, "foreign").unwrap();
         store
-            .bind_draft_domain(&project.id, &foreign.id, "item", "1.3.1", None)
+            .bind_draft_domain(&project.id, &foreign.id, "item", "1.3.2", None)
             .unwrap();
         let foreign_lease = store.issue_task_scope(
             &project.id,
@@ -5607,7 +5607,7 @@ mod tests {
             &["shop".to_string()],
             &["shop".to_string()],
             std::slice::from_ref(&foreign.id),
-            serde_json::json!({"shop":"1.3.1"}),
+            serde_json::json!({"shop":"1.3.2"}),
             now + 60_000,
         );
         assert!(foreign_lease
@@ -5637,14 +5637,14 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 Some("recover-composite"),
             )
             .unwrap();
         let read_systems = vec!["shop".to_string(), "item".to_string()];
         let write_systems = vec!["shop".to_string()];
         let draft_ids = vec![draft.id.clone()];
-        let plugin_versions = serde_json::json!({"shop":"1.3.1","item":"1.3.1"});
+        let plugin_versions = serde_json::json!({"shop":"1.3.2","item":"1.3.2"});
         let previous = store
             .issue_task_scope(
                 &project.id,
@@ -5713,7 +5713,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 Some("version-composite"),
             )
             .unwrap();
@@ -5724,7 +5724,7 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"shop":"1.3.1"}),
+                serde_json::json!({"shop":"1.3.2"}),
                 now_millis() + 60_000,
             )
             .unwrap();
@@ -5783,7 +5783,7 @@ mod tests {
                         &["shop".to_string()],
                         &["shop".to_string()],
                         &[],
-                        serde_json::json!({"shop":"1.3.1"}),
+                        serde_json::json!({"shop":"1.3.2"}),
                         now_millis() + 60_000,
                     )
                     .unwrap(),
@@ -5820,7 +5820,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 Some("scope-owner-composite"),
             )
             .unwrap();
@@ -5831,7 +5831,7 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"shop":"1.3.1"}),
+                serde_json::json!({"shop":"1.3.2"}),
                 now_millis() + 60_000,
             )
             .unwrap();
@@ -5872,7 +5872,7 @@ mod tests {
         ] {
             let draft = store.open_draft(&project.id, intent).unwrap();
             store
-                .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.1", composite_id)
+                .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.2", composite_id)
                 .unwrap();
             drafts.push(draft);
         }
@@ -5883,7 +5883,7 @@ mod tests {
                 &["shop".to_string()],
                 &["shop".to_string()],
                 std::slice::from_ref(&drafts[0].id),
-                serde_json::json!({"shop":"1.3.1"}),
+                serde_json::json!({"shop":"1.3.2"}),
                 now_millis() + 60_000,
             )
             .unwrap();
@@ -5920,7 +5920,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 Some("scope-winner-composite"),
             )
             .unwrap();
@@ -5939,7 +5939,7 @@ mod tests {
                     &["shop".to_string()],
                     &["shop".to_string()],
                     &[draft_id],
-                    serde_json::json!({"shop":"1.3.1"}),
+                    serde_json::json!({"shop":"1.3.2"}),
                     now_millis() + 60_000,
                 );
                 (candidate.to_string(), result)
@@ -5982,20 +5982,20 @@ mod tests {
         let project = store.import_project(&root).unwrap();
         let draft = store.open_draft(&project.id, "existing draft").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.2", None)
             .unwrap();
         store
             .associate_draft_composite(
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 "failed-global-task",
             )
             .unwrap();
 
         assert!(store
-            .disassociate_draft_composite(&project.id, &draft.id, "shop", "1.3.1", "foreign-task",)
+            .disassociate_draft_composite(&project.id, &draft.id, "shop", "1.3.2", "foreign-task",)
             .unwrap_err()
             .starts_with("COMPOSITE_DRAFT_DISASSOCIATE_MISMATCH:"));
         store
@@ -6003,7 +6003,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 "failed-global-task",
             )
             .unwrap();
@@ -6012,7 +6012,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 "retried-global-task",
             )
             .unwrap();
@@ -6057,7 +6057,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "shop operations").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.2", None)
             .unwrap();
         for (index, operation_id) in operation_ids.iter().enumerate() {
             let revision_before = index as i64;
@@ -6180,7 +6180,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -6233,7 +6233,7 @@ mod tests {
                 &["shop".to_string(), "item".to_string()],
                 &["shop".to_string(), "item".to_string()],
                 &draft_ids,
-                serde_json::json!({"shop":"1.3.1","item":"1.3.1"}),
+                serde_json::json!({"shop":"1.3.2","item":"1.3.2"}),
                 now_millis() + 60_000,
             )
             .unwrap();
@@ -6677,7 +6677,7 @@ mod tests {
                 && step
                     .get("pluginVersion")
                     .and_then(serde_json::Value::as_str)
-                    == Some("1.3.1")
+                    == Some("1.3.2")
                 && step
                     .get("parameterKey")
                     .and_then(serde_json::Value::as_str)
@@ -6701,7 +6701,7 @@ mod tests {
                     &project_id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(invocation_composite),
                 )
                 .unwrap();
@@ -7055,7 +7055,7 @@ mod tests {
                 &LegacyDraftCloneRequest {
                     legacy_draft_id,
                     system_id: "shop".to_string(),
-                    plugin_version: "1.3.1".to_string(),
+                    plugin_version: "1.3.2".to_string(),
                     expected_sources: BTreeMap::from([(
                         "引擎/Mir200/Envir/shop.txt".to_string(),
                         hash_bytes(&current),
@@ -7198,7 +7198,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(&composite_id),
                 )
                 .unwrap();
@@ -7266,7 +7266,7 @@ mod tests {
         let snapshot = store.snapshot_domain_governance("shop").unwrap();
         let persisted_snapshot = serde_json::to_vec(&snapshot).unwrap();
         let report = store
-            .migrate_domain_governance("shop", "1.3.1", "1.3.1")
+            .migrate_domain_governance("shop", "1.3.2", "1.3.2")
             .unwrap();
         assert!(report.compatible);
         assert_eq!(report.status, "applied");
@@ -7309,7 +7309,7 @@ mod tests {
                 .get_domain_memory(&project_id, &memory_id)
                 .unwrap()
                 .plugin_version,
-            "1.3.1"
+            "1.3.2"
         );
         let shared = store
             .shared_capability("personal", &capability.id, Some("0.1.0"))
@@ -7456,7 +7456,7 @@ mod tests {
         );
         let invocation = store.open_draft(&project_id, "invoke").unwrap();
         store
-            .bind_draft_domain(&project_id, &invocation.id, "shop", "1.3.1", None)
+            .bind_draft_domain(&project_id, &invocation.id, "shop", "1.3.2", None)
             .unwrap();
         connection
             .execute(
@@ -7503,7 +7503,7 @@ mod tests {
             summary: "atomic".to_string(),
             status: "applied".to_string(),
             draft_id: None,
-            plugin_versions: serde_json::json!({"shop":"1.3.1"}),
+            plugin_versions: serde_json::json!({"shop":"1.3.2"}),
             evidence: serde_json::json!({"diffHash":"x"}),
             created_at: now_millis(),
         };
@@ -7540,7 +7540,7 @@ mod tests {
         store.scan_project(&project.id, || false).unwrap();
         let draft = store.open_draft(&project.id, "atomic shop update").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.2", None)
             .unwrap();
         let changed = shop_record(2);
         store
@@ -7728,7 +7728,7 @@ mod tests {
         let receipts = store.list_task_receipts(&project.id, Some("shop")).unwrap();
         assert_eq!(receipts.len(), 1);
         assert_eq!(receipts[0].draft_id.as_deref(), Some(draft.id.as_str()));
-        assert_eq!(receipts[0].plugin_versions["shop"], "1.3.1");
+        assert_eq!(receipts[0].plugin_versions["shop"], "1.3.2");
         assert!(receipts[0].plugin_versions.get("domain").is_none());
         assert_eq!(
             receipts[0].evidence["snapshotId"].as_str(),
@@ -7823,7 +7823,7 @@ mod tests {
                     &project.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -7886,7 +7886,7 @@ mod tests {
                 &["shop".to_string(), "item".to_string(), "buff".to_string()],
                 &["shop".to_string(), "item".to_string()],
                 &draft_ids,
-                serde_json::json!({"shop":"1.3.1","item":"1.3.1","buff":"1.3.1"}),
+                serde_json::json!({"shop":"1.3.2","item":"1.3.2","buff":"1.3.2"}),
                 now_millis() + 60_000,
             )
             .unwrap();
@@ -7896,7 +7896,7 @@ mod tests {
             &["shop".to_string(), "item".to_string(), "buff".to_string()],
             &["shop".to_string(), "item".to_string()],
             &draft_ids,
-            serde_json::json!({"shop":"1.3.1","item":"1.3.1","buff":"1.3.1"}),
+            serde_json::json!({"shop":"1.3.2","item":"1.3.2","buff":"1.3.2"}),
             now_millis() + 60_000,
         );
         assert!(conflicting_scope
@@ -8006,7 +8006,7 @@ mod tests {
             receipt.evidence["snapshotId"].as_str() == Some(result.snapshot.id.as_str())
         }));
         assert!(receipts.iter().all(|receipt| {
-            receipt.plugin_versions[&receipt.system_id] == "1.3.1"
+            receipt.plugin_versions[&receipt.system_id] == "1.3.2"
                 && receipt.plugin_versions.get("domain").is_none()
                 && receipt.evidence["validation"]["valid"] == true
                 && receipt.evidence["validationHash"]

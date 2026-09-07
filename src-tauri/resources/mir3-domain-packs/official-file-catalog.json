@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "documentVersion": "2026.08.06",
+  "source": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+  "bindings": {
+    "map": [
+      { "id": "map-info", "root": "engineData", "pathPattern": "cfg_mapinfo.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "map-startpoint", "root": "engineData", "pathPattern": "cfg_startpoint.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "map-music", "root": "engineData", "pathPattern": "cfg_mapmusic.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "map-background", "root": "engineData", "pathPattern": "cfg_mapbginfo.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "map-name", "root": "engineData", "pathPattern": "cfg_mapname.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "map-binary", "root": "engineRuntime", "pathPattern": "map/**/*.map", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "map-text", "root": "engineRuntime", "pathPattern": "Envir/MapInfo.txt", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "npc": [
+      { "id": "npc-list", "root": "engineData", "pathPattern": "cfg_npclist.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "npc-market", "root": "engineRuntime", "pathPattern": "Envir/Market_Def/**", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "npc-definitions", "root": "engineRuntime", "pathPattern": "Envir/Npc_def/**", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "npc-root-list", "root": "engineRuntime", "pathPattern": "Envir/Npcs.txt", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "monster": [
+      { "id": "monster-table", "root": "engineData", "pathPattern": "cfg_monster.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-attacks", "root": "engineData", "pathPattern": "cfg_monattack.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-spawns", "root": "engineData", "pathPattern": "cfg_mongen.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-drops", "root": "engineData", "pathPattern": "cfg_monitems*.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-intro", "root": "engineData", "pathPattern": "cfg_monster_intro.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-pet-level", "root": "engineData", "pathPattern": "cfg_petlevel.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-slave-level", "root": "engineData", "pathPattern": "cfg_slavelvupatts.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "monster-model-table", "root": "engineData", "pathPattern": "cfg_model_info.xls", "relation": "reference", "access": "readonly", "scope": { "type": "wholeFile" }, "evidenceRef": "https://mir3.996m2.com/thread-9845-1-1.html" },
+      { "id": "monster-client-models", "root": "clientDev", "pathPattern": "anim/monster/**", "relation": "reference", "access": "readonly", "scope": { "type": "wholeFile" }, "evidenceRef": "https://mir3.996m2.com/thread-9845-1-1.html" },
+      { "id": "monster-atlas", "root": "clientDev", "pathPattern": "data_config/ModelAtlasSplitConfigs.txt", "relation": "reference", "access": "readonly", "scope": { "type": "wholeFile" }, "evidenceRef": "https://mir3.996m2.com/thread-9845-1-1.html" }
+    ],
+    "equipment": [
+      { "id": "equipment-table", "root": "engineData", "pathPattern": "cfg_equip.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "equipment-suit", "root": "engineData", "pathPattern": "cfg_suit.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "equipment-suit-extended", "root": "engineData", "pathPattern": "cfg_suitex.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "equipment-score", "root": "engineData", "pathPattern": "cfg_att_score.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "equipment-random-attribute", "root": "engineData", "pathPattern": "cfg_goodattset.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "equipment-luck", "root": "engineData", "pathPattern": "cfg_luck.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "equipment-obsolete-show", "root": "engineData", "pathPattern": "cfg_show_equip.xls", "relation": "reference", "access": "readonly", "scope": { "type": "wholeFile" } }
+    ],
+    "item": [
+      { "id": "item-table", "root": "engineData", "pathPattern": "cfg_item.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "item-box", "root": "engineData", "pathPattern": "cfg_box.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "item-drop-set", "root": "engineData", "pathPattern": "cfg_dropset.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "item-pick", "root": "engineData", "pathPattern": "cfg_pick_set.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "item-purity", "root": "engineData", "pathPattern": "cfg_purity_color.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "level": [
+      { "id": "level-table", "root": "engineData", "pathPattern": "cfg_level.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "level-experience", "root": "engineRuntime", "pathPattern": "Envir/Exps.ini", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "buff": [
+      { "id": "buff-table", "root": "engineData", "pathPattern": "cfg_buff.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "skill": [
+      { "id": "skill-table", "root": "engineData", "pathPattern": "cfg_magic.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "skill-custom", "root": "engineData", "pathPattern": "cfg_magiccustom.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "skill-info", "root": "engineData", "pathPattern": "cfg_magicinfo.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "skill-presentation", "root": "engineData", "pathPattern": "cfg_skill_present.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "skill-upgrade", "root": "engineData", "pathPattern": "cfg_upskilllv.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "enhance": [
+      { "id": "enhance-weapon-level", "root": "engineData", "pathPattern": "cfg_weaponlv.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "quest": [
+      { "id": "quest-table", "root": "engineData", "pathPattern": "cfg_newtask.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "shop": [
+      { "id": "shop-table", "root": "engineData", "pathPattern": "cfg_store.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "recycle": [
+      { "id": "recycle-table", "root": "engineData", "pathPattern": "cfg_reclaim.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "recycle-title", "root": "engineData", "pathPattern": "cfg_sell_type.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "guild": [
+      { "id": "guild-level", "root": "engineData", "pathPattern": "cfg_guildlevel.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "guild-name", "root": "engineData", "pathPattern": "cfg_guildname.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "guild-practice", "root": "engineData", "pathPattern": "cfg_guildpractice.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "sabac": [
+      { "id": "sabac-config", "root": "engineRuntime", "pathPattern": "Castle/**/SabukW.txt", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "sabac-walls", "root": "engineRuntime", "pathPattern": "Castle/**/AttackSabukWall.txt", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } },
+      { "id": "sabac-list", "root": "engineRuntime", "pathPattern": "Castle/**/List.txt", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ],
+    "cross_server": [
+      { "id": "cross-server-values", "root": "engineData", "pathPattern": "cfg_kuafuval.xls", "relation": "direct", "access": "readwrite", "scope": { "type": "wholeFile" } }
+    ]
+  }
+}

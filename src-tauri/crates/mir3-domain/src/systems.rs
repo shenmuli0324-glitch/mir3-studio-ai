@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 const REGISTRY_JSON: &str = include_str!("../../../resources/mir3-domain-packs/registry.json");
 const MAX_RESOURCE_SCHEMA_BYTES: u64 = 2 * 1024 * 1024;
@@ -295,6 +295,32 @@ pub struct FileProjection {
     pub readonly_extensions: Vec<String>,
     #[serde(default)]
     pub unknown_format_policy: String,
+    #[serde(default)]
+    pub bindings: Vec<DomainFileBinding>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainFileBinding {
+    pub id: String,
+    pub system_id: String,
+    pub root: String,
+    pub path_pattern: String,
+    pub relation: String,
+    pub access: String,
+    #[serde(default)]
+    pub scope: serde_json::Value,
+    pub evidence: DomainFileBindingEvidence,
+    #[serde(default)]
+    pub engine_range: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainFileBindingEvidence {
+    pub kind: String,
+    pub r#ref: String,
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -502,6 +528,26 @@ pub struct DomainFileRecord {
     pub ownership: String,
     pub access: String,
     pub systems: Vec<String>,
+    #[serde(default)]
+    pub binding_id: Option<String>,
+    #[serde(default)]
+    pub scope: serde_json::Value,
+    #[serde(default)]
+    pub evidence: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainProjectBinding {
+    pub id: String,
+    pub project_id: String,
+    pub system_id: String,
+    pub path: String,
+    pub relation: String,
+    pub access: String,
+    pub scope: serde_json::Value,
+    pub evidence: serde_json::Value,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1189,17 +1235,58 @@ impl DomainStore {
             .iter()
             .find(|manifest| manifest.system_id == system_id)
             .ok_or_else(|| format!("DOMAIN_SYSTEM_NOT_FOUND: {system_id}"))?;
+        self.query_projected_domain_files(project_id, manifest, query, false)
+    }
+
+    pub fn query_domain_references(
+        &self,
+        project_id: &str,
+        system_id: &str,
+        query: &DomainFileQuery,
+    ) -> Result<Vec<DomainFileRecord>, String> {
+        let registry = self.runtime_domain_registry()?;
+        let manifest = registry
+            .packs
+            .iter()
+            .find(|manifest| manifest.system_id == system_id)
+            .ok_or_else(|| format!("DOMAIN_SYSTEM_NOT_FOUND: {system_id}"))?;
+        self.query_projected_domain_files(project_id, manifest, query, true)
+    }
+
+    fn query_projected_domain_files(
+        &self,
+        project_id: &str,
+        manifest: &DomainManifest,
+        query: &DomainFileQuery,
+        references_only: bool,
+    ) -> Result<Vec<DomainFileRecord>, String> {
+        self.ensure_file_system_projection(project_id)?;
         let connection = self.project_connection(project_id)?;
+        let relation_filter = if references_only {
+            "projection.relation='reference'"
+        } else {
+            "projection.relation IN ('direct','shared')"
+        };
+        let sql = format!(
+            "SELECT files.path,files.role,files.category,files.extension,files.size,files.modified_at,
+                    projection.relation,projection.access,projection.binding_id,
+                    projection.scope_json,projection.evidence_json,
+                    (SELECT GROUP_CONCAT(DISTINCT owners.system_id)
+                       FROM file_system_projection owners WHERE owners.path=files.path)
+             FROM file_system_projection projection
+             JOIN files ON files.path=projection.path
+             WHERE projection.system_id=?1 AND {relation_filter}
+               AND (?2='' OR files.path LIKE ?3 ESCAPE '\\')
+             GROUP BY files.path
+             ORDER BY files.path"
+        );
         let mut statement = connection
-            .prepare(
-                "SELECT path,role,category,extension,size,modified_at,content FROM files
-                 WHERE (?1='' OR path LIKE ?2 ESCAPE '\\') ORDER BY path",
-            )
+            .prepare(&sql)
             .map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
         let text = query.text.trim();
         let pattern = format!("%{}%", text.replace('%', "\\%").replace('_', "\\_"));
         let rows = statement
-            .query_map(params![text, pattern], |row| {
+            .query_map(params![manifest.system_id, text, pattern], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -1207,7 +1294,12 @@ impl DomainStore {
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
-                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, Option<String>>(11)?,
                 ))
             })
             .map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
@@ -1220,36 +1312,38 @@ impl DomainStore {
                 .is_ok();
         let mut matched = Vec::new();
         for row in rows {
-            let (path, role, category, extension, size, modified_at, content) =
-                row.map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
-            let systems =
-                projection_system_ids(&registry, &path, extension.as_deref(), content.as_deref());
-            let owns_file = systems.contains(&manifest.system_id);
-            let dependency_file = !owns_file
-                && systems
-                    .iter()
-                    .any(|system_id| manifest.dependencies.contains(system_id));
-            if !owns_file && !dependency_file {
-                continue;
-            }
-            let ownership = if dependency_file {
-                "dependency"
-            } else if systems.len() > 1 {
-                "shared"
-            } else {
-                "owned"
+            let (
+                path,
+                role,
+                category,
+                extension,
+                size,
+                modified_at,
+                relation,
+                projected_access,
+                binding_id,
+                scope,
+                evidence,
+                systems,
+            ) = row.map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
+            let systems = systems
+                .unwrap_or_default()
+                .split(',')
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            let ownership = match relation.as_str() {
+                "direct" => "owned",
+                "shared" => "shared",
+                _ => "reference",
             };
-            let access = if dependency_file || !projected_write_enabled {
+            let access = if projected_access == "readonly" || !projected_write_enabled {
                 "readonly"
             } else {
                 access_for(manifest, extension.as_deref())
             };
-            let resource_manifest = systems
-                .first()
-                .and_then(|owner| registry.packs.iter().find(|pack| pack.system_id == *owner))
-                .unwrap_or(manifest);
             matched.push(DomainFileRecord {
-                resource_id: stable_resource_id(resource_manifest, &path, content.as_deref()),
+                resource_id: stable_resource_id(manifest, &path, None),
                 path,
                 role,
                 category,
@@ -1259,6 +1353,9 @@ impl DomainStore {
                 ownership: ownership.to_string(),
                 access: access.to_string(),
                 systems,
+                binding_id: Some(binding_id),
+                scope: serde_json::from_str(&scope).unwrap_or_default(),
+                evidence: serde_json::from_str(&evidence).unwrap_or_default(),
             });
         }
         Ok(matched.into_iter().skip(offset).take(limit).collect())
@@ -1269,11 +1366,16 @@ impl DomainStore {
         project_id: &str,
         query: &DomainFileQuery,
     ) -> Result<Vec<DomainFileRecord>, String> {
+        self.ensure_file_system_projection(project_id)?;
         let connection = self.project_connection(project_id)?;
         let mut statement = connection
             .prepare(
-                "SELECT path,role,category,extension,size,modified_at,content FROM files
-                 WHERE (?1='' OR path LIKE ?2 ESCAPE '\\') ORDER BY path",
+                "SELECT files.path,files.role,files.category,files.extension,files.size,files.modified_at
+                 FROM files
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM file_system_projection projection WHERE projection.path=files.path
+                 ) AND (?1='' OR files.path LIKE ?2 ESCAPE '\\')
+                 ORDER BY files.path",
             )
             .map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
         let text = query.text.trim();
@@ -1287,22 +1389,15 @@ impl DomainStore {
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
-                    row.get::<_, Option<String>>(6)?,
                 ))
             })
             .map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
-        let registry = self.runtime_domain_registry()?;
         let offset = query.offset.unwrap_or_default();
         let limit = query.limit.unwrap_or(250).clamp(1, 10_000);
         let mut files = Vec::new();
         for row in rows {
-            let (path, role, category, extension, size, modified_at, content) =
+            let (path, role, category, extension, size, modified_at) =
                 row.map_err(|error| format!("DOMAIN_FILE_QUERY_FAILED: {error}"))?;
-            if !projection_system_ids(&registry, &path, extension.as_deref(), content.as_deref())
-                .is_empty()
-            {
-                continue;
-            }
             files.push(DomainFileRecord {
                 resource_id: stable_unknown_resource_id(&path),
                 path,
@@ -1314,9 +1409,157 @@ impl DomainStore {
                 ownership: "unknown".to_string(),
                 access: "readonly".to_string(),
                 systems: Vec::new(),
+                binding_id: None,
+                scope: Value::Null,
+                evidence: Value::Null,
             });
         }
         Ok(files.into_iter().skip(offset).take(limit).collect())
+    }
+
+    pub fn list_domain_project_bindings(
+        &self,
+        project_id: &str,
+        system_id: &str,
+    ) -> Result<Vec<DomainProjectBinding>, String> {
+        self.runtime_manifest(system_id)?;
+        let connection = self.project_connection(project_id)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id,path,relation,access,scope_json,created_at
+                 FROM domain_project_bindings WHERE system_id=?1 ORDER BY created_at DESC,path",
+            )
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_LIST_FAILED: {error}"))?;
+        let rows = statement
+            .query_map([system_id], |row| {
+                let id = row.get::<_, String>(0)?;
+                Ok(DomainProjectBinding {
+                    evidence: serde_json::json!({
+                        "kind":"projectBinding",
+                        "ref":id,
+                        "version":"project"
+                    }),
+                    id,
+                    project_id: project_id.to_string(),
+                    system_id: system_id.to_string(),
+                    path: row.get(1)?,
+                    relation: row.get(2)?,
+                    access: row.get(3)?,
+                    scope: serde_json::from_str(&row.get::<_, String>(4)?).unwrap_or_default(),
+                    created_at: row.get(5)?,
+                })
+            })
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_LIST_FAILED: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_LIST_FAILED: {error}"))
+    }
+
+    pub fn add_domain_project_binding(
+        &self,
+        project_id: &str,
+        system_id: &str,
+        path: &str,
+    ) -> Result<DomainProjectBinding, String> {
+        self.ensure_writable()?;
+        self.runtime_manifest(system_id)?;
+        let normalized = normalize_project_binding_path(path)?;
+        let mut connection = self.project_connection(project_id)?;
+        let (indexed_path, source_sha256) = connection
+            .query_row(
+                "SELECT path,sha256 FROM files WHERE lower(path)=lower(?1)",
+                [&normalized],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_FILE_READ_FAILED: {error}"))?
+            .ok_or_else(|| format!("DOMAIN_PROJECT_BINDING_FILE_NOT_INDEXED: {normalized}"))?;
+        let mut digest = Sha256::new();
+        digest.update(project_id.as_bytes());
+        digest.update([0]);
+        digest.update(system_id.as_bytes());
+        digest.update([0]);
+        digest.update(indexed_path.to_lowercase().as_bytes());
+        let id = format!("project-{}", &format!("{:x}", digest.finalize())[..20]);
+        let created_at = crate::now_millis();
+        let scope = serde_json::json!({"type":"wholeFile"});
+        let evidence = serde_json::json!({
+            "kind":"projectBinding",
+            "ref":id,
+            "version":"project"
+        });
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_TRANSACTION_FAILED: {error}"))?;
+        transaction
+            .execute(
+                "INSERT INTO domain_project_bindings(id,system_id,path,relation,access,scope_json,created_at)
+                 VALUES(?1,?2,?3,'shared','readwrite',?4,?5)
+                 ON CONFLICT(system_id,path) DO NOTHING",
+                params![id, system_id, indexed_path, scope.to_string(), created_at],
+            )
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_ADD_FAILED: {error}"))?;
+        transaction
+            .execute(
+                "INSERT INTO file_system_projection(path,system_id,relation,access,binding_id,scope_json,evidence_json,rule_version,source_sha256)
+                 VALUES(?1,?2,'shared','readwrite',?3,?4,?5,'project',?6)
+                 ON CONFLICT(path,system_id,binding_id) DO UPDATE SET
+                   relation=excluded.relation,access=excluded.access,scope_json=excluded.scope_json,
+                   evidence_json=excluded.evidence_json,rule_version=excluded.rule_version,
+                   source_sha256=excluded.source_sha256",
+                params![
+                    indexed_path,
+                    system_id,
+                    id,
+                    scope.to_string(),
+                    evidence.to_string(),
+                    source_sha256,
+                ],
+            )
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_PROJECTION_WRITE_FAILED: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_COMMIT_FAILED: {error}"))?;
+        drop(connection);
+        self.list_domain_project_bindings(project_id, system_id)?
+            .into_iter()
+            .find(|binding| binding.path.eq_ignore_ascii_case(&indexed_path))
+            .ok_or_else(|| {
+                "DOMAIN_PROJECT_BINDING_ADD_FAILED: binding was not persisted".to_string()
+            })
+    }
+
+    pub fn remove_domain_project_binding(
+        &self,
+        project_id: &str,
+        system_id: &str,
+        binding_id: &str,
+    ) -> Result<(), String> {
+        self.ensure_writable()?;
+        self.runtime_manifest(system_id)?;
+        let mut connection = self.project_connection(project_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_TRANSACTION_FAILED: {error}"))?;
+        let changed = transaction
+            .execute(
+                "DELETE FROM domain_project_bindings WHERE id=?1 AND system_id=?2",
+                params![binding_id, system_id],
+            )
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_REMOVE_FAILED: {error}"))?;
+        if changed == 0 {
+            return Err(format!("DOMAIN_PROJECT_BINDING_NOT_FOUND: {binding_id}"));
+        }
+        transaction
+            .execute(
+                "DELETE FROM file_system_projection
+                 WHERE system_id=?1 AND binding_id=?2",
+                params![system_id, binding_id],
+            )
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_PROJECTION_DELETE_FAILED: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_COMMIT_FAILED: {error}"))?;
+        Ok(())
     }
 
     pub fn validate_domain_system(
@@ -1822,17 +2065,23 @@ impl DomainStore {
         manifest: &DomainManifest,
         overlay: Option<&DomainDraftOverlay>,
     ) -> Result<Vec<DomainValidationFile>, String> {
+        self.ensure_file_system_projection(project_id)?;
         let project = self.get_project(project_id)?;
         let registry = self.runtime_domain_registry()?;
         let root = PathBuf::from(project.root);
         let connection = self.project_connection(project_id)?;
         let mut statement = connection
             .prepare(
-                "SELECT path,role,category,extension,size,modified_at,content FROM files ORDER BY path",
+                "SELECT f.path,f.role,f.category,f.extension,f.size,f.modified_at,f.content,
+                        p.binding_id,p.scope_json,p.evidence_json,p.access
+                 FROM file_system_projection p
+                 JOIN files f ON lower(f.path)=lower(p.path)
+                 WHERE p.system_id=?1 AND p.relation IN ('direct','shared')
+                 ORDER BY f.path",
             )
             .map_err(|error| format!("DOMAIN_VALIDATION_READ_FAILED: {error}"))?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map([&manifest.system_id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -1841,6 +2090,10 @@ impl DomainStore {
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
                     row.get::<_, Option<String>>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, String>(10)?,
                 ))
             })
             .map_err(|error| format!("DOMAIN_VALIDATION_READ_FAILED: {error}"))?;
@@ -1852,7 +2105,20 @@ impl DomainStore {
 
         let mut files = Vec::new();
         let mut seen = BTreeSet::new();
-        for (path, role, category, extension, size, modified_at, indexed_content) in indexed {
+        for (
+            path,
+            role,
+            category,
+            extension,
+            size,
+            modified_at,
+            indexed_content,
+            binding_id,
+            scope_json,
+            evidence_json,
+            binding_access,
+        ) in indexed
+        {
             seen.insert(path.clone());
             if overlay
                 .and_then(|value| value.changes.get(&path))
@@ -1869,25 +2135,16 @@ impl DomainStore {
                 }
                 None => None,
             };
-            let fingerprint_content = bytes
-                .as_deref()
-                .and_then(crate::safe_files::decode_supported_text)
-                .or_else(|| indexed_content.clone());
-            if !projection_system_ids(
-                &registry,
-                &path,
-                extension.as_deref(),
-                fingerprint_content.as_deref(),
-            )
-            .contains(&manifest.system_id)
-            {
-                continue;
-            }
             // 正式校验必须复用查看/编辑相同的格式门禁，未知二进制只读诊断而非误报为可写错误。
-            let access = if root.join(&path).is_file() {
+            let verified_access = if root.join(&path).is_file() {
                 self.verified_access_for(project_id, manifest, &path, extension.as_deref())
             } else {
                 access_for(manifest, extension.as_deref())
+            };
+            let access = if binding_access == "readonly" {
+                "readonly"
+            } else {
+                verified_access
             };
             let (content, syntax_error, projected_size) = validation_file_payload(
                 &path,
@@ -1908,6 +2165,9 @@ impl DomainStore {
                     ownership: "owned".to_string(),
                     access: access.to_string(),
                     systems: vec![manifest.system_id.clone()],
+                    binding_id: Some(binding_id),
+                    scope: serde_json::from_str(&scope_json).unwrap_or_default(),
+                    evidence: serde_json::from_str(&evidence_json).unwrap_or_default(),
                 },
                 content,
                 syntax_error,
@@ -1927,14 +2187,18 @@ impl DomainStore {
                     .and_then(|value| value.to_str())
                     .map(|value| value.to_lowercase());
                 let fingerprint_content = crate::safe_files::decode_supported_text(bytes);
-                if !projection_system_ids(
+                let projected = projection_system_ids(
                     &registry,
                     path,
                     extension.as_deref(),
                     fingerprint_content.as_deref(),
                 )
-                .contains(&manifest.system_id)
-                {
+                .contains(&manifest.system_id);
+                #[cfg(test)]
+                let projected = projected
+                    || (self.trusted_fixture_engine_override
+                        && matches_projection_path(manifest, path, extension.as_deref()));
+                if !projected {
                     continue;
                 }
                 let access = access_for(manifest, extension.as_deref());
@@ -1960,6 +2224,9 @@ impl DomainStore {
                         ownership: "owned".to_string(),
                         access: access.to_string(),
                         systems: vec![manifest.system_id.clone()],
+                        binding_id: None,
+                        scope: Value::Null,
+                        evidence: Value::Null,
                     },
                     content,
                     syntax_error,
@@ -2265,6 +2532,17 @@ impl DomainStore {
         draft_id: &str,
         path: &str,
     ) -> Result<(), String> {
+        self.draft_path_write_scope(project_id, draft_id, path)
+            .map(|_| ())
+    }
+
+    /// 结构化写入除文件所有权外还必须取得该绑定声明的内部范围。
+    pub(crate) fn draft_path_write_scope(
+        &self,
+        project_id: &str,
+        draft_id: &str,
+        path: &str,
+    ) -> Result<Value, String> {
         let binding = self
             .project_connection(project_id)?
             .query_row(
@@ -2296,7 +2574,7 @@ impl DomainStore {
             return Err("DRAFT_DOMAIN_REQUIRED: draft is not bound to a domain".to_string());
         };
         if system_id == "__studio_gui__" {
-            return Ok(());
+            return Ok(serde_json::json!({"type":"wholeFile"}));
         }
         let plugin_version = plugin_version.ok_or_else(|| {
             "DRAFT_DOMAIN_VERSION_REQUIRED: draft has no pinned plugin version".to_string()
@@ -2306,30 +2584,51 @@ impl DomainStore {
         let extension = std::path::Path::new(path)
             .extension()
             .and_then(|value| value.to_str());
-        let path_projection_matches = matches_projection(&manifest, path, extension, None);
-        let content_projection_matches = if path_projection_matches {
-            false
-        } else {
-            let project = self.get_project(project_id)?;
-            let root = fs::canonicalize(&project.root).ok();
-            let target = root.as_ref().and_then(|root| {
-                fs::canonicalize(root.join(path))
-                    .ok()
-                    .map(|target| (root, target))
-            });
-            target.is_some_and(|(root, target)| {
-                crate::path_is_within(root, &target)
-                    && fs::read(target)
-                        .ok()
-                        .and_then(|bytes| {
-                            crate::safe_files::decode_supported_text_checked(&bytes).ok()
-                        })
-                        .is_some_and(|content| {
-                            matches_projection(&manifest, path, extension, Some(&content))
-                        })
-            })
-        };
-        if !path_projection_matches && !content_projection_matches {
+        let projected_binding = manifest
+            .file_projection
+            .bindings
+            .iter()
+            .find(|binding| binding_matches_path(binding, path));
+        let project_binding = self
+            .project_connection(project_id)?
+            .query_row(
+                "SELECT access,scope_json FROM domain_project_bindings
+                 WHERE system_id=?1 AND lower(path)=lower(?2)",
+                params![system_id, path],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(|error| format!("DOMAIN_PROJECT_BINDING_READ_FAILED: {error}"))?;
+        #[cfg(test)]
+        let trusted_fixture_legacy_match = self.trusted_fixture_engine_override
+            && matches_projection_path(&manifest, path, extension);
+        #[cfg(not(test))]
+        let trusted_fixture_legacy_match = false;
+        if manifest.manifest_schema_version >= 2
+            && projected_binding.is_none()
+            && project_binding.is_none()
+            && !trusted_fixture_legacy_match
+        {
+            return Err(format!(
+                "DRAFT_DOMAIN_SCOPE_DENIED: {path} is not owned by {system_id}"
+            ));
+        }
+        if projected_binding.is_some_and(|binding| binding.access == "readonly") {
+            return Err(format!(
+                "DRAFT_DOMAIN_READONLY: {path} is a reference-only binding"
+            ));
+        }
+        if project_binding
+            .as_ref()
+            .is_some_and(|(access, _)| access == "readonly")
+        {
+            return Err(format!(
+                "DRAFT_DOMAIN_READONLY: {path} is a reference-only project binding"
+            ));
+        }
+        if manifest.manifest_schema_version < 2
+            && !matches_projection(&manifest, path, extension, None)
+        {
             return Err(format!(
                 "DRAFT_DOMAIN_SCOPE_DENIED: {path} is not owned by {system_id}"
             ));
@@ -2339,7 +2638,14 @@ impl DomainStore {
                 "DRAFT_DOMAIN_READONLY: {path} has no verified writer"
             ));
         }
-        Ok(())
+        if let Some(binding) = projected_binding {
+            return Ok(binding.scope.clone());
+        }
+        if let Some((_, scope_json)) = project_binding {
+            return serde_json::from_str(&scope_json)
+                .map_err(|error| format!("DOMAIN_PROJECT_BINDING_SCOPE_INVALID: {error}"));
+        }
+        Ok(serde_json::json!({"type":"wholeFile"}))
     }
 
     /// 领域写入必须绑定一个可归一化且命中声明范围的真实引擎版本。
@@ -2517,17 +2823,25 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
         let requires_evidence_contract = version
             .as_ref()
             .is_ok_and(|version| version >= &Version::new(1, 2, 0));
+        let evidence_contract = if pack.manifest_schema_version >= 2 {
+            [
+                "project-directory-layout",
+                "official-file-binding",
+                "resource-schema-validation",
+            ]
+        } else {
+            [
+                "project-directory-layout",
+                "owned-selector-or-content-fingerprint",
+                "resource-schema-validation",
+            ]
+        };
         if requires_evidence_contract
             && (pack.supported_engine_range == "*"
                 || pack.engine_compatibility.strategy != "evidence-gated-auto-generalization-v1"
                 || pack.engine_compatibility.version_aliases
                     != ["semver", "v-prefixed-semver", "major-minor"]
-                || pack.engine_compatibility.required_evidence
-                    != [
-                        "project-directory-layout",
-                        "owned-selector-or-content-fingerprint",
-                        "resource-schema-validation",
-                    ]
+                || pack.engine_compatibility.required_evidence != evidence_contract
                 || pack.engine_compatibility.unknown_version_policy != "readonly"
                 || pack.engine_compatibility.incompatible_version_policy != "readonly")
         {
@@ -2536,7 +2850,7 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
                 pack.system_id
             ));
         }
-        if pack.manifest_schema_version != 1
+        if !matches!(pack.manifest_schema_version, 1 | 2)
             || pack.resource_schema_version != 1
             || pack.capability_schema_version != 1
             || pack.memory_schema_version != 1
@@ -2557,9 +2871,18 @@ fn validate_registry(registry: &DomainRegistry) -> Result<(), String> {
                 pack.system_id
             ));
         }
-        if pack.file_projection.owned_selectors.is_empty()
+        let legacy_projection_invalid = pack.manifest_schema_version == 1
+            && (pack.file_projection.owned_selectors.is_empty()
+                || pack.file_projection.content_fingerprints.is_empty());
+        let binding_projection_invalid = pack.manifest_schema_version >= 2
+            && pack
+                .file_projection
+                .bindings
+                .iter()
+                .any(|binding| !valid_file_binding(binding, &pack.system_id));
+        if legacy_projection_invalid
+            || binding_projection_invalid
             || pack.file_projection.roles.is_empty()
-            || pack.file_projection.content_fingerprints.is_empty()
             || pack.file_projection.path_aliases.is_empty()
             || pack
                 .file_projection
@@ -2837,18 +3160,70 @@ fn matches_projection(
     extension: Option<&str>,
     content: Option<&str>,
 ) -> bool {
+    if manifest.manifest_schema_version >= 2 {
+        return manifest
+            .file_projection
+            .bindings
+            .iter()
+            .any(|binding| binding_matches_path(binding, path));
+    }
     matches_projection_path(manifest, path, extension)
         || matches_projection_content(manifest, path, content)
 }
 
-/// 全局归属先比较真实路径；只有没有任何路径所有者时才允许内容指纹推断。
-/// 这样依赖字段名不会把一个已经明确归属的文件错误标成被引用领域的共享文件。
+fn valid_file_binding(binding: &DomainFileBinding, system_id: &str) -> bool {
+    !binding.id.is_empty()
+        && binding.system_id == system_id
+        && matches!(
+            binding.root.as_str(),
+            "clientDev" | "engineData" | "engineRuntime"
+        )
+        && !binding.path_pattern.is_empty()
+        && matches!(binding.relation.as_str(), "direct" | "shared" | "reference")
+        && matches!(binding.access.as_str(), "readwrite" | "readonly")
+        && binding
+            .scope
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|kind| matches!(kind, "wholeFile" | "xls" | "script"))
+        && matches!(
+            binding.evidence.kind.as_str(),
+            "officialDoc" | "officialForum" | "projectBinding"
+        )
+        && !binding.evidence.r#ref.is_empty()
+        && !binding.evidence.version.is_empty()
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectedFileBinding {
+    pub system_id: String,
+    pub binding_id: String,
+    pub relation: String,
+    pub access: String,
+    pub scope: serde_json::Value,
+    pub evidence: serde_json::Value,
+    pub rule_version: String,
+}
+
+/// v2 领域包只接受带证据的精确文件绑定；关键词仅保留给旧包兼容读取，不能继续
+/// 把说明文字或 GUI 源码中的普通领域词升级为正式所有权。
 pub(crate) fn projection_system_ids(
     registry: &DomainRegistry,
     path: &str,
     extension: Option<&str>,
     content: Option<&str>,
 ) -> Vec<String> {
+    let bound = projected_file_bindings(registry, path);
+    if !bound.is_empty() {
+        return bound.into_iter().map(|binding| binding.system_id).collect();
+    }
+    if registry
+        .packs
+        .iter()
+        .any(|manifest| manifest.manifest_schema_version >= 2)
+    {
+        return Vec::new();
+    }
     let path_owners = registry
         .packs
         .iter()
@@ -2864,6 +3239,154 @@ pub(crate) fn projection_system_ids(
         .filter(|manifest| matches_projection_content(manifest, path, content))
         .map(|manifest| manifest.system_id.clone())
         .collect()
+}
+
+pub(crate) fn projected_file_bindings(
+    registry: &DomainRegistry,
+    path: &str,
+) -> Vec<ProjectedFileBinding> {
+    let mut projected = Vec::new();
+    for manifest in &registry.packs {
+        if manifest.manifest_schema_version < 2 {
+            continue;
+        }
+        for binding in &manifest.file_projection.bindings {
+            if !binding_matches_path(binding, path) {
+                continue;
+            }
+            projected.push(ProjectedFileBinding {
+                system_id: manifest.system_id.clone(),
+                binding_id: binding.id.clone(),
+                relation: binding.relation.clone(),
+                access: binding.access.clone(),
+                scope: binding.scope.clone(),
+                evidence: serde_json::to_value(&binding.evidence).unwrap_or_default(),
+                rule_version: manifest.version.clone(),
+            });
+        }
+    }
+    projected.sort_by(|left, right| {
+        left.system_id
+            .cmp(&right.system_id)
+            .then_with(|| left.binding_id.cmp(&right.binding_id))
+    });
+    projected
+}
+
+#[cfg(test)]
+pub(crate) fn trusted_fixture_projection_system_ids(
+    registry: &DomainRegistry,
+    path: &str,
+    extension: Option<&str>,
+) -> Vec<String> {
+    registry
+        .packs
+        .iter()
+        .filter(|manifest| matches_projection_path(manifest, path, extension))
+        .map(|manifest| manifest.system_id.clone())
+        .collect()
+}
+
+/// 投影版本同时包含领域包版本和精确绑定内容；规则升级时自动使旧投影失效。
+pub(crate) fn file_projection_rule_version(registry: &DomainRegistry) -> String {
+    let mut digest = Sha256::new();
+    for manifest in &registry.packs {
+        digest.update(manifest.system_id.as_bytes());
+        digest.update([0]);
+        digest.update(manifest.version.as_bytes());
+        digest.update([0]);
+        for binding in &manifest.file_projection.bindings {
+            digest.update(binding.id.as_bytes());
+            digest.update([0]);
+            digest.update(binding.root.as_bytes());
+            digest.update([0]);
+            digest.update(binding.path_pattern.as_bytes());
+            digest.update([0]);
+            digest.update(binding.relation.as_bytes());
+            digest.update([0]);
+            digest.update(binding.access.as_bytes());
+            digest.update([0]);
+            digest.update(binding.scope.to_string().as_bytes());
+            digest.update([0]);
+        }
+    }
+    format!("{:x}", digest.finalize())
+}
+
+fn binding_matches_path(binding: &DomainFileBinding, path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    let relative = match binding.root.as_str() {
+        "clientDev" => strip_prefix_case_insensitive(&normalized, "客户端/dev/"),
+        "engineData" => strip_prefix_case_insensitive(&normalized, "引擎/Mir200/Envir/Data/"),
+        "engineRuntime" => strip_prefix_case_insensitive(&normalized, "引擎/Mir200/"),
+        _ => None,
+    };
+    relative.is_some_and(|relative| wildcard_path_matches(relative, &binding.path_pattern))
+}
+
+fn normalize_project_binding_path(path: &str) -> Result<String, String> {
+    let normalized = path.replace('\\', "/");
+    let parsed = Path::new(&normalized);
+    if normalized.trim().is_empty()
+        || parsed.is_absolute()
+        || parsed
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(
+            "DOMAIN_PROJECT_BINDING_PATH_INVALID: path must be a project-relative indexed file"
+                .to_string(),
+        );
+    }
+    Ok(normalized)
+}
+
+fn strip_prefix_case_insensitive<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
+    value
+        .get(..prefix.len())
+        .filter(|candidate| candidate.eq_ignore_ascii_case(prefix))
+        .and_then(|_| value.get(prefix.len()..))
+}
+
+fn wildcard_path_matches(value: &str, pattern: &str) -> bool {
+    if !pattern.contains('*') && !pattern.contains('?') {
+        return value.eq_ignore_ascii_case(pattern);
+    }
+    let mut expression = String::from("(?i)^");
+    let characters = pattern.replace('\\', "/").chars().collect::<Vec<_>>();
+    let mut index = 0usize;
+    while index < characters.len() {
+        match characters[index] {
+            '*' if characters.get(index + 1) == Some(&'*') => {
+                index += 1;
+                if characters.get(index + 1) == Some(&'/') {
+                    index += 1;
+                    expression.push_str("(?:.*/)?");
+                } else {
+                    expression.push_str(".*");
+                }
+            }
+            '*' => expression.push_str("[^/]*"),
+            '?' => expression.push_str("[^/]"),
+            character => expression.push_str(&regex::escape(&character.to_string())),
+        }
+        index += 1;
+    }
+    expression.push('$');
+    static CACHE: OnceLock<Mutex<BTreeMap<String, regex::Regex>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let Ok(mut cache) = cache.lock() else {
+        return false;
+    };
+    if let Some(compiled) = cache.get(&expression) {
+        return compiled.is_match(value);
+    }
+    let Ok(compiled) = regex::Regex::new(&expression) else {
+        return false;
+    };
+    let matched = compiled.is_match(value);
+    cache.insert(expression, compiled);
+    matched
 }
 
 fn matches_projection_path(manifest: &DomainManifest, path: &str, extension: Option<&str>) -> bool {
@@ -3623,9 +4146,9 @@ mod tests {
         assert!(registry.packs.iter().all(|pack| {
             pack.version
                 == if pack.system_id == "map" {
-                    "1.3.2"
+                    "1.3.3"
                 } else {
-                    "1.3.1"
+                    "1.3.2"
                 }
                 && pack.supported_engine_range == ">=1.0.0"
                 && pack.engine_compatibility.strategy == "evidence-gated-auto-generalization-v1"
@@ -3812,6 +4335,9 @@ mod tests {
                 ownership: "owned".to_string(),
                 access: "editable".to_string(),
                 systems: vec!["level".to_string()],
+                binding_id: None,
+                scope: Value::Null,
+                evidence: Value::Null,
             },
             content: Some(content.to_string()),
             syntax_error: None,
@@ -3846,9 +4372,9 @@ mod tests {
             crate::now_millis()
         ));
         let root = base.join("木立");
-        let relative = "客户端/dev/Level/Level.txt";
-        std::fs::create_dir_all(root.join("客户端/dev/Level")).unwrap();
-        std::fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
+        let relative = "引擎/Mir200/Envir/Exps.ini";
+        std::fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        std::fs::create_dir_all(root.join("引擎/Mir200/Envir")).unwrap();
         std::fs::write(root.join(relative), "level=1\nrequiredExperience=100\n").unwrap();
 
         let store = DomainStore::new(base.join("data")).unwrap();
@@ -3868,7 +4394,7 @@ mod tests {
         assert_eq!(files[0].access, "readonly");
         let unknown = store.open_draft(&project.id, "unknown engine").unwrap();
         store
-            .bind_draft_domain(&project.id, &unknown.id, "level", "1.3.1", None)
+            .bind_draft_domain(&project.id, &unknown.id, "level", "1.3.2", None)
             .unwrap();
         assert!(store
             .patch_draft(
@@ -3889,7 +4415,7 @@ mod tests {
         let project = store.validate_project(&project.id).unwrap();
         let draft = store.open_draft(&project.id, "recognized engine").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.2", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -4018,7 +4544,7 @@ mod tests {
             .unwrap();
         assert!(matches_projection(
             item,
-            "客户端/dev/data/cfg_item.xls",
+            "引擎/Mir200/Envir/Data/cfg_item.xls",
             Some("xls"),
             None,
         ));
@@ -4035,8 +4561,8 @@ mod tests {
         let registry = bundled_domain_registry().unwrap();
         let owners = projection_system_ids(
             registry,
-            "客户端/dev/domains/item/cfg_item.txt",
-            Some("txt"),
+            "引擎/Mir200/Envir/Data/cfg_item.xls",
+            Some("xls"),
             Some(
                 "itemId=ITEM_A\nitemType=material\nlinkedBuffId=BUFF_A\nclientIcon=item.png\nengineStdMode=1\nstackLimit=10\n",
             ),
@@ -4046,7 +4572,7 @@ mod tests {
     }
 
     #[test]
-    fn content_fingerprint_claims_a_file_only_when_no_path_owner_exists() {
+    fn content_fingerprint_never_grants_v2_ownership() {
         let registry = bundled_domain_registry().unwrap();
         let owners = projection_system_ids(
             registry,
@@ -4054,7 +4580,7 @@ mod tests {
             Some("txt"),
             Some("status_effect=poison\n"),
         );
-        assert_eq!(owners, vec!["buff"]);
+        assert!(owners.is_empty());
     }
 
     #[test]
@@ -4082,20 +4608,96 @@ mod tests {
     }
 
     #[test]
-    fn dependency_files_are_visible_but_never_writable_from_the_consumer() {
+    fn project_binding_moves_only_the_selected_unclaimed_file_into_one_system() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-project-binding-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let root = base.join("木立");
+        let relative = "客户端/dev/misc/custom.lua";
+        std::fs::create_dir_all(root.join("客户端/dev/misc")).unwrap();
+        std::fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
+        std::fs::write(
+            root.join(relative),
+            "-- 正文提到装备、物品，但没有官方归属\nreturn 1\n",
+        )
+        .unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+
+        let query = DomainFileQuery {
+            text: String::new(),
+            limit: Some(10),
+            offset: None,
+        };
+        assert!(store
+            .query_domain_files(&project.id, "equipment", &query)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .query_domain_files(&project.id, "rebirth", &query)
+            .unwrap()
+            .is_empty());
+
+        let binding = store
+            .add_domain_project_binding(&project.id, "rebirth", relative)
+            .unwrap();
+        let files = store
+            .query_domain_files(&project.id, "rebirth", &query)
+            .unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, relative);
+        assert_eq!(files[0].ownership, "shared");
+        assert_eq!(files[0].evidence["kind"], "projectBinding");
+
+        let draft = store.open_draft(&project.id, "项目关联编辑").unwrap();
+        store
+            .bind_draft_domain(&project.id, &draft.id, "rebirth", "1.3.2", None)
+            .unwrap();
+        store
+            .patch_draft(
+                &project.id,
+                &draft.id,
+                0,
+                &[crate::DraftChangeInput {
+                    path: relative.to_string(),
+                    content: Some("return 2\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+
+        store
+            .remove_domain_project_binding(&project.id, "rebirth", &binding.id)
+            .unwrap();
+        assert!(store
+            .query_domain_files(&project.id, "rebirth", &query)
+            .unwrap()
+            .is_empty());
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn reference_files_are_loaded_separately_and_remain_readonly() {
         let base = std::env::temp_dir().join(format!("mir3-dependency-{}", std::process::id()));
         let root = base.join("木立");
-        std::fs::create_dir_all(root.join("客户端/dev/Quest")).unwrap();
-        std::fs::create_dir_all(root.join("引擎/Mir200/Item")).unwrap();
-        std::fs::write(root.join("客户端/dev/Quest/Main.lua"), "questId=Q1\n").unwrap();
-        std::fs::write(root.join("引擎/Mir200/Item/Items.txt"), "itemId=I1\n").unwrap();
+        std::fs::create_dir_all(root.join("客户端/dev/data_config")).unwrap();
+        std::fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
+        std::fs::write(
+            root.join("客户端/dev/data_config/ModelAtlasSplitConfigs.txt"),
+            "monster atlas\n",
+        )
+        .unwrap();
         let store = DomainStore::new(base.join("data")).unwrap();
         let project = store.import_project(&root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
         let files = store
-            .query_domain_files(
+            .query_domain_references(
                 &project.id,
-                "quest",
+                "monster",
                 &DomainFileQuery {
                     text: String::new(),
                     limit: Some(100),
@@ -4105,9 +4707,9 @@ mod tests {
             .unwrap();
         let dependency = files
             .iter()
-            .find(|file| file.path.contains("Item/Items.txt"))
+            .find(|file| file.path.ends_with("ModelAtlasSplitConfigs.txt"))
             .unwrap();
-        assert_eq!(dependency.ownership, "dependency");
+        assert_eq!(dependency.ownership, "reference");
         assert_eq!(dependency.access, "readonly");
         std::fs::remove_dir_all(base).ok();
     }
@@ -4143,7 +4745,7 @@ mod tests {
             .open_draft(&project.id, "invalid level overlay")
             .unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.2", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -4222,7 +4824,7 @@ mod tests {
                 &project.id,
                 &draft.id,
                 "level",
-                "1.3.1",
+                "1.3.2",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -4232,7 +4834,7 @@ mod tests {
                 &project.id,
                 &companion.id,
                 "shop",
-                "1.3.1",
+                "1.3.2",
                 Some("overlay-composite"),
             )
             .unwrap();
@@ -4289,7 +4891,7 @@ mod tests {
         copy_test_directory(&bundled, &v1_staging);
         let v1_hash = hash_runtime_release(&v1_staging).unwrap();
         let v1 = RuntimeDomainPackRelease {
-            version: "1.3.1".to_string(),
+            version: "1.3.2".to_string(),
             directory: format!("level-{}", &v1_hash[..12]),
             hash: v1_hash,
         };
@@ -4297,10 +4899,10 @@ mod tests {
 
         let v101_staging = base.join("level-v101");
         copy_test_directory(&bundled, &v101_staging);
-        mutate_test_pack_contract(&v101_staging, "1.3.2", "v101");
+        mutate_test_pack_contract(&v101_staging, "1.3.3", "v101");
         let v101_hash = hash_runtime_release(&v101_staging).unwrap();
         let v101 = RuntimeDomainPackRelease {
-            version: "1.3.2".to_string(),
+            version: "1.3.3".to_string(),
             directory: format!("level-{}", &v101_hash[..12]),
             hash: v101_hash,
         };
@@ -4308,10 +4910,10 @@ mod tests {
 
         let v102_staging = base.join("level-v102");
         copy_test_directory(&bundled, &v102_staging);
-        mutate_test_pack_contract(&v102_staging, "1.3.3", "v102");
+        mutate_test_pack_contract(&v102_staging, "1.3.4", "v102");
         let v102_hash = hash_runtime_release(&v102_staging).unwrap();
         let v102 = RuntimeDomainPackRelease {
-            version: "1.3.3".to_string(),
+            version: "1.3.4".to_string(),
             directory: format!("level-{}", &v102_hash[..12]),
             hash: v102_hash,
         };
@@ -4324,9 +4926,9 @@ mod tests {
         let project = store.import_project(&project_root).unwrap();
         store.scan_project(&project.id, || false).unwrap();
 
-        let draft = store.open_draft(&project.id, "pinned v1.3.1").unwrap();
+        let draft = store.open_draft(&project.id, "pinned v1.3.2").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.2", None)
             .unwrap();
         let old_lease = store
             .issue_task_scope(
@@ -4335,7 +4937,7 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 std::slice::from_ref(&draft.id),
-                serde_json::json!({"level":"1.3.1"}),
+                serde_json::json!({"level":"1.3.2"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
@@ -4351,14 +4953,14 @@ mod tests {
                     body: serde_json::json!({"maximumLevel": 80}),
                     status: "active".to_string(),
                     source_task_id: "old-task".to_string(),
-                    plugin_version: "1.3.1".to_string(),
+                    plugin_version: "1.3.2".to_string(),
                     created_at: crate::now_millis(),
                     updated_at: crate::now_millis(),
                 },
             )
             .unwrap();
 
-        // 两次升级后 v1.3.1 已不在 current/previous/LKG，但目录仍保留给旧任务。
+        // 两次升级后 v1.3.2 已不在 current/previous/LKG，但目录仍保留给旧任务。
         write_test_runtime_state(
             &system_root,
             "level",
@@ -4373,7 +4975,7 @@ mod tests {
             .into_iter()
             .find(|manifest| manifest.system_id == "level")
             .unwrap();
-        assert_eq!(active.version, "1.3.3");
+        assert_eq!(active.version, "1.3.4");
         assert_eq!(
             store
                 .list_domain_memories(&project.id, "level", true)
@@ -4386,7 +4988,7 @@ mod tests {
             .iter()
             .any(|operation| operation.id == "scale-experience-v102"));
         let pinned_manifest = store.draft_domain_manifest(&project.id, &draft.id).unwrap();
-        assert_eq!(pinned_manifest.version, "1.3.1");
+        assert_eq!(pinned_manifest.version, "1.3.2");
         assert!(pinned_manifest
             .operations
             .iter()
@@ -4412,7 +5014,7 @@ mod tests {
             )
             .is_ok());
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.3", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.4", None)
             .unwrap();
         assert!(store
             .authorize_task_scope(
@@ -4425,7 +5027,7 @@ mod tests {
             .unwrap_err()
             .starts_with("TASK_SCOPE_DRAFT_VERSION_MISMATCH:"));
         store
-            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "level", "1.3.2", None)
             .unwrap();
 
         let new_lease = store
@@ -4435,11 +5037,11 @@ mod tests {
                 &["level".to_string()],
                 &["level".to_string()],
                 &[],
-                serde_json::json!({"level":"1.3.3"}),
+                serde_json::json!({"level":"1.3.4"}),
                 crate::now_millis() + 60_000,
             )
             .unwrap();
-        assert_eq!(new_lease.plugin_versions["level"], "1.3.3");
+        assert_eq!(new_lease.plugin_versions["level"], "1.3.4");
 
         // 保留另一个可用领域，用来证明禁用包从新任务清单消失而非拖垮注册表。
         let shop_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -4448,7 +5050,7 @@ mod tests {
         copy_test_directory(&shop_bundled, &shop_staging);
         let shop_hash = hash_runtime_release(&shop_staging).unwrap();
         let shop_release = RuntimeDomainPackRelease {
-            version: "1.3.1".to_string(),
+            version: "1.3.2".to_string(),
             directory: format!("shop-{}", &shop_hash[..12]),
             hash: shop_hash,
         };
@@ -4508,7 +5110,7 @@ mod tests {
         )
         .unwrap();
         assert!(store
-            .runtime_manifest_at_version("level", Some("1.3.1"))
+            .runtime_manifest_at_version("level", Some("1.3.2"))
             .unwrap_err()
             .starts_with("DOMAIN_PACK_VERSION_UNAVAILABLE:"));
         assert!(store

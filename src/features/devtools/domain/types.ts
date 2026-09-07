@@ -23,6 +23,16 @@ export interface DomainManifest {
     editableExtensions: string[]
     structuredExtensions: string[]
     readonlyExtensions: string[]
+    bindings?: Array<{
+      id: string
+      systemId: string
+      root: 'clientDev' | 'engineData' | 'engineRuntime'
+      pathPattern: string
+      relation: 'direct' | 'shared' | 'reference'
+      access: 'readwrite' | 'readonly'
+      scope: Record<string, unknown>
+      evidence: Record<string, unknown>
+    }>
   }
   dependencies: string[]
   capabilities: Array<{
@@ -57,9 +67,24 @@ export interface DomainFileRecord {
   size: number
   modifiedAt: number
   resourceId: string
-  ownership: 'owned' | 'shared' | 'dependency' | 'unknown'
+  ownership: 'owned' | 'shared' | 'reference' | 'unknown'
   access: 'editable' | 'structured' | 'readonly'
   systems: string[]
+  bindingId?: string | null
+  scope?: Record<string, unknown> | null
+  evidence?: Record<string, unknown> | null
+}
+
+export interface DomainProjectBinding {
+  id: string
+  projectId: string
+  systemId: string
+  path: string
+  relation: 'direct' | 'shared' | 'reference'
+  access: 'readwrite' | 'readonly'
+  scope: Record<string, unknown>
+  evidence: Record<string, unknown>
+  createdAt: number
 }
 
 export interface DomainTextProjection {

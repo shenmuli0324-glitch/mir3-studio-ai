@@ -128,8 +128,8 @@ for (const pluginRoot of pluginRoots) {
         failures.push(`${manifest.name}: client entry is missing ${contract}`)
     }
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
-      if (manifest.version !== '1.3.5')
-        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.5`)
+      if (manifest.version !== '1.3.6')
+        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.6`)
       for (const contract of [
         'const PROTOCOL_VERSION = 2',
         'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',
@@ -255,7 +255,9 @@ else {
     }
     if (JSON.stringify(packageManifest.mir3Domain?.engineCompatibility) !== JSON.stringify(domain.engineCompatibility))
       failures.push(`${label}: package engine compatibility differs from domain manifest`)
-    for (const key of ['manifestSchemaVersion', 'resourceSchemaVersion', 'capabilitySchemaVersion', 'memorySchemaVersion']) {
+    if (![1, 2].includes(domain.manifestSchemaVersion))
+      failures.push(`${label}: manifestSchemaVersion must be 1 or 2`)
+    for (const key of ['resourceSchemaVersion', 'capabilitySchemaVersion', 'memorySchemaVersion']) {
       if (domain[key] !== 1)
         failures.push(`${label}: ${key} must be 1`)
     }
@@ -265,21 +267,45 @@ else {
       failures.push(`${label}: local README and changelog references are required`)
     if (!Array.isArray(domain.requiredKernelPrimitives) || !domain.requiredKernelPrimitives.includes('draft-v1'))
       failures.push(`${label}: requiredKernelPrimitives must include draft-v1`)
-    for (const key of ['ownedSelectors', 'dependencySelectors', 'excludes', 'contentFingerprints', 'pathAliases', 'roles']) {
+    for (const key of ['ownedSelectors', 'dependencySelectors', 'excludes', 'contentFingerprints', 'bindings', 'pathAliases', 'roles']) {
       if (!Array.isArray(domain.fileProjection?.[key]))
         failures.push(`${label}: fileProjection.${key} must be an array`)
     }
-    if (!domain.fileProjection?.contentFingerprints?.length || !domain.fileProjection?.pathAliases?.length)
-      failures.push(`${label}: file projection fingerprints and path aliases cannot be empty`)
+    if (!domain.fileProjection?.pathAliases?.length)
+      failures.push(`${label}: file projection path aliases cannot be empty`)
+    if (domain.manifestSchemaVersion >= 2 && (domain.fileProjection?.ownedSelectors?.length || domain.fileProjection?.contentFingerprints?.length))
+      failures.push(`${label}: v2 file ownership cannot use selectors or content fingerprints`)
+    for (const binding of domain.fileProjection?.bindings || []) {
+      if (!binding.id || binding.systemId !== systemId
+        || !['clientDev', 'engineData', 'engineRuntime'].includes(binding.root)
+        || !binding.pathPattern
+        || !['direct', 'shared', 'reference'].includes(binding.relation)
+        || !['readwrite', 'readonly'].includes(binding.access)
+        || !['wholeFile', 'xls', 'script'].includes(binding.scope?.type)
+        || !['officialDoc', 'officialForum', 'projectBinding'].includes(binding.evidence?.kind)
+        || !binding.evidence?.ref || !binding.evidence?.version) {
+        failures.push(`${label}: invalid evidence-backed file binding ${binding.id || '<missing>'}`)
+      }
+    }
     if (!Array.isArray(domain.resources?.resourceTypes) || !domain.resources.resourceTypes.length)
       failures.push(`${label}: at least one resource type is required`)
     if (!Array.isArray(domain.presentation?.views) || !domain.presentation.views.includes(domain.renderer))
       failures.push(`${label}: presentation views must include the primary renderer`)
     const validatorKinds = new Set((domain.validators || []).map(validator => validator.kind))
-    for (const kind of ['syntax', 'schema', 'uniqueness', 'range', 'reference-integrity', 'client-engine-consistency', 'runtime-diagnostics']) {
+    const projectedRoots = new Set((domain.fileProjection?.bindings || [])
+      .filter(binding => binding.relation !== 'reference')
+      .map(binding => binding.root))
+    const hasClientEngineProjection = projectedRoots.has('clientDev')
+      && [...projectedRoots].some(root => root === 'engineData' || root === 'engineRuntime')
+    const requiredValidatorKinds = ['syntax', 'schema', 'uniqueness', 'range', 'reference-integrity', 'runtime-diagnostics']
+    if (hasClientEngineProjection)
+      requiredValidatorKinds.push('client-engine-consistency')
+    for (const kind of requiredValidatorKinds) {
       if (!validatorKinds.has(kind))
         failures.push(`${label}: validator ${kind} is required`)
     }
+    if (!hasClientEngineProjection && validatorKinds.has('client-engine-consistency'))
+      failures.push(`${label}: client-engine validator requires both official projections`)
     if (!Array.isArray(domain.dependencies))
       failures.push(`${label}: dependencies must be an array`)
     for (const dependency of domain.dependencies || []) {

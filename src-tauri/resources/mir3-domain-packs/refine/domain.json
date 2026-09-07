@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "refine",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "洗炼",
       "精炼"
     ],
-    "ownedSelectors": [
-      "refine",
-      "洗炼",
-      "精炼"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "equipment"
@@ -61,20 +57,8 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
-      {
-        "contains": "refine",
-        "caseSensitive": false
-      },
-      {
-        "contains": "洗炼",
-        "caseSensitive": false
-      },
-      {
-        "contains": "精炼",
-        "caseSensitive": false
-      }
-    ],
+    "contentFingerprints": [],
+    "bindings": [],
     "pathAliases": [
       {
         "from": "client",
@@ -94,7 +78,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -824,7 +809,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -930,7 +915,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1034,7 +1019,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1144,7 +1129,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1254,7 +1239,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1338,7 +1323,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1402,16 +1387,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "refine.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "poolId",
-      "compareFields": [
-        "minimumValue",
-        "maximumValue"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "refine.runtime",

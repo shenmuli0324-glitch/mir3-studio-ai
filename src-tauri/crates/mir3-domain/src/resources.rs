@@ -766,6 +766,7 @@ mod tests {
     fn create_project(root: &Path, shop_path: &str) {
         fs::create_dir_all(root.join("客户端/dev/Item")).unwrap();
         fs::create_dir_all(root.join("引擎/Mir200")).unwrap();
+        fs::create_dir_all(root.join("引擎/Mir200/Envir/Shop")).unwrap();
         fs::write(
             root.join("客户端/dev/Item/cfg_item.txt"),
             "itemId\tlinkedBuffId\nITEM_OK\t\n",
@@ -789,8 +790,8 @@ mod tests {
         ));
         let first_root = base.join("first");
         let second_root = base.join("second");
-        let first_path = "引擎/Mir200/Envir/Shop/cfg_store.xls";
-        let second_path = "引擎/Mir200/Envir/Shop/moved/cfg_store.xls";
+        let first_path = "引擎/Mir200/Envir/Data/cfg_store.xls";
+        let second_path = "引擎/Mir200/Envir/Data/cfg_store.xls";
         create_project(&first_root, first_path);
         create_project(&second_root, second_path);
 
@@ -904,6 +905,9 @@ mod tests {
             ownership: "owned".to_string(),
             access: "structured".to_string(),
             systems: vec!["shop".to_string()],
+            binding_id: None,
+            scope: Value::Null,
+            evidence: Value::Null,
         };
         let mut fields = Map::new();
         fields.insert("price".to_string(), Value::String("50".to_string()));

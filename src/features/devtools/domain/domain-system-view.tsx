@@ -1,6 +1,6 @@
 import type { DevToolDefinition } from '../devtool-registry'
 import type { DomainWorkbookCellEdit } from './domain-workbook-model'
-import type { DomainDraftPreview, DomainFileRecord, DomainManifest, DomainValidationReport, DomainWorkbookData, DomainWorkingCopy, SafeTextOpen } from './types'
+import type { DomainDraftPreview, DomainFileRecord, DomainManifest, DomainProjectBinding, DomainValidationReport, DomainWorkbookData, DomainWorkingCopy, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainWorkingCopyHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { File, Folder, Magnifier } from '@gravity-ui/icons'
@@ -14,6 +14,8 @@ import { SystemAiPanel } from '@/features/system-ai/system-ai-panel'
 import { toast } from '@/utils'
 import { DevToolWorkspace } from '../shell/devtool-workspace'
 import {
+  addDomainProjectBinding,
+  listDomainProjectBindings,
   listDomainSaveNodes,
   listDomainSystems,
   loadDomainWorkingWorkbook,
@@ -23,6 +25,9 @@ import {
   patchDomainWorkingXls,
   previewDomainWorkingCopy,
   queryDomainFiles,
+  queryDomainReferences,
+  queryUnclaimedDomainFiles,
+  removeDomainProjectBinding,
   restoreDomainSaveNode,
   saveDomainWorkingCopy,
 } from './api'
@@ -42,6 +47,8 @@ interface WorkingXlsEdit extends DomainWorkbookCellEdit {
   path: string
   sourceSha256: string
 }
+
+const EMPTY_DOMAIN_FILES: DomainFileRecord[] = []
 
 interface MutableFileTree {
   directories: Map<string, MutableFileTree>
@@ -78,6 +85,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   const [reviewOpen, setReviewOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [savingFlow, setSavingFlow] = useState(false)
+  const [bindingOpen, setBindingOpen] = useState(false)
   const handledTargetRef = useRef('')
   const workingCopyRef = useRef<DomainWorkingCopy | null>(null)
   const workingEditsRef = useRef<Record<string, WorkingTextEdit>>({})
@@ -98,7 +106,22 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     queryFn: () => queryDomainFiles(project!.id, tool.id, deferredSearch),
     enabled: project != null,
   })
-  const projectedFiles = currentSystemFiles(files.data ?? [])
+  const references = useQuery({
+    queryKey: ['domain-references', project?.id, tool.id, deferredSearch],
+    queryFn: () => queryDomainReferences(project!.id, tool.id, deferredSearch),
+    enabled: project != null,
+  })
+  const bindings = useQuery({
+    queryKey: ['domain-bindings', project?.id, tool.id],
+    queryFn: () => listDomainProjectBindings(project!.id, tool.id),
+    enabled: project != null,
+  })
+  const unclaimedFiles = useQuery({
+    queryKey: ['domain-unclaimed', project?.id, deferredSearch],
+    queryFn: () => queryUnclaimedDomainFiles(project!.id, deferredSearch, 100),
+    enabled: project != null && bindingOpen,
+  })
+  const projectedFiles = files.data ?? EMPTY_DOMAIN_FILES
   const activeWorkingCopyId = workingCopy?.id ?? null
   const openedFile = useQuery({
     queryKey: ['domain-source', project?.id, selectedFile?.path, activeWorkingCopyId],
@@ -146,7 +169,17 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
-  const busy = saveWorking.isPending || restoreSave.isPending || syncing || savingFlow
+  const addBinding = useMutation({
+    mutationFn: (path: string) => addDomainProjectBinding(project!.id, tool.id, path),
+    onSuccess: async () => invalidateWorkspaceQueries(queryClient, project!.id, tool.id),
+    onError: reason => toast(String(reason), { variant: 'danger' }),
+  })
+  const removeBinding = useMutation({
+    mutationFn: (bindingId: string) => removeDomainProjectBinding(project!.id, tool.id, bindingId),
+    onSuccess: async () => invalidateWorkspaceQueries(queryClient, project!.id, tool.id),
+    onError: reason => toast(String(reason), { variant: 'danger' }),
+  })
+  const busy = saveWorking.isPending || restoreSave.isPending || addBinding.isPending || removeBinding.isPending || syncing || savingFlow
 
   useEffect(() => {
     if (!project || !target || files.isLoading || target.projectId !== project.id || target.systemId !== tool.id || handledTargetRef.current === target.nonce)
@@ -413,11 +446,19 @@ export function DomainSystemView({ tool, project, onBack, target }: {
         sidebar={(
           <DomainFileSidebar
             files={projectedFiles}
-            loading={files.isLoading}
+            references={references.data ?? []}
+            bindings={bindings.data ?? []}
+            unclaimedFiles={unclaimedFiles.data ?? []}
+            bindingOpen={bindingOpen}
+            bindingLoading={unclaimedFiles.isLoading}
+            loading={files.isLoading || references.isLoading}
             search={search}
             selectedPath={selectedFile?.path}
             onSearch={setSearch}
             onSelect={selectFile}
+            onToggleBinding={() => setBindingOpen(value => !value)}
+            onBind={path => addBinding.mutate(path)}
+            onRemoveBinding={bindingId => removeBinding.mutate(bindingId)}
           />
         )}
         toolbar={(
@@ -465,13 +506,21 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   )
 }
 
-function DomainFileSidebar({ files, loading, search, selectedPath, onSearch, onSelect }: {
+function DomainFileSidebar({ files, references, bindings, unclaimedFiles, bindingOpen, bindingLoading, loading, search, selectedPath, onSearch, onSelect, onToggleBinding, onBind, onRemoveBinding }: {
   files: DomainFileRecord[]
+  references: DomainFileRecord[]
+  bindings: DomainProjectBinding[]
+  unclaimedFiles: DomainFileRecord[]
+  bindingOpen: boolean
+  bindingLoading: boolean
   loading: boolean
   search: string
   selectedPath?: string
   onSearch: (value: string) => void
   onSelect: (file: DomainFileRecord) => void
+  onToggleBinding: () => void
+  onBind: (path: string) => void
+  onRemoveBinding: (bindingId: string) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -481,15 +530,63 @@ function DomainFileSidebar({ files, loading, search, selectedPath, onSearch, onS
           <Magnifier className="size-3.5 text-muted" />
           <input className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-muted" value={search} placeholder={t('studio.devtools.files.search')} aria-label={t('studio.devtools.files.search')} onChange={event => onSearch(event.target.value)} />
         </label>
+        <button type="button" className="mt-2 w-full rounded-lg border border-line px-2.5 py-1.5 text-xs text-accent hover:bg-panel2" onClick={onToggleBinding}>
+          {t('studio.devtools.files.bind')}
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-2">
+        <If cond={bindingOpen}>
+          <DomainBindingPicker files={unclaimedFiles} bindings={bindings} loading={bindingLoading} onBind={onBind} onRemove={onRemoveBinding} />
+        </If>
         <If cond={!loading} else={<p className="p-4 text-center text-xs text-muted">{t('studio.devtools.resources.loading')}</p>}>
-          <If cond={files.length > 0} else={<p className="p-4 text-center text-xs leading-5 text-muted">{t('studio.devtools.files.empty')}</p>}>
-            <DirectoryTree files={files} selectedPath={selectedPath} onSelect={onSelect} />
+          <If cond={files.length > 0} else={<p className="p-4 text-center text-xs leading-5 text-muted">{t('studio.devtools.files.unbound')}</p>}>
+            <FileTreeSection title={t('studio.devtools.files.system')} files={files} selectedPath={selectedPath} onSelect={onSelect} />
+          </If>
+          <If cond={references.length > 0}>
+            <details className="mt-3 rounded-lg border border-line/70">
+              <summary className="cursor-pointer list-none px-2.5 py-2 text-[11px] font-medium text-muted">{t('studio.devtools.files.references')}</summary>
+              <div className="border-t border-line/70 p-1.5">
+                <DirectoryTree files={references} selectedPath={selectedPath} onSelect={onSelect} />
+              </div>
+            </details>
           </If>
         </If>
       </div>
     </div>
+  )
+}
+
+function DomainBindingPicker({ files, bindings, loading, onBind, onRemove }: { files: DomainFileRecord[], bindings: DomainProjectBinding[], loading: boolean, onBind: (path: string) => void, onRemove: (bindingId: string) => void }) {
+  const { t } = useTranslation()
+  return (
+    <section className="mb-3 rounded-lg border border-line bg-panel2 p-2">
+      <p className="mb-1.5 text-[10px] font-medium text-muted">{t('studio.devtools.files.project_bindings')}</p>
+      {bindings.map(binding => (
+        <div key={binding.id} className="flex items-center gap-1 py-1 text-[10px] text-ink">
+          <span className="min-w-0 flex-1 truncate" title={binding.path}>{binding.path}</span>
+          <button type="button" className="shrink-0 text-danger" onClick={() => onRemove(binding.id)}>{t('studio.devtools.files.unbind')}</button>
+        </div>
+      ))}
+      <If cond={!loading} else={<p className="py-2 text-center text-[10px] text-muted">{t('studio.devtools.resources.loading')}</p>}>
+        <p className="mb-1 mt-2 text-[10px] font-medium text-muted">{t('studio.devtools.files.unclaimed')}</p>
+        {files.map(file => (
+          <button key={file.path} type="button" className="flex w-full items-center gap-1 py-1 text-left text-[10px] text-ink hover:text-accent" title={file.path} onClick={() => onBind(file.path)}>
+            <File className="size-3 shrink-0" />
+            <span className="truncate">{file.path}</span>
+          </button>
+        ))}
+        <If cond={files.length === 0}><p className="py-2 text-center text-[10px] text-muted">{t('studio.devtools.files.no_unclaimed')}</p></If>
+      </If>
+    </section>
+  )
+}
+
+function FileTreeSection({ title, files, selectedPath, onSelect }: { title: string, files: DomainFileRecord[], selectedPath?: string, onSelect: (file: DomainFileRecord) => void }) {
+  return (
+    <section>
+      <p className="px-1.5 pb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">{title}</p>
+      <DirectoryTree files={files} selectedPath={selectedPath} onSelect={onSelect} />
+    </section>
   )
 }
 
@@ -519,10 +616,16 @@ function DirectoryBranch({ node, selectedPath, onSelect, depth }: { node: FileTr
 }
 
 function FileTreeButton({ file, selected, onSelect }: { file: DomainFileRecord, selected: boolean, onSelect: (file: DomainFileRecord) => void }) {
+  const { t } = useTranslation()
   return (
     <button type="button" className={fileTreeButtonClass(selected)} title={file.path} onClick={() => onSelect(file)}>
       <File className="size-3 shrink-0 text-muted" />
       <span className="truncate">{fileName(file.path)}</span>
+      <span className="ml-auto shrink-0 text-[9px] text-muted">
+        <If cond={file.evidence?.kind === 'projectBinding'} then={t('studio.devtools.files.project_binding')} else={t('studio.devtools.files.official')} />
+      </span>
+      <If cond={file.ownership === 'shared'}><span className="shrink-0 text-[9px] text-accent">{t('studio.devtools.files.shared')}</span></If>
+      <If cond={file.access === 'readonly'}><span className="shrink-0 text-[9px] text-warning">{t('studio.devtools.files.readonly')}</span></If>
     </button>
   )
 }
@@ -601,15 +704,6 @@ function CenteredNotice({ title, description }: { title: string, description: st
 function NoProject() {
   const { t } = useTranslation()
   return <CenteredNotice title={t('studio.devtools.no_project')} description={t('studio.devtools.no_project_desc')} />
-}
-
-function currentSystemFiles(files: DomainFileRecord[]) {
-  const unique = new Map<string, DomainFileRecord>()
-  files.forEach((file) => {
-    if ((file.ownership === 'owned' || file.ownership === 'shared') && !unique.has(file.path))
-      unique.set(file.path, file)
-  })
-  return [...unique.values()].sort((left, right) => left.path.localeCompare(right.path, 'zh-CN'))
 }
 
 function buildFileTree(files: DomainFileRecord[]): FileTreeNode {
@@ -721,27 +815,30 @@ function canEditSource(file?: DomainFileRecord | null): boolean {
 }
 
 function fallbackManifest(tool: DevToolDefinition): DomainManifest {
+  let version = '1.3.2'
+  if (tool.id === 'map')
+    version = '1.3.3'
   return {
     kind: 'domain',
     systemId: tool.id,
-    version: '1.3.1',
+    version,
     kernelApiRange: '^1.0.0',
     supportedEngineRange: '>=1.0.0',
     engineCompatibility: {
       strategy: 'evidence-gated-auto-generalization-v1',
       versionAliases: ['semver', 'v-prefixed-semver', 'major-minor'],
-      requiredEvidence: ['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'],
+      requiredEvidence: ['project-directory-layout', 'official-file-binding', 'resource-schema-validation'],
       unknownVersionPolicy: 'readonly',
       incompatibleVersionPolicy: 'readonly',
     },
-    manifestSchemaVersion: 1,
+    manifestSchemaVersion: 2,
     resourceSchemaVersion: 1,
     capabilitySchemaVersion: 1,
     memorySchemaVersion: 1,
     category: tool.category,
     complexity: 1,
     renderer: 'table-v1',
-    fileProjection: { keywords: [], editableExtensions: ['txt', 'lua'], structuredExtensions: ['xls'], readonlyExtensions: [] },
+    fileProjection: { keywords: [], editableExtensions: ['txt', 'lua', 'ini'], structuredExtensions: ['xls'], readonlyExtensions: [], bindings: [] },
     dependencies: [],
     capabilities: [],
   }

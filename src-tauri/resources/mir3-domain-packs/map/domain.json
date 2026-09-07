@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "map",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "/map/",
       ".map"
     ],
-    "ownedSelectors": [
-      "mapinfo",
-      "/map/",
-      ".map"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "npc"
@@ -70,10 +66,119 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
+    "contentFingerprints": [],
+    "bindings": [
       {
-        "contains": "mapId=",
-        "caseSensitive": false
+        "id": "map-info",
+        "root": "engineData",
+        "pathPattern": "cfg_mapinfo.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "map-startpoint",
+        "root": "engineData",
+        "pathPattern": "cfg_startpoint.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "map-music",
+        "root": "engineData",
+        "pathPattern": "cfg_mapmusic.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "map-background",
+        "root": "engineData",
+        "pathPattern": "cfg_mapbginfo.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "map-name",
+        "root": "engineData",
+        "pathPattern": "cfg_mapname.xls",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "map-binary",
+        "root": "engineRuntime",
+        "pathPattern": "map/**/*.map",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
+      },
+      {
+        "id": "map-text",
+        "root": "engineRuntime",
+        "pathPattern": "Envir/MapInfo.txt",
+        "relation": "direct",
+        "access": "readwrite",
+        "scope": {
+          "type": "wholeFile"
+        },
+        "systemId": "map",
+        "evidence": {
+          "kind": "officialDoc",
+          "ref": "996传3引擎帮助文档（2026.08.06）.chm/数据库资料/Excel结构/表结构详细说明.htm",
+          "version": "2026.08.06"
+        }
       }
     ],
     "pathAliases": [
@@ -96,6 +201,7 @@
     "editableExtensions": [
       "txt",
       "lua",
+      "ini",
       "map"
     ],
     "structuredExtensions": [
@@ -1100,7 +1206,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1204,7 +1310,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1310,7 +1416,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1565,7 +1671,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1681,7 +1787,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1791,7 +1897,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1878,7 +1984,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.2",
+      "version": "1.3.3",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1937,16 +2043,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "map.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "mapId",
-      "compareFields": [
-        "width",
-        "height"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "map.runtime",

@@ -1854,7 +1854,7 @@ mod tests {
         let imported = store.import_project(&project).unwrap();
         let draft = store.open_draft(&imported.id, "修改入口").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.1", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.2", None)
             .unwrap();
         let preview = store
             .patch_draft(
@@ -1901,7 +1901,7 @@ mod tests {
         let imported = store.import_project(&project).unwrap();
         let draft = store.open_draft(&imported.id, "修改入口").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.1", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.2", None)
             .unwrap();
         let first = store
             .patch_draft(
@@ -1960,7 +1960,7 @@ mod tests {
 
         let quest = store.open_draft(&imported.id, "更新任务").unwrap();
         store
-            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.3.1", Some("release-1"))
+            .bind_draft_domain(&imported.id, &quest.id, "quest", "1.3.2", Some("release-1"))
             .unwrap();
         let denied = store.patch_draft(
             &imported.id,
@@ -1992,7 +1992,7 @@ mod tests {
 
         let shop = store.open_draft(&imported.id, "更新商城").unwrap();
         store
-            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.3.1", Some("release-1"))
+            .bind_draft_domain(&imported.id, &shop.id, "shop", "1.3.2", Some("release-1"))
             .unwrap();
         let shop_preview = store
             .patch_draft(
@@ -2155,7 +2155,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -2339,7 +2339,7 @@ mod tests {
         store.scan_project(&imported.id, || false).unwrap();
         let draft = store.open_draft(&imported.id, "并发修改").unwrap();
         store
-            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.1", None)
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.2", None)
             .unwrap();
 
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
@@ -2421,7 +2421,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -2569,7 +2569,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(composite_id),
                 )
                 .unwrap();
@@ -2594,7 +2594,7 @@ mod tests {
         }
         let late = store.open_draft(&imported.id, "late member").unwrap();
         store
-            .bind_draft_domain(&imported.id, &late.id, "item", "1.3.1", None)
+            .bind_draft_domain(&imported.id, &late.id, "item", "1.3.2", None)
             .unwrap();
         let second_store = DomainStore::new_trusted_fixture(&data_root).unwrap();
         let entered = std::sync::Arc::new(std::sync::Barrier::new(2));
@@ -2613,7 +2613,7 @@ mod tests {
         });
         entered.wait();
         let rejected = second_store
-            .associate_draft_composite(&imported.id, &late.id, "item", "1.3.1", composite_id)
+            .associate_draft_composite(&imported.id, &late.id, "item", "1.3.2", composite_id)
             .unwrap_err();
         assert!(rejected.starts_with("DRAFT_MUTATION_RESERVED:"));
         release.wait();
@@ -2664,7 +2664,7 @@ mod tests {
                     &imported.id,
                     &draft.id,
                     system_id,
-                    "1.3.1",
+                    "1.3.2",
                     Some(composite_id),
                 )
                 .unwrap();

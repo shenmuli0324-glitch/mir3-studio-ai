@@ -6,12 +6,13 @@ import { defineDomainFixtures, defineDomainManifest } from '../src-tauri/resourc
 
 const root = resolve(import.meta.dirname, '..')
 const outputRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-packs')
+const officialFileCatalog = JSON.parse(readFileSync(join(outputRoot, 'official-file-catalog.json'), 'utf8'))
 const sdkExampleOutputRoot = join(root, 'src-tauri', 'resources', 'mir3-domain-sdk', 'fixtures', 'example-pack')
 const ownershipFileName = '.generated-ownership.json'
 const generatorId = 'scripts/generate-domain-packs.mjs'
 
 const packDefinitions = [
-  pack('map', 'resources', 5, 'map-canvas-v1', ['mapinfo', '/map/', '.map'], ['npc', 'monster', 'quest', 'manor', 'sabac'], ['inspect-map', 'clone-map', 'edit-map-config', 'edit-map-region'], '1.3.2'),
+  pack('map', 'resources', 5, 'map-canvas-v1', ['mapinfo', '/map/', '.map'], ['npc', 'monster', 'quest', 'manor', 'sabac'], ['inspect-map', 'clone-map', 'edit-map-config', 'edit-map-region'], '1.3.3'),
   pack('npc', 'resources', 3, 'flow-v1', ['npc', 'market_def', 'merchant', '商人'], ['map', 'quest', 'shop', 'item'], ['inspect-npc', 'move-npc', 'edit-dialogue', 'replace-npc-reference']),
   pack('monster', 'resources', 2, 'graph-v1', ['monster', 'mongen', 'monitems', '怪物'], ['map', 'item', 'quest'], ['inspect-monster', 'clone-monster', 'tune-monster', 'edit-drop-table']),
   pack('equipment', 'resources', 2, 'table-v1', ['equipment', 'equip', '装备'], ['item', 'enhance', 'gem', 'refine', 'skill', 'buff'], ['inspect-equipment', 'clone-equipment', 'batch-tune-equipment', 'replace-equipment-reference']),
@@ -106,8 +107,25 @@ const compoundUniqueKeys = {
   talent: ['treeId', 'nodeId'],
 }
 
-function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.3.1') {
+function pack(id, category, complexity, renderer, keywords, dependencies, capabilities, version = '1.3.2') {
   return { id, category, complexity, renderer, keywords, dependencies, capabilities, version }
+}
+
+function officialBindings(systemId) {
+  if (officialFileCatalog.schemaVersion !== 1 || typeof officialFileCatalog.documentVersion !== 'string')
+    throw new Error('DOMAIN_OFFICIAL_FILE_CATALOG_INVALID: schemaVersion and documentVersion are required')
+  return (officialFileCatalog.bindings?.[systemId] || []).map((binding) => {
+    const { evidenceRef, ...definition } = binding
+    return {
+      ...definition,
+      systemId,
+      evidence: {
+        kind: evidenceRef?.startsWith('http') ? 'officialForum' : 'officialDoc',
+        ref: evidenceRef || officialFileCatalog.source,
+        version: officialFileCatalog.documentVersion,
+      },
+    }
+  })
 }
 
 function createPack(definition) {
@@ -130,6 +148,12 @@ function createPack(definition) {
     ...references.map(reference => reference.systemId),
   ])]
   const operations = completedCapabilities.map(capabilityId => operation(id, completeDependencies, capabilityId, spec, operationPrimitive(capabilityId, primitive)))
+  const bindings = officialBindings(id)
+  const projectedRoots = new Set(bindings
+    .filter(binding => binding.relation !== 'reference')
+    .map(binding => binding.root))
+  const hasClientEngineProjection = projectedRoots.has('clientDev')
+    && [...projectedRoots].some(root => root === 'engineData' || root === 'engineRuntime')
   return {
     kind: 'domain',
     systemId: id,
@@ -139,11 +163,11 @@ function createPack(definition) {
     engineCompatibility: {
       strategy: 'evidence-gated-auto-generalization-v1',
       versionAliases: ['semver', 'v-prefixed-semver', 'major-minor'],
-      requiredEvidence: ['project-directory-layout', 'owned-selector-or-content-fingerprint', 'resource-schema-validation'],
+      requiredEvidence: ['project-directory-layout', 'official-file-binding', 'resource-schema-validation'],
       unknownVersionPolicy: 'readonly',
       incompatibleVersionPolicy: 'readonly',
     },
-    manifestSchemaVersion: 1,
+    manifestSchemaVersion: 2,
     resourceSchemaVersion: 1,
     capabilitySchemaVersion: 1,
     memorySchemaVersion: 1,
@@ -154,15 +178,14 @@ function createPack(definition) {
     requiredKernelPrimitives: ['resource-index-v1', 'draft-v1', 'diff-v1', 'validation-v1', 'capability-v1'],
     fileProjection: {
       keywords,
-      ownedSelectors: id === 'map' ? keywords : [...new Set([id, ...keywords])],
+      ownedSelectors: [],
       dependencySelectors: completeDependencies.map(systemId => ({ systemId })),
       excludes: ['**/.git/**', '**/node_modules/**', '**/.mir3-studio/**'],
-      contentFingerprints: id === 'map'
-        ? [{ contains: 'mapId=', caseSensitive: false }]
-        : keywords.map(value => ({ contains: value, caseSensitive: false })),
+      contentFingerprints: [],
+      bindings,
       pathAliases: [{ from: 'client', to: '客户端' }, { from: 'engine', to: '引擎' }],
       roles: ['client', 'engine', 'shared', 'generated', 'readonly'],
-      editableExtensions: id === 'map' ? ['txt', 'lua', 'map'] : ['txt', 'lua'],
+      editableExtensions: id === 'map' ? ['txt', 'lua', 'ini', 'map'] : ['txt', 'lua', 'ini'],
       structuredExtensions: ['xls'],
       readonlyExtensions: ['png', 'plist', 'json', 'ini', 'cfg'],
       unknownFormatPolicy: 'readonly',
@@ -205,7 +228,9 @@ function createPack(definition) {
       { id: `${id}.unique`, kind: 'uniqueness', fields: uniqueKey, scope: `${id}.project` },
       { id: `${id}.range`, kind: 'range', fields: rangeFields },
       { id: `${id}.reference`, kind: 'reference-integrity', references },
-      { id: `${id}.client-engine`, kind: 'client-engine-consistency', matchBy: spec.fields[0].name, compareFields: spec.consistencyFields, missingProjection: 'error' },
+      ...(hasClientEngineProjection
+        ? [{ id: `${id}.client-engine`, kind: 'client-engine-consistency', matchBy: spec.fields[0].name, compareFields: spec.consistencyFields, missingProjection: 'error' }]
+        : []),
       { id: `${id}.runtime`, kind: 'runtime-diagnostics', rule: spec.runtimeRule, severity: 'error', target: `${id}.${spec.resourceType}` },
     ],
     fixtures: {
@@ -633,6 +658,16 @@ export function createGeneratedDomainPackGroups() {
       : ''
     const mapLegacyChangelog = entry.systemId === 'map' ? `## 1.0.1\n\n- Added the closed, structured \`edit-map-region\` parameter contract for scoped binary map Draft edits.\n\n` : ''
     packFiles.set(`${prefix}CHANGELOG.md`, `# Changelog\n\n${mapChangelog}## 1.3.1\n\n- Closed reference dependencies from the executable field schema and revalidated the pack in the 155-operation lifecycle matrix.\n- Confirmed at least one safe operation for this system completes validation, Draft Diff, governed Apply, byte change, and Snapshot restore.\n\n## 1.3.0\n\n- Added executable schema-backed field mappings with declared aliases and scalar types; unknown or ambiguous columns remain read-only.\n- Resource projection now preserves canonical fields for validation, cross-system references, and structured operations.\n\n## 1.2.0\n\n- Replaced the wildcard engine declaration with evidence-gated automatic generalization for recognized SemVer aliases.\n- Made unknown and incompatible engine versions explicitly read-only before Draft writes and final Apply.\n\n## 1.1.0\n\n- Completed the registered create, clone, batch-update, and reference-replacement operation families with closed parameter schemas and Draft safety gates.\n- Kept all writes scoped to this domain and compiled only through registered safe primitives.\n\n${mapLegacyChangelog}## 1.0.0\n\n- Added the ${spec.resourceType} resource schema with typed fields, unique keys, references, client/engine consistency, and runtime diagnostics.\n- Added parameterized safe operations backed by the ${entry.presentation.safePrimitive} primitive.\n- Added valid and invalid contract fixtures with expected diagnostics.\n`)
+    const readmePath = `${prefix}README.md`
+    packFiles.set(readmePath, packFiles.get(readmePath).replace(
+      'Write access additionally requires the real project layout, an owned selector or content fingerprint, and resource-schema validation;',
+      'Write access requires the real project layout, an evidence-backed file binding, and resource-schema validation; keywords never grant ownership.',
+    ))
+    const changelogPath = `${prefix}CHANGELOG.md`
+    packFiles.set(changelogPath, packFiles.get(changelogPath).replace(
+      '# Changelog\n\n',
+      `# Changelog\n\n## ${entry.version} - 2026-09-07\n\n- Replaced fuzzy path and content ownership with evidence-backed official file bindings.\n- Scoped system discovery to active runtime files; unverified custom systems now remain empty until explicitly bound.\n\n`,
+    ))
   }
 
   const sdkExample = packs.find(entry => entry.systemId === 'level')
@@ -662,6 +697,11 @@ export function createGeneratedDomainPackGroups() {
     },
   }))
   sdkFiles.set('CHANGELOG.md', '# Changelog\n\n## 1.3.1 - 2026-08-27\n\n- Revalidated dependency closure and the complete governed lifecycle contract.\n\n## 1.3.0 - 2026-08-27\n\n- Added executable schema-backed field mappings to the runtime-installable example.\n')
+
+  sdkFiles.set('CHANGELOG.md', sdkFiles.get('CHANGELOG.md').replace(
+    '# Changelog\n\n',
+    `# Changelog\n\n## ${sdkExample.version} - 2026-09-07\n\n- Added evidence-backed official file bindings and removed keyword ownership.\n\n`,
+  ))
 
   return [
     { name: 'domain-packs', root: outputRoot, files: packFiles },

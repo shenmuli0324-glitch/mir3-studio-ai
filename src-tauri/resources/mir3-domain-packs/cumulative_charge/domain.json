@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "cumulative_charge",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "recharge_total",
       "累计充值"
     ],
-    "ownedSelectors": [
-      "cumulative_charge",
-      "recharge_total",
-      "累计充值"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "item"
@@ -64,20 +60,8 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
-      {
-        "contains": "cumulative_charge",
-        "caseSensitive": false
-      },
-      {
-        "contains": "recharge_total",
-        "caseSensitive": false
-      },
-      {
-        "contains": "累计充值",
-        "caseSensitive": false
-      }
-    ],
+    "contentFingerprints": [],
+    "bindings": [],
     "pathAliases": [
       {
         "from": "client",
@@ -97,7 +81,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -697,7 +682,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -804,7 +789,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -898,7 +883,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -998,7 +983,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1083,7 +1068,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1141,16 +1126,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "cumulative_charge.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "tierId",
-      "compareFields": [
-        "cycleId",
-        "chargeThreshold"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "cumulative_charge.runtime",

@@ -72,6 +72,8 @@ function developmentReadViolation(projectRoot, session, requestedPath) {
     return sessionViolation
   if (typeof requestedPath !== 'string' || requestedPath.trim() === '')
     return 'MIR3_NON_DEVELOPMENT_FILE_SKIPPED'
+  if (isMir3ManagedSession(session))
+    return 'MIR3_SYSTEM_FILE_MCP_REQUIRED'
   const target = resolve(session.header.cwd, requestedPath)
   if (!isWithin(projectRoot, target))
     return 'MIR3_PROJECT_READ_OUTSIDE_SCOPE'
@@ -107,14 +109,9 @@ function filterDevelopmentReferences(projectRoot, agent, candidates) {
     return []
   if (!isMir3ManagedSession(agent?.session))
     return candidates
-  return candidates.filter((candidate) => {
-    const target = resolve(agent.session.header.cwd, candidate?.path ?? '')
-    if (!isWithin(projectRoot, target))
-      return false
-    return candidate?.kind === 'directory'
-      || (candidate?.kind === 'file'
-        && isDevelopmentFilePath(candidate.path, projectRoot, agent.session.header.cwd))
-  })
+  // 受管系统会话的文件引用必须来自 MIR3 投影服务；Harness 原生候选没有
+  // systemId/bindingId/scope，不能据此授予领域读取权限。
+  return []
 }
 
 function isProtectedTarget(projectRoot, target) {

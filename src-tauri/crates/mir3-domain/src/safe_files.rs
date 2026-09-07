@@ -336,6 +336,9 @@ impl DomainStore {
             .unwrap_or_else(|| source.clone());
         let mut current_reader = Xls::new(Cursor::new(current.clone()))
             .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+        let write_scope =
+            self.draft_path_write_scope(project_id, &draft.id, &request.relative_path)?;
+        assert_xls_updates_in_scope(&write_scope, &request.updates, &mut current_reader)?;
         let mut package = Biff8TemplatePackage::from_bytes(&current)
             .map_err(|error| format!("SAFE_XLS_TEMPLATE_UNSUPPORTED: {error}"))?;
         let sheet_names = package.sheet_names().into_iter().collect::<BTreeSet<_>>();
@@ -445,6 +448,81 @@ impl DomainStore {
         }
         Ok(canonical)
     }
+}
+
+/// XLS 共享绑定按工作表和列名收窄写权限；无法从表头验证的列一律拒绝。
+fn assert_xls_updates_in_scope(
+    scope: &serde_json::Value,
+    updates: &[SafeXlsCellUpdate],
+    reader: &mut Xls<Cursor<Vec<u8>>>,
+) -> Result<(), String> {
+    let scope_type = scope
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if scope_type == "wholeFile" {
+        return Ok(());
+    }
+    if scope_type != "xls" {
+        return Err(format!(
+            "DOMAIN_BINDING_SCOPE_TYPE_DENIED: XLS update cannot use {scope_type} scope"
+        ));
+    }
+    let sheets = scope
+        .get("sheets")
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let columns = scope
+        .get("columns")
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for update in updates {
+        if !sheets.is_empty()
+            && !sheets
+                .iter()
+                .any(|sheet| sheet.eq_ignore_ascii_case(&update.sheet))
+        {
+            return Err(format!(
+                "DOMAIN_BINDING_XLS_SHEET_DENIED: {} is outside the binding scope",
+                update.sheet
+            ));
+        }
+        if columns.is_empty() {
+            continue;
+        }
+        let range = reader
+            .worksheet_range(&update.sheet)
+            .map_err(|error| format!("SAFE_XLS_SHEET_FAILED: {error}"))?;
+        let header_matches = (0..range.height().min(32)).any(|row| {
+            range
+                .get_value((u32::try_from(row).unwrap_or_default(), update.column as u32))
+                .map(ToString::to_string)
+                .is_some_and(|header| {
+                    columns
+                        .iter()
+                        .any(|column| column.eq_ignore_ascii_case(header.trim()))
+                })
+        });
+        if !header_matches {
+            return Err(format!(
+                "DOMAIN_BINDING_XLS_COLUMN_DENIED: {}!C{} is outside the binding scope",
+                update.sheet, update.column
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn safe_xls_value(value: &serde_json::Value) -> Result<Biff8Value, String> {
@@ -561,8 +639,8 @@ fn validate_safe_text_path(value: &str) -> Result<(), String> {
         .map(str::to_ascii_lowercase)
         .as_deref()
     {
-        Some("txt" | "lua") => Ok(()),
-        _ => Err("SAFE_FILE_TYPE_UNSUPPORTED: only TXT and Lua are editable".to_string()),
+        Some("txt" | "lua" | "ini") => Ok(()),
+        _ => Err("SAFE_FILE_TYPE_UNSUPPORTED: only TXT, Lua, and INI are editable".to_string()),
     }
 }
 
@@ -1374,7 +1452,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "安全编辑任务配置").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "quest", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "quest", "1.3.2", None)
             .unwrap();
         let result = store
             .safe_text_patch(
@@ -1475,7 +1553,7 @@ mod tests {
             .unwrap();
         let draft = store.open_draft(&project.id, "修改商品价格").unwrap();
         store
-            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.1", None)
+            .bind_draft_domain(&project.id, &draft.id, "shop", "1.3.2", None)
             .unwrap();
         let result = store
             .safe_xls_patch(
@@ -1528,5 +1606,54 @@ mod tests {
             "新价格"
         );
         fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn xls_binding_scope_rejects_foreign_sheet_and_column() {
+        let mut sheet = Biff8Sheet::new("商品");
+        for (column, value) in ["商品ID", "价格"].iter().enumerate() {
+            sheet
+                .set(
+                    0,
+                    column,
+                    Biff8Cell::general(Biff8Value::Text((*value).to_string())),
+                )
+                .unwrap();
+        }
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        let bytes = book.to_cfb_bytes().unwrap();
+        let scope = serde_json::json!({
+            "type":"xls",
+            "sheets":["商品"],
+            "columns":["价格"]
+        });
+        let update = SafeXlsCellUpdate {
+            sheet: "商品".to_string(),
+            row: 1,
+            column: 1,
+            expected_value: None,
+            value: serde_json::json!(10),
+        };
+        let mut reader = Xls::new(Cursor::new(bytes.clone())).unwrap();
+        assert_xls_updates_in_scope(&scope, std::slice::from_ref(&update), &mut reader).unwrap();
+
+        let mut foreign_column = update.clone();
+        foreign_column.column = 0;
+        let mut reader = Xls::new(Cursor::new(bytes.clone())).unwrap();
+        assert!(
+            assert_xls_updates_in_scope(&scope, &[foreign_column], &mut reader)
+                .unwrap_err()
+                .starts_with("DOMAIN_BINDING_XLS_COLUMN_DENIED:")
+        );
+
+        let mut foreign_sheet = update;
+        foreign_sheet.sheet = "充值".to_string();
+        let mut reader = Xls::new(Cursor::new(bytes)).unwrap();
+        assert!(
+            assert_xls_updates_in_scope(&scope, &[foreign_sheet], &mut reader)
+                .unwrap_err()
+                .starts_with("DOMAIN_BINDING_XLS_SHEET_DENIED:")
+        );
     }
 }

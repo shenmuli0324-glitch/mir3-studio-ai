@@ -1,7 +1,7 @@
 {
   "kind": "domain",
   "systemId": "limited_event",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "kernelApiRange": "^1.0.0",
   "supportedEngineRange": ">=1.0.0",
   "engineCompatibility": {
@@ -13,13 +13,13 @@
     ],
     "requiredEvidence": [
       "project-directory-layout",
-      "owned-selector-or-content-fingerprint",
+      "official-file-binding",
       "resource-schema-validation"
     ],
     "unknownVersionPolicy": "readonly",
     "incompatibleVersionPolicy": "readonly"
   },
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "resourceSchemaVersion": 1,
   "capabilitySchemaVersion": 1,
   "memorySchemaVersion": 1,
@@ -43,11 +43,7 @@
       "limited event",
       "限时活动"
     ],
-    "ownedSelectors": [
-      "limited_event",
-      "limited event",
-      "限时活动"
-    ],
+    "ownedSelectors": [],
     "dependencySelectors": [
       {
         "systemId": "quest"
@@ -70,20 +66,8 @@
       "**/node_modules/**",
       "**/.mir3-studio/**"
     ],
-    "contentFingerprints": [
-      {
-        "contains": "limited_event",
-        "caseSensitive": false
-      },
-      {
-        "contains": "limited event",
-        "caseSensitive": false
-      },
-      {
-        "contains": "限时活动",
-        "caseSensitive": false
-      }
-    ],
+    "contentFingerprints": [],
+    "bindings": [],
     "pathAliases": [
       {
         "from": "client",
@@ -103,7 +87,8 @@
     ],
     "editableExtensions": [
       "txt",
-      "lua"
+      "lua",
+      "ini"
     ],
     "structuredExtensions": [
       "xls"
@@ -794,7 +779,7 @@
         "validationRequired": true,
         "confirmationRequired": false
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -891,7 +876,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -972,7 +957,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1074,7 +1059,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1177,7 +1162,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1265,7 +1250,7 @@
         "validationRequired": true,
         "confirmationRequired": true
       },
-      "version": "1.3.1",
+      "version": "1.3.2",
       "previewRequired": true,
       "validationRequired": true,
       "confirmationRequired": true
@@ -1327,16 +1312,6 @@
           "required": true
         }
       ]
-    },
-    {
-      "id": "limited_event.client-engine",
-      "kind": "client-engine-consistency",
-      "matchBy": "eventId",
-      "compareFields": [
-        "startEpochSeconds",
-        "endEpochSeconds"
-      ],
-      "missingProjection": "error"
     },
     {
       "id": "limited_event.runtime",

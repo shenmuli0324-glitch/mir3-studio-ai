@@ -14,6 +14,7 @@ import type {
   DomainMemory,
   DomainPackState,
   DomainPackUpdateCheck,
+  DomainProjectBinding,
   DomainResourceRecord,
   DomainSaveNode,
   DomainSnapshot,
@@ -59,18 +60,46 @@ export async function queryDomainFiles(projectId: string, systemId: string, text
   }
 }
 
-export async function queryUnclaimedDomainFiles(projectId: string, text = '') {
+export async function queryDomainReferences(projectId: string, systemId: string, text = '') {
   const files: DomainFileRecord[] = []
   const pageSize = 10_000
   while (true) {
-    const page = await invoke<DomainFileRecord[]>('domain_unclaimed_file_query', {
+    const page = await invoke<DomainFileRecord[]>('domain_reference_query', {
       projectId,
+      systemId,
       query: { text, limit: pageSize, offset: files.length },
     })
     files.push(...page)
     if (page.length < pageSize)
       return files
   }
+}
+
+export async function queryUnclaimedDomainFiles(projectId: string, text = '', maximum = 10_000) {
+  const files: DomainFileRecord[] = []
+  const pageSize = Math.min(maximum, 250)
+  while (files.length < maximum) {
+    const page = await invoke<DomainFileRecord[]>('domain_unclaimed_file_query', {
+      projectId,
+      query: { text, limit: pageSize, offset: files.length },
+    })
+    files.push(...page)
+    if (page.length < pageSize || files.length >= maximum)
+      return files
+  }
+  return files
+}
+
+export function listDomainProjectBindings(projectId: string, systemId: string) {
+  return invoke<DomainProjectBinding[]>('domain_binding_list', { projectId, systemId })
+}
+
+export function addDomainProjectBinding(projectId: string, systemId: string, path: string) {
+  return invoke<DomainProjectBinding>('domain_binding_add', { projectId, systemId, path })
+}
+
+export function removeDomainProjectBinding(projectId: string, systemId: string, bindingId: string) {
+  return invoke<void>('domain_binding_remove', { projectId, systemId, bindingId })
 }
 
 export function getDomainResource(projectId: string, systemId: string, resourceId: string) {
