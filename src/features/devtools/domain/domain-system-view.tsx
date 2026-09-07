@@ -1,5 +1,6 @@
 import type { DevToolDefinition } from '../devtool-registry'
-import type { DomainDraftPreview, DomainFileRecord, DomainManifest, DomainValidationReport, DomainWorkingCopy, SafeTextOpen, SafeXlsSheet, SafeXlsWorkbook } from './types'
+import type { DomainWorkbookCellEdit } from './domain-workbook-model'
+import type { DomainDraftPreview, DomainFileRecord, DomainManifest, DomainValidationReport, DomainWorkbookData, DomainWorkingCopy, SafeTextOpen } from './types'
 import type { Mir3Project } from '@/features/projects/types'
 import type { DomainWorkingCopyHandoff, VerifiedDevtoolsTarget } from '@/features/system-ai/ai-handoff'
 import { File, Folder, Magnifier } from '@gravity-ui/icons'
@@ -15,23 +16,31 @@ import { DevToolWorkspace } from '../shell/devtool-workspace'
 import {
   listDomainSaveNodes,
   listDomainSystems,
+  loadDomainWorkingWorkbook,
   openDomainWorkingCopy,
   openDomainWorkingText,
-  openDomainXls,
   patchDomainWorkingText,
+  patchDomainWorkingXls,
   previewDomainWorkingCopy,
   queryDomainFiles,
-  readDomainXlsSheet,
   restoreDomainSaveNode,
   saveDomainWorkingCopy,
 } from './api'
 import { DomainChangeReviewDialog } from './domain-change-review'
+import { domainWorkspaceQueryKeys } from './domain-query-keys'
 import { isSaveConfirmationRequired, requiresSaveConfirmation } from './domain-save-policy'
+import { DomainWorkbookEditor } from './domain-workbook-editor'
+import { isEditableXlsExtension, xlsCellKey } from './domain-workbook-model'
 import { DomainWorkingToolbar } from './domain-working-toolbar'
 
 interface WorkingTextEdit {
   content: string
   baseSha256: string
+}
+
+interface WorkingXlsEdit extends DomainWorkbookCellEdit {
+  path: string
+  sourceSha256: string
 }
 
 interface MutableFileTree {
@@ -63,14 +72,18 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   const [selectedSheet, setSelectedSheet] = useState('')
   const [workingCopy, setWorkingCopy] = useState<DomainWorkingCopy | null>(null)
   const [workingEdits, setWorkingEdits] = useState<Record<string, WorkingTextEdit>>({})
+  const [xlsEdits, setXlsEdits] = useState<Record<string, WorkingXlsEdit>>({})
   const [changePreview, setChangePreview] = useState<DomainDraftPreview | null>(null)
   const [validation, setValidation] = useState<DomainValidationReport | null>(null)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [savingFlow, setSavingFlow] = useState(false)
   const handledTargetRef = useRef('')
   const workingCopyRef = useRef<DomainWorkingCopy | null>(null)
   const workingEditsRef = useRef<Record<string, WorkingTextEdit>>({})
+  const xlsEditsRef = useRef<Record<string, WorkingXlsEdit>>({})
   const syncPromiseRef = useRef<Promise<DomainWorkingCopy | null> | null>(null)
+  const savingFlowRef = useRef(false)
   const acceptWorkingCopyHandoffRef = useRef(acceptWorkingCopyHandoff)
   acceptWorkingCopyHandoffRef.current = acceptWorkingCopyHandoff
 
@@ -92,17 +105,12 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     queryFn: () => openDomainWorkingText(project!.id, selectedFile!.path, activeWorkingCopyId),
     enabled: project != null && isTextFile(selectedFile),
   })
-  const workbook = useQuery({
-    queryKey: ['domain-xls', project?.id, selectedFile?.path],
-    queryFn: () => openDomainXls(project!.id, selectedFile!.path),
+  const workbookData = useQuery({
+    queryKey: ['domain-workbook', project?.id, selectedFile?.path, activeWorkingCopyId, workingCopy?.revision ?? 0],
+    queryFn: () => loadDomainWorkingWorkbook(project!.id, selectedFile!.path, activeWorkingCopyId),
     enabled: project != null && isXlsFile(selectedFile),
   })
-  const sheetName = selectedSheet || workbook.data?.sheets[0]?.name || ''
-  const sheet = useQuery({
-    queryKey: ['domain-xls-sheet', project?.id, selectedFile?.path, workbook.data?.sha256, sheetName],
-    queryFn: () => readDomainXlsSheet(project!.id, selectedFile!.path, sheetName, workbook.data!.sha256),
-    enabled: project != null && isXlsFile(selectedFile) && workbook.data != null && sheetName.length > 0,
-  })
+  const sheetName = selectedSheet || workbookData.data?.sheets[0]?.sheet || ''
   const saveNodes = useQuery({
     queryKey: ['domain-save-nodes', project?.id, tool.id],
     queryFn: () => listDomainSaveNodes(project!.id, tool.id),
@@ -118,6 +126,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
       setValidation(null)
       setEditedContent(null)
       await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
+      updateXlsEdits({})
       await saveNodes.refetch()
       toast(t('studio.devtools.working.saved'), {})
     },
@@ -131,11 +140,13 @@ export function DomainSystemView({ tool, project, onBack, target }: {
       setValidation(null)
       setEditedContent(null)
       await invalidateWorkspaceQueries(queryClient, project!.id, tool.id)
+      updateXlsEdits({})
       await saveNodes.refetch()
       toast(t('studio.devtools.working.restored'), {})
     },
     onError: reason => toast(String(reason), { variant: 'danger' }),
   })
+  const busy = saveWorking.isPending || restoreSave.isPending || syncing || savingFlow
 
   useEffect(() => {
     if (!project || !target || files.isLoading || target.projectId !== project.id || target.systemId !== tool.id || handledTargetRef.current === target.nonce)
@@ -153,12 +164,13 @@ export function DomainSystemView({ tool, project, onBack, target }: {
 
   async function handleAiWorkingCopyHandoff(handoff: DomainWorkingCopyHandoff) {
     if (!project || handoff.systemId !== tool.id)
-      throw new Error('AI_DRAFT_SCOPE_MISMATCH')
+      throw new Error('AI_WORKING_COPY_SCOPE_MISMATCH')
     await acceptWorkingCopyHandoff(handoff.workingCopyId, handoff.revision)
     const handoffFile = projectedFiles.find(file => file.resourceId === handoff.resourceId)
     if (handoffFile)
       selectFile(handoffFile)
     await invalidateWorkspaceQueries(queryClient, project.id, tool.id)
+    updateXlsEdits(unsyncedXlsEdits(xlsEditsRef.current))
   }
 
   function updateWorkingCopy(copy: DomainWorkingCopy | null) {
@@ -171,8 +183,13 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     setWorkingEdits(edits)
   }
 
+  function updateXlsEdits(edits: Record<string, WorkingXlsEdit>) {
+    xlsEditsRef.current = edits
+    setXlsEdits(edits)
+  }
+
   function editSource(content: string) {
-    if (!selectedFile || !openedFile.data)
+    if (busy || !selectedFile || !openedFile.data)
       return
     const next = { ...workingEditsRef.current }
     if (content === openedFile.data.content)
@@ -181,6 +198,28 @@ export function DomainSystemView({ tool, project, onBack, target }: {
       next[selectedFile.path] = { content, baseSha256: openedFile.data.sha256 }
     updateWorkingEdits(next)
     setEditedContent(content)
+    setValidation(null)
+  }
+
+  function editWorkbookCell(edit: DomainWorkbookCellEdit) {
+    if (busy || !selectedFile || !workbookData.data)
+      return
+    const key = xlsCellKey(selectedFile.path, edit.sheet, edit.row, edit.column)
+    const current = { ...xlsEditsRef.current }
+    const existing = current[key]
+    if (existing?.synced !== true && xlsEditDisplayValue(edit.value) === edit.expectedValue) {
+      delete current[key]
+      updateXlsEdits(current)
+      return
+    }
+    updateXlsEdits({
+      ...current,
+      [key]: {
+        ...edit,
+        path: selectedFile.path,
+        sourceSha256: workbookData.data.workbook.sha256,
+      },
+    })
     setValidation(null)
   }
 
@@ -215,18 +254,28 @@ export function DomainSystemView({ tool, project, onBack, target }: {
   }
 
   async function flushWorkingEdits(): Promise<DomainWorkingCopy | null> {
-    if (syncPromiseRef.current)
-      await syncPromiseRef.current
-    if (Object.keys(workingEditsRef.current).length === 0)
-      return workingCopyRef.current
-    const pending = syncWorkingEdits()
-    syncPromiseRef.current = pending
     setSyncing(true)
     try {
-      return await pending
+      if (syncPromiseRef.current)
+        await syncPromiseRef.current
+      while (hasPendingWorkingEdits(workingEditsRef.current, xlsEditsRef.current)) {
+        if (syncPromiseRef.current) {
+          await syncPromiseRef.current
+          continue
+        }
+        const pending = syncWorkingEdits()
+        syncPromiseRef.current = pending
+        try {
+          await pending
+        }
+        finally {
+          if (syncPromiseRef.current === pending)
+            syncPromiseRef.current = null
+        }
+      }
+      return workingCopyRef.current
     }
     finally {
-      syncPromiseRef.current = null
       setSyncing(false)
     }
   }
@@ -239,8 +288,8 @@ export function DomainSystemView({ tool, project, onBack, target }: {
       copy = await openDomainWorkingCopy(project.id, manifest.systemId, manifest.version, t('studio.devtools.working.intent'))
       updateWorkingCopy(copy)
     }
-    const edits = Object.entries(workingEditsRef.current)
-    for (const [path, edit] of edits) {
+    const textEdits = Object.entries(workingEditsRef.current)
+    for (const [path, edit] of textEdits) {
       const opened = await openDomainWorkingText(project.id, path, copy.id)
       if (opened.sha256 !== edit.baseSha256)
         throw new Error('SAFE_FILE_SOURCE_CONFLICT')
@@ -254,15 +303,46 @@ export function DomainSystemView({ tool, project, onBack, target }: {
         delete current[path]
       updateWorkingEdits(current)
     }
+    const xlsGroups = groupUnsyncedXlsEdits(xlsEditsRef.current)
+    for (const [path, edits] of xlsGroups) {
+      const result = await patchDomainWorkingXls(
+        project.id,
+        copy.id,
+        path,
+        copy.revision,
+        edits[0].sourceSha256,
+        edits.map(edit => ({
+          sheet: edit.sheet,
+          row: edit.row,
+          column: edit.column,
+          expectedValue: edit.expectedValue,
+          value: edit.value,
+        })),
+      )
+      copy = { ...copy, revision: result.revision, dirty: true, updatedAt: Date.now() }
+      updateWorkingCopy(copy)
+      const current = { ...xlsEditsRef.current }
+      edits.forEach((edit) => {
+        const key = xlsCellKey(edit.path, edit.sheet, edit.row, edit.column)
+        if (sameXlsEdit(current[key], edit))
+          current[key] = { ...current[key], synced: true }
+      })
+      updateXlsEdits(current)
+    }
     const preview = await previewDomainWorkingCopy(project.id, copy.id)
     setChangePreview(preview)
     copy = { ...copy, revision: preview.draft.revision, dirty: preview.changes.length > 0, updatedAt: preview.draft.updatedAt }
     updateWorkingCopy(copy)
     await invalidateWorkspaceQueries(queryClient, project.id, tool.id)
+    updateXlsEdits(unsyncedXlsEdits(xlsEditsRef.current))
     return copy
   }
 
   async function saveChanges() {
+    if (savingFlowRef.current)
+      return
+    savingFlowRef.current = true
+    setSavingFlow(true)
     try {
       const copy = await flushWorkingEdits()
       if (!copy || !copy.dirty)
@@ -287,6 +367,10 @@ export function DomainSystemView({ tool, project, onBack, target }: {
     }
     catch (reason) {
       toast(String(reason), { variant: 'danger' })
+    }
+    finally {
+      savingFlowRef.current = false
+      setSavingFlow(false)
     }
   }
 
@@ -319,8 +403,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
       restoreSave.mutate(node.id)
   }
 
-  const dirty = Object.keys(workingEdits).length > 0 || workingCopy?.dirty === true || (changePreview?.changes.length ?? 0) > 0
-  const busy = saveWorking.isPending || restoreSave.isPending || syncing
+  const dirty = Object.keys(workingEdits).length > 0 || hasUnsyncedXlsEdits(xlsEdits) || workingCopy?.dirty === true || (changePreview?.changes.length ?? 0) > 0
 
   return (
     <>
@@ -343,7 +426,7 @@ export function DomainSystemView({ tool, project, onBack, target }: {
             systemId={manifest.systemId}
             selectedPath={selectedFile?.path}
             dirty={dirty}
-            changeCount={changePreview?.changes.length ?? Object.keys(workingEdits).length}
+            changeCount={changePreview?.changes.length ?? Object.keys(workingEdits).length + unsyncedXlsEditCount(xlsEdits)}
             canRestore={(saveNodes.data?.length ?? 0) > 0}
             busy={busy}
             onSave={() => void saveChanges()}
@@ -362,13 +445,13 @@ export function DomainSystemView({ tool, project, onBack, target }: {
               sourceError={openedFile.error}
               editedContent={editedContent}
               onEditedContent={editSource}
-              workbook={workbook.data}
-              workbookLoading={workbook.isLoading}
-              workbookError={workbook.error}
+              busy={busy}
+              workbookData={workbookData.data}
+              workbookLoading={workbookData.isLoading}
+              workbookError={workbookData.error}
               sheetName={sheetName}
-              sheet={sheet.data}
-              sheetLoading={sheet.isLoading}
-              sheetError={sheet.error}
+              xlsEdits={xlsEdits}
+              onWorkbookCell={editWorkbookCell}
               onSheet={setSelectedSheet}
             />
           </div>
@@ -451,13 +534,13 @@ function FileSourceWorkspace(props: {
   sourceError: Error | null
   editedContent: string | null
   onEditedContent: (content: string) => void
-  workbook?: SafeXlsWorkbook
+  busy: boolean
+  workbookData?: DomainWorkbookData
   workbookLoading: boolean
   workbookError: Error | null
   sheetName: string
-  sheet?: SafeXlsSheet
-  sheetLoading: boolean
-  sheetError: Error | null
+  xlsEdits: Record<string, WorkingXlsEdit>
+  onWorkbookCell: (edit: DomainWorkbookCellEdit) => void
   onSheet: (sheet: string) => void
 }) {
   const { t } = useTranslation()
@@ -465,16 +548,18 @@ function FileSourceWorkspace(props: {
     return <CenteredNotice title={t('studio.devtools.source.empty')} description={t('studio.devtools.source.empty_desc_simple')} />
   if (isXlsFile(props.selectedFile)) {
     return (
-      <XlsSourcePreview
+      <DomainWorkbookEditor
+        key={props.selectedFile.path}
         file={props.selectedFile}
-        workbook={props.workbook}
-        workbookLoading={props.workbookLoading}
-        workbookError={props.workbookError}
+        data={props.workbookData}
+        loading={props.workbookLoading}
+        error={props.workbookError}
+        editable={canEditWorkbook(props.selectedFile, props.workbookData)}
+        busy={props.busy}
         sheetName={props.sheetName}
-        sheet={props.sheet}
-        sheetLoading={props.sheetLoading}
-        sheetError={props.sheetError}
+        edits={props.xlsEdits}
         onSheet={props.onSheet}
+        onCellChange={props.onWorkbookCell}
       />
     )
   }
@@ -497,47 +582,7 @@ function FileSourceWorkspace(props: {
           <small className="text-[9px] text-accent">{t('studio.devtools.working.buffered')}</small>
         </If>
       </header>
-      <textarea readOnly={!editable} className="min-h-0 flex-1 resize-none bg-canvas p-4 font-mono text-xs leading-5 text-ink outline-none" value={content} aria-label={t('studio.devtools.source.editor')} onChange={event => props.onEditedContent(event.target.value)} />
-    </div>
-  )
-}
-
-function XlsSourcePreview({ file, workbook, workbookLoading, workbookError, sheetName, sheet, sheetLoading, sheetError, onSheet }: {
-  file: DomainFileRecord
-  workbook?: SafeXlsWorkbook
-  workbookLoading: boolean
-  workbookError: Error | null
-  sheetName: string
-  sheet?: SafeXlsSheet
-  sheetLoading: boolean
-  sheetError: Error | null
-  onSheet: (sheet: string) => void
-}) {
-  const { t } = useTranslation()
-  if (workbookLoading)
-    return <CenteredNotice title={t('studio.devtools.source.xls_loading')} description={file.path} />
-  if (workbookError || !workbook)
-    return <CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(workbookError ?? '')} />
-  if (sheetLoading)
-    return <CenteredNotice title={t('studio.devtools.source.xls_sheet_loading')} description={sheetName} />
-  if (sheetError || !sheet)
-    return <CenteredNotice title={t('studio.devtools.source.xls_failed')} description={String(sheetError ?? '')} />
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bg-canvas">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">
-        <span className="min-w-0">
-          <strong className="block truncate text-xs text-ink">{file.path}</strong>
-          <small className="text-[9px] text-muted">{t('studio.devtools.source.xls_readonly')}</small>
-        </span>
-        <If cond={workbook.sheets.length > 1}>
-          <select className="max-w-52 rounded-md border border-line bg-panel2 px-2 py-1 text-[10px] text-ink outline-none" value={sheetName} aria-label={t('studio.devtools.source.xls_sheet')} onChange={event => onSheet(event.target.value)}>
-            {workbook.sheets.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-          </select>
-        </If>
-      </header>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <pre className="min-w-max whitespace-pre p-4 font-mono text-[11px] leading-5 text-ink">{xlsTsvPreview(sheet)}</pre>
-      </div>
+      <textarea readOnly={!editable || props.busy} className="min-h-0 flex-1 resize-none bg-canvas p-4 font-mono text-xs leading-5 text-ink outline-none" value={content} aria-label={t('studio.devtools.source.editor')} onChange={event => props.onEditedContent(event.target.value)} />
     </div>
   )
 }
@@ -607,20 +652,66 @@ function fileName(path: string) {
   return path.split('/').at(-1) ?? path
 }
 
-function xlsTsvPreview(sheet: SafeXlsSheet) {
-  return sheet.rows
-    .slice(0, 500)
-    .map(row => row.slice(0, 100).join('\t'))
-    .join('\n')
-}
-
 function isTextFile(file?: DomainFileRecord | null): boolean {
   const extension = file?.extension?.toLowerCase()
   return extension === 'txt' || extension === 'lua'
 }
 
 function isXlsFile(file?: DomainFileRecord | null): boolean {
-  return file?.extension?.toLowerCase() === 'xls'
+  return isEditableXlsExtension(file?.extension)
+}
+
+function canEditWorkbook(file: DomainFileRecord, data?: DomainWorkbookData): boolean {
+  return file.access !== 'readonly'
+    && data?.workbook.readOnly !== true
+    && (file.ownership === 'owned' || file.ownership === 'shared')
+}
+
+function hasUnsyncedXlsEdits(edits: Record<string, WorkingXlsEdit>): boolean {
+  return Object.values(edits).some(edit => !edit.synced)
+}
+
+function unsyncedXlsEditCount(edits: Record<string, WorkingXlsEdit>): number {
+  return Object.values(edits).filter(edit => !edit.synced).length
+}
+
+function hasPendingWorkingEdits(textEdits: Record<string, WorkingTextEdit>, xlsEdits: Record<string, WorkingXlsEdit>): boolean {
+  return Object.keys(textEdits).length > 0 || hasUnsyncedXlsEdits(xlsEdits)
+}
+
+function unsyncedXlsEdits(edits: Record<string, WorkingXlsEdit>): Record<string, WorkingXlsEdit> {
+  return Object.fromEntries(Object.entries(edits).filter(([, edit]) => !edit.synced))
+}
+
+function groupUnsyncedXlsEdits(edits: Record<string, WorkingXlsEdit>): Map<string, WorkingXlsEdit[]> {
+  const grouped = new Map<string, WorkingXlsEdit[]>()
+  Object.values(edits).forEach((edit) => {
+    if (edit.synced)
+      return
+    const values = grouped.get(edit.path) ?? []
+    values.push(edit)
+    grouped.set(edit.path, values)
+  })
+  for (const values of grouped.values()) {
+    if (values.length > 10_000)
+      throw new Error('SAFE_XLS_UPDATE_COUNT_INVALID: expected 1..10000 updates')
+  }
+  return grouped
+}
+
+function sameXlsEdit(current: WorkingXlsEdit | undefined, submitted: WorkingXlsEdit): boolean {
+  return current?.path === submitted.path
+    && current.sheet === submitted.sheet
+    && current.row === submitted.row
+    && current.column === submitted.column
+    && current.value === submitted.value
+    && current.expectedValue === submitted.expectedValue
+}
+
+function xlsEditDisplayValue(value: DomainWorkbookCellEdit['value']): string {
+  if (value == null)
+    return ''
+  return String(value)
 }
 
 function canEditSource(file?: DomainFileRecord | null): boolean {
@@ -699,12 +790,7 @@ async function consumeNavigationTarget(
 }
 
 async function invalidateWorkspaceQueries(queryClient: ReturnType<typeof useQueryClient>, projectId: string, systemId: string) {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['domain-files', projectId, systemId] }),
-    queryClient.invalidateQueries({ queryKey: ['domain-source', projectId] }),
-    queryClient.invalidateQueries({ queryKey: ['domain-xls', projectId] }),
-    queryClient.invalidateQueries({ queryKey: ['domain-xls-sheet', projectId] }),
-  ])
+  await Promise.all(domainWorkspaceQueryKeys(projectId, systemId).map(queryKey => queryClient.invalidateQueries({ queryKey })))
 }
 
 function fileTreeButtonClass(selected: boolean) {

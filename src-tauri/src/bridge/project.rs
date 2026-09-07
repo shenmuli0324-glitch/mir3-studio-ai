@@ -7,7 +7,7 @@ use mir3_domain::{
     DomainCompositeWorkingSaveResult, DomainDependencyGraph, DomainFileQuery, DomainFileRecord,
     DomainManifest, DomainMemory, DomainResourceQuery, DomainResourceRecord, DomainSaveNode,
     DomainSystemDescription, DomainValidationReport, DomainWorkingCopy, DomainWorkingCopyRevision,
-    DomainWorkingRestoreResult, DomainWorkingSaveResult, Draft, DraftPreview,
+    DomainWorkingRestoreResult, DomainWorkingSaveResult, DomainWorkingXlsOpen, Draft, DraftPreview,
     GlobalCapabilityCompileRequest, IndexQuery, IndexRecord, IndexStats, KnowledgeFilter,
     KnowledgeRecord, KnowledgeStatus, LegacyDraftCloneRequest, Mir3Project, SafeTextOpen,
     SafeTextPatch, SafeTextPatchResult, SafeXlsDraftPatch, SafeXlsPatchResult, SafeXlsSheet,
@@ -660,6 +660,19 @@ pub fn domain_working_xls_patch(
     service
         .store()
         .domain_working_xls_patch(&project_id, &working_copy_id, operation)
+}
+
+#[tauri::command]
+pub fn domain_working_xls_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    relative_path: String,
+    working_copy_id: Option<String>,
+) -> Result<DomainWorkingXlsOpen, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .domain_working_xls_open(&project_id, &relative_path, working_copy_id.as_deref())
 }
 
 #[tauri::command]

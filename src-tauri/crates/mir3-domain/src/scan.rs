@@ -1,4 +1,6 @@
-use crate::{now_millis, path_is_within, path_string, DomainStore};
+use crate::{
+    is_editable_xls_extension, now_millis, path_is_within, path_string, DomainRegistry, DomainStore,
+};
 use encoding_rs::GBK;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -66,6 +68,23 @@ pub struct IndexRecord {
     pub excerpt: Option<String>,
 }
 
+/// 文件进入 Studio 私有二开索引后的可用方式。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DevelopmentFileAccess {
+    Editable,
+    Reference,
+}
+
+/// 统一二开文件判定；不符合策略的运行文件和加密包不会进入索引。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DevelopmentFileDecision {
+    pub path: String,
+    pub access: DevelopmentFileAccess,
+    pub owner_systems: Vec<String>,
+}
+
 impl DomainStore {
     /// 增量扫描项目；不写项目目录，只更新外置 SQLite 索引。
     pub fn scan_project<F>(&self, project_id: &str, cancelled: F) -> Result<ScanSummary, String>
@@ -84,6 +103,7 @@ impl DomainStore {
         let mut indexed_text_files = 0usize;
         let mut categories = BTreeMap::new();
         let mut was_cancelled = false;
+        let registry = self.runtime_domain_registry()?;
 
         for entry in WalkDir::new(&root)
             .follow_links(false)
@@ -116,23 +136,47 @@ impl DomainStore {
                 .extension()
                 .and_then(|value| value.to_str())
                 .map(|value| value.to_lowercase());
+            if !development_file_extension_candidate(
+                &registry,
+                &relative_string,
+                extension.as_deref(),
+            ) {
+                continue;
+            }
             let modified_at = metadata
                 .modified()
                 .ok()
                 .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
                 .map(|value| value.as_millis().min(i64::MAX as u128) as i64)
                 .unwrap_or_default();
-            // 二进制和大型资源只记录元数据，避免扫描地图/素材时读取整文件并造成
-            // 无意义的内存与磁盘压力；只有可索引文本才读取内容并计算内容哈希。
-            let (sha256, content) =
-                if metadata.len() <= MAX_CONTENT_BYTES && text_extension(extension.as_deref()) {
-                    let bytes = fs::read(path)
-                        .map_err(|e| format!("INDEX_READ_FAILED: {}: {e}", path.display()))?;
-                    let content = decode_text(&bytes);
-                    (content.as_ref().map(|_| hash_bytes(&bytes)), content)
-                } else {
-                    (None, None)
+            // XLS 是结构化二开文件：读取完整工作簿并建立全部单元格索引，不受普通
+            // 文本 2 MiB 阈值限制。其他二进制资源仍只记录元数据，避免无意义 I/O。
+            let (sha256, content) = if is_editable_xls_extension(extension.as_deref()) {
+                let bytes = fs::read(path)
+                    .map_err(|e| format!("INDEX_READ_FAILED: {}: {e}", path.display()))?;
+                let Ok(content) = crate::safe_files::project_xls_index_content(&bytes) else {
+                    // 加密、损坏或伪装的 XLS 不是可二开工作簿，不进入领域索引。
+                    continue;
                 };
+                (Some(hash_bytes(&bytes)), Some(content))
+            } else if metadata.len() <= MAX_CONTENT_BYTES && text_extension(extension.as_deref()) {
+                let bytes = fs::read(path)
+                    .map_err(|e| format!("INDEX_READ_FAILED: {}: {e}", path.display()))?;
+                let content = decode_text(&bytes);
+                (content.as_ref().map(|_| hash_bytes(&bytes)), content)
+            } else {
+                (None, None)
+            };
+            if development_file_decision(
+                &registry,
+                &relative_string,
+                extension.as_deref(),
+                content.as_deref(),
+            )
+            .is_none()
+            {
+                continue;
+            }
             if content.is_some() {
                 indexed_text_files += 1;
             }
@@ -300,6 +344,46 @@ impl DomainStore {
             .optional()
             .map_err(|e| format!("INDEX_HASH_FAILED: {e}"))
     }
+
+    /// 使用当前已启用的 33 个领域包判定一个路径是否属于二开范围。
+    pub fn classify_development_file(
+        &self,
+        project_id: &str,
+        relative_path: &str,
+    ) -> Result<Option<DevelopmentFileDecision>, String> {
+        let registry = self.runtime_domain_registry()?;
+        let extension = Path::new(relative_path)
+            .extension()
+            .and_then(|value| value.to_str());
+        let normalized = relative_path.replace('\\', "/");
+        if !development_file_extension_candidate(&registry, &normalized, extension) {
+            return Ok(None);
+        }
+        let target = self.safe_file_target(project_id, relative_path)?;
+        let metadata = target
+            .metadata()
+            .map_err(|error| format!("DEVELOPMENT_FILE_METADATA_FAILED: {error}"))?;
+        let content = if is_editable_xls_extension(extension) {
+            let bytes = fs::read(&target)
+                .map_err(|error| format!("DEVELOPMENT_FILE_READ_FAILED: {error}"))?;
+            match crate::safe_files::project_xls_index_content(&bytes) {
+                Ok(content) => Some(content),
+                Err(_) => return Ok(None),
+            }
+        } else if metadata.len() <= MAX_CONTENT_BYTES && text_extension(extension) {
+            let bytes = fs::read(&target)
+                .map_err(|error| format!("DEVELOPMENT_FILE_READ_FAILED: {error}"))?;
+            decode_text(&bytes)
+        } else {
+            None
+        };
+        Ok(development_file_decision(
+            &registry,
+            &normalized,
+            extension,
+            content.as_deref(),
+        ))
+    }
 }
 
 fn ignored_entry(entry: &DirEntry, root: &Path) -> bool {
@@ -307,16 +391,112 @@ fn ignored_entry(entry: &DirEntry, root: &Path) -> bool {
         return false;
     }
     let name = entry.file_name().to_string_lossy().to_lowercase();
-    entry.file_type().is_dir()
-        && matches!(
-            name.as_str(),
-            "cache" | ".git" | "node_modules" | "logs" | "log" | "temp" | "tmp" | "__pycache__"
-        )
+    if !entry.file_type().is_dir() {
+        return false;
+    }
+    if matches!(
+        name.as_str(),
+        "cache" | ".git" | "node_modules" | "logs" | "log" | "temp" | "tmp" | "__pycache__"
+    ) {
+        return true;
+    }
+    let Ok(relative) = entry.path().strip_prefix(root) else {
+        return true;
+    };
+    let normalized = relative.to_string_lossy().replace('\\', "/").to_lowercase();
+    let depth = relative.components().count();
+    if depth == 1 {
+        return normalized != "客户端" && normalized != "引擎";
+    }
+    normalized.starts_with("客户端/")
+        && normalized != "客户端/dev"
+        && !normalized.starts_with("客户端/dev/")
 }
 
 fn ignored_file(relative: &str) -> bool {
     let lower = relative.to_lowercase();
-    lower.ends_with(".log") || lower.ends_with(".tmp") || lower.ends_with(".bak")
+    let extension = Path::new(&lower)
+        .extension()
+        .and_then(|value| value.to_str());
+    lower.ends_with(".log")
+        || lower.ends_with(".tmp")
+        || lower.ends_with(".bak")
+        || matches!(
+            extension,
+            Some("exe" | "dll" | "pak" | "pkg" | "zip" | "7z" | "rar" | "db" | "sqlite" | "dmp")
+        )
+}
+
+fn development_file_extension_candidate(
+    registry: &DomainRegistry,
+    relative_path: &str,
+    extension: Option<&str>,
+) -> bool {
+    if ignored_file(relative_path) {
+        return false;
+    }
+    let normalized = relative_path.replace('\\', "/").to_lowercase();
+    let in_client_dev = normalized.starts_with("客户端/dev/");
+    let in_engine = normalized.starts_with("引擎/");
+    if !in_client_dev && !in_engine {
+        return false;
+    }
+    let Some(extension) = extension else {
+        return false;
+    };
+    registry.packs.iter().any(|manifest| {
+        manifest
+            .file_projection
+            .editable_extensions
+            .iter()
+            .chain(&manifest.file_projection.structured_extensions)
+            .chain(&manifest.file_projection.readonly_extensions)
+            .any(|candidate| candidate.eq_ignore_ascii_case(extension))
+    })
+}
+
+fn development_file_decision(
+    registry: &DomainRegistry,
+    relative_path: &str,
+    extension: Option<&str>,
+    content: Option<&str>,
+) -> Option<DevelopmentFileDecision> {
+    if !development_file_extension_candidate(registry, relative_path, extension) {
+        return None;
+    }
+    if is_editable_xls_extension(extension) && content.is_none() {
+        return None;
+    }
+    let normalized = relative_path.replace('\\', "/");
+    let client_development_file = normalized.to_lowercase().starts_with("客户端/dev/");
+    let owner_systems =
+        crate::systems::projection_system_ids(registry, &normalized, extension, content);
+    if !client_development_file && owner_systems.is_empty() {
+        return None;
+    }
+    let editable = is_editable_xls_extension(extension)
+        || owner_systems.iter().any(|system_id| {
+            registry
+                .packs
+                .iter()
+                .find(|manifest| manifest.system_id == *system_id)
+                .is_some_and(|manifest| {
+                    crate::systems::access_for(manifest, extension) != "readonly"
+                })
+        })
+        || extension.is_some_and(|value| {
+            client_development_file
+                && matches!(value.to_ascii_lowercase().as_str(), "txt" | "lua" | "map")
+        });
+    Some(DevelopmentFileDecision {
+        path: normalized,
+        access: if editable {
+            DevelopmentFileAccess::Editable
+        } else {
+            DevelopmentFileAccess::Reference
+        },
+        owner_systems,
+    })
 }
 
 fn role_for_path(path: &Path) -> &'static str {
@@ -454,6 +634,7 @@ pub fn project_path_string(root: &str, relative: &str) -> Result<String, String>
 mod tests {
     use super::*;
     use crate::DomainFileQuery;
+    use easyexcel_xls::biff8::{Biff8Book, Biff8Cell, Biff8Sheet, Biff8Value};
 
     #[test]
     fn scan_indexes_domain_text_without_loading_binary_content() {
@@ -472,11 +653,14 @@ mod tests {
         )
         .unwrap();
         fs::write(project_root.join("客户端/map.pkg"), vec![7_u8; 1024]).unwrap();
+        fs::write(project_root.join("客户端/game.exe"), b"MZ").unwrap();
+        fs::write(project_root.join("客户端/dev/unknown.bin"), b"opaque").unwrap();
+        fs::write(project_root.join("客户端/dev/resources.pak"), b"packed").unwrap();
 
         let store = DomainStore::new(base.join("data")).unwrap();
         let project = store.import_project(&project_root).unwrap();
         let summary = store.scan_project(&project.id, || false).unwrap();
-        assert_eq!(summary.scanned_files, 3);
+        assert_eq!(summary.scanned_files, 2);
 
         let results = store
             .query_index(
@@ -492,7 +676,7 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert!(results[0].excerpt.as_deref().unwrap().contains("测试任务"));
 
-        let binary_hash: Option<String> = store
+        let binary_hash: Option<Option<String>> = store
             .project_connection(&project.id)
             .unwrap()
             .query_row(
@@ -500,8 +684,45 @@ mod tests {
                 [],
                 |row| row.get(0),
             )
+            .optional()
             .unwrap();
         assert!(binary_hash.is_none());
+        let excluded: i64 = store
+            .project_connection(&project.id)
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE path IN ('客户端/game.exe','客户端/dev/unknown.bin','客户端/dev/resources.pak')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(excluded, 0);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn scan_excludes_corrupt_or_disguised_xls_from_development_index() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-invalid-xls-index-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project_root = base.join("损坏表格项目");
+        let engine = project_root.join("引擎/Mir200/Envir/Data");
+        fs::create_dir_all(&engine).unwrap();
+        fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
+        fs::write(engine.join("cfg_item.xls"), b"not-an-ole-workbook").unwrap();
+        fs::write(engine.join("cfg_store.xls"), b"PK\x03\x04fake-xlsx").unwrap();
+
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let summary = store.scan_project(&project.id, || false).unwrap();
+        assert_eq!(summary.scanned_files, 0);
+        assert_eq!(store.index_stats(&project.id).unwrap().total_files, 0);
+        assert!(store
+            .classify_development_file(&project.id, "引擎/Mir200/Envir/Data/cfg_item.xls")
+            .unwrap()
+            .is_none());
         fs::remove_dir_all(base).ok();
     }
 
@@ -509,6 +730,82 @@ mod tests {
     fn unicode_excerpt_never_uses_lowercased_byte_offsets() {
         let result = excerpt(Some("İstanbul\n传奇项目"), "传奇").unwrap();
         assert_eq!(result, "传奇项目");
+    }
+
+    #[test]
+    fn scan_indexes_every_xls_sheet_and_bypasses_the_text_size_limit() {
+        const ROWS: usize = 7_000;
+        const COLUMNS: usize = 6;
+        let base = std::env::temp_dir().join(format!(
+            "mir3-xls-index-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project_root = base.join("完整表格项目");
+        let relative = "引擎/Mir200/Envir/Shop/完整商品表.xls";
+        let target = project_root.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
+
+        let mut first = Biff8Sheet::new("商品");
+        for row in 0..ROWS {
+            for column in 0..COLUMNS {
+                first
+                    .set(
+                        row as u32,
+                        column,
+                        Biff8Cell::general(Biff8Value::Text(format!(
+                            "商品-{row:05}-{column}-{}",
+                            "完整索引内容".repeat(5)
+                        ))),
+                    )
+                    .unwrap();
+            }
+        }
+        let mut second = Biff8Sheet::new("活动");
+        second
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("第二张表末端标记".to_string())),
+            )
+            .unwrap();
+        let mut book = Biff8Book::default();
+        book.sheets.extend([first, second]);
+        let bytes = book.to_cfb_bytes().unwrap();
+        assert!(bytes.len() as u64 > MAX_CONTENT_BYTES);
+        fs::write(&target, bytes).unwrap();
+
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let summary = store.scan_project(&project.id, || false).unwrap();
+        assert_eq!(summary.scanned_files, 1);
+        assert_eq!(summary.indexed_text_files, 1);
+        for marker in ["商品-06999-5", "第二张表末端标记"] {
+            let results = store
+                .query_index(
+                    &project.id,
+                    &IndexQuery {
+                        text: marker.to_string(),
+                        categories: Vec::new(),
+                        role: Some("engine".to_string()),
+                        limit: Some(10),
+                    },
+                )
+                .unwrap();
+            assert_eq!(results.len(), 1, "未索引 XLS 标记：{marker}");
+        }
+        assert!(store
+            .indexed_file_hash(&project.id, relative)
+            .unwrap()
+            .is_some());
+        let decision = store
+            .classify_development_file(&project.id, relative)
+            .unwrap()
+            .unwrap();
+        assert_eq!(decision.access, DevelopmentFileAccess::Editable);
+        assert!(!decision.owner_systems.is_empty());
+        fs::remove_dir_all(base).ok();
     }
 
     #[test]

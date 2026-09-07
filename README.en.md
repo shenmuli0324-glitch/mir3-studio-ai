@@ -8,7 +8,7 @@
 
 <p align="center"><samp><strong>English</strong> · <a href="./README.md">中文</a></samp></p>
 
-> Version `0.9.31` develops projects created by 996 Project Manager through one system kernel, 33 domain packs, archived system sessions, and a safe Working Copy workflow.
+> Version `0.9.32` develops projects created by 996 Project Manager through one system kernel, 33 domain packs, archived system sessions, and a safe Working Copy workflow.
 
 MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastructure foundations. On top of its plugin architecture, we independently develop the project model, knowledge system, development toolchain, and AI workflows for the 996 MIR3 ecosystem.
 
@@ -19,12 +19,13 @@ MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastruct
 - Core version downloads, switching, health checks, and process lifecycle management.
 - Isolated profiles, plugin management, and recovery workflows.
 - 996 project recognition, external indexing, real file-to-resource mapping, governed knowledge, Working Copies, and save nodes.
+- Project import verifies only the `客户端` and `引擎` root identities; indexing and managed Harness sessions process development files only and skip executables, encrypted packages, runtime trees, and unknown formats.
 - A three-pane system workspace: real files/resources/dependencies, domain views, and an archived AI session, with Save, Restore Previous Save, and optional change review in the top bar.
 - One system kernel and 33 independently versioned domain packs that can be audited, upgraded, disabled, and rolled back without competing for the Harness UI lifecycle.
 - Sixteen fixed MCP tools comprise twelve domain tools and four GUI tools. Domain tools expose resources, dependencies, Working Copy inspection, validation, and the capability registry to system AI and the global Harness workbench; GUI tools operate only on Studio's private Working Workspace.
 - Successful tasks produce Task Receipts and can be promoted, after preview and validation, into versioned project, personal, or team capabilities.
 - All 33 domain systems and GUI Designer share one user workflow: humans and AI modify an app-private Working Copy; only Save validates, checks source SHA, atomically updates the project, and creates a save node. Restore Previous Save appends a restore node. Ordinary saves do not force a Diff dialog, while high-risk and cross-system changes still require confirmation.
-- Domain Working Copies preserve GB18030/BOM/newline details for TXT and Lua changes and support BIFF XLS data; Harness AI writes only through task-scoped generic MCP with pinned domain-pack versions and never directly to game files.
+- Domain Working Copies preserve GB18030/BOM/newline details for TXT and Lua changes and support BIFF XLS data. `.xls` opens in a table editor, loads every worksheet and effective cell, and remains in its original BIFF8 format when saved. Harness AI writes only through task-scoped generic MCP with pinned domain-pack versions and never directly to game files.
 - Self-updates exclusively from MIR3 Studio AI GitHub Releases.
 
 ## Public identity
@@ -33,7 +34,7 @@ MIR3 Studio AI uses DeepSeek Harness as one of its open-source Agent infrastruct
 | --- | --- |
 | App | MIR3 Studio AI |
 | Core display name | MIR3 AI Core |
-| Version | 0.9.31 |
+| Version | 0.9.32 |
 | Tauri identifier | `ai.mir3.studio` |
 | Data directory | `~/.mir3-studio-ai` |
 | Development data directory | `~/.mir3-studio-ai.dev` |

@@ -1621,9 +1621,12 @@ mod tests {
 
         assert!(server_entry.contains("export default plugin"));
         assert!(server_entry.contains("function apply(ctx)"));
-        assert!(server_entry.contains("inject: ['sessions', 'sandboxPolicy']"));
+        assert!(server_entry.contains("inject: ['sessions', 'sandboxPolicy', 'fileReferences']"));
         assert!(server_entry.contains("exec?.agent?.session"));
         assert!(server_entry.contains("MIR3_SYSTEM_SESSION_DRAFT_REQUIRED"));
+        assert!(server_entry.contains("ctx.on('tools/pre-execute'"));
+        assert!(server_entry.contains("ctx.fileReferences.list"));
+        assert!(server_entry.contains("MIR3_GENERIC_SHELL_DISABLED"));
         assert!(client_entry.contains("module.exports = { apply, inject, name }"));
         assert!(client_entry.contains("return module.exports"));
         assert_eq!(

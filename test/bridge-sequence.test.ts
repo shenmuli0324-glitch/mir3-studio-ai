@@ -2,7 +2,7 @@ import type { RefObject } from 'react'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
-import { developmentWriteViolation, isGlobalSession, isGuiSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
+import { developmentReadViolation, developmentToolViolation, developmentWriteViolation, filterDevelopmentReferences, isDevelopmentFilePath, isGlobalSession, isGuiSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
 import { BridgeSequenceRegistry } from '../src/features/projects/bridge-sequence'
 import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, subscribeHarnessBridge } from '../src/features/projects/workspace-bridge'
 
@@ -337,6 +337,64 @@ describe('mir3 managed-session policy', () => {
     expect(sessionScopeViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/outside' } })).toBe('MIR3_PROJECT_SESSION_OUTSIDE_SCOPE')
     expect(developmentWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/outside/file.txt' })).toBe('MIR3_PROJECT_WRITE_OUTSIDE_SCOPE')
     expect(developmentWriteViolation('/project', { id: 'ordinary-harness-session', header: { cwd: '/project' } }, { path: '/project/file.txt' })).toBeNull()
+    expect(developmentWriteViolation('/project', { id: 'mir3-system-write-test', header: { cwd: '/project' } }, { path: '/project/引擎/Data/file.txt' })).toBe('MIR3_SYSTEM_SESSION_DRAFT_REQUIRED')
+  })
+
+  it('exposes only real second-development files and routes BIFF workbooks through MCP', () => {
+    const session = { id: 'mir3-system-filter-test', header: { cwd: '/project' } }
+    const agent = { session }
+    expect(isDevelopmentFilePath('/project/客户端/dev/main.LUA', '/project')).toBe(true)
+    expect(isDevelopmentFilePath('/project/引擎/Data/world.map', '/project')).toBe(true)
+    expect(isDevelopmentFilePath('/project/引擎/Data/config.txt', '/project')).toBe(true)
+    expect(isDevelopmentFilePath('/project/引擎/Data/config.xls', '/project')).toBe(true)
+    expect(isDevelopmentFilePath('/project/引擎/Data/config.xlsx', '/project')).toBe(false)
+    expect(isDevelopmentFilePath('/project/客户端/game.txt', '/project')).toBe(false)
+    expect(isDevelopmentFilePath('/project/game.exe', '/project')).toBe(false)
+    expect(isDevelopmentFilePath('/outside/main.lua', '/project')).toBe(false)
+    expect(developmentReadViolation('/project', session, '客户端/dev/main.lua')).toBeNull()
+    expect(developmentReadViolation('/project', session, '引擎/Data/config.xls')).toBe('MIR3_XLS_MCP_REQUIRED')
+    expect(developmentReadViolation('/project', session, '引擎/Data/config.xlsx')).toBe('MIR3_NON_DEVELOPMENT_FILE_SKIPPED')
+    expect(developmentReadViolation('/project', session, '客户端/game.txt')).toBe('MIR3_NON_DEVELOPMENT_FILE_SKIPPED')
+    expect(developmentReadViolation('/project', session, '../outside.txt')).toBe('MIR3_PROJECT_READ_OUTSIDE_SCOPE')
+    expect(developmentToolViolation('/project', { name: 'glob', arguments: { pattern: '*' }, agent })).toBe('MIR3_DEVELOPMENT_SEARCH_REQUIRED')
+    expect(developmentToolViolation('/project', { name: 'grep', arguments: { pattern: 'secret' }, agent })).toBe('MIR3_DEVELOPMENT_SEARCH_REQUIRED')
+    expect(developmentToolViolation('/project', { name: 'read', arguments: { file_path: '引擎/Data/a.txt' }, agent })).toBeNull()
+    expect(developmentToolViolation('/project', { name: 'read_image', arguments: { file_path: 'Data/a.png' }, agent })).toBe('MIR3_NON_DEVELOPMENT_FILE_SKIPPED')
+    expect(developmentToolViolation('/project', { name: 'bash', arguments: { command: 'find .' }, agent })).toBe('MIR3_GENERIC_SHELL_DISABLED')
+    expect(developmentToolViolation('/project', { name: 'pwsh', arguments: { command: 'Get-ChildItem' }, agent })).toBe('MIR3_GENERIC_SHELL_DISABLED')
+    expect(filterDevelopmentReferences('/project', agent, [
+      { path: '客户端', kind: 'directory' },
+      { path: '../outside', kind: 'directory' },
+      { path: '客户端/dev/main.lua', kind: 'file' },
+      { path: '客户端/game.txt', kind: 'file' },
+      { path: '引擎/Data/config.xls', kind: 'file' },
+      { path: '引擎/Data/config.xlsx', kind: 'file' },
+      { path: '客户端/game.exe', kind: 'file' },
+    ])).toEqual([
+      { path: '客户端', kind: 'directory' },
+      { path: '客户端/dev/main.lua', kind: 'file' },
+      { path: '引擎/Data/config.xls', kind: 'file' },
+    ])
+    expect(developmentToolViolation('/project', {
+      name: 'read',
+      arguments: { file_path: '引擎/Data/a.txt' },
+      agent: { session: { id: 'mir3-system-invalid-scope', header: { cwd: '/outside' } } },
+    })).toBe('MIR3_PROJECT_SESSION_OUTSIDE_SCOPE')
+  })
+
+  it('keeps ordinary Harness sessions on the original generic tool and reference behavior', () => {
+    const session = { id: 'ordinary-harness-session', header: { cwd: '/project' } }
+    const agent = { session }
+    expect(developmentToolViolation('/project', { name: 'glob', arguments: { pattern: '*' }, agent })).toBeNull()
+    expect(developmentToolViolation('/project', { name: 'grep', arguments: { pattern: 'value' }, agent })).toBeNull()
+    expect(developmentToolViolation('/project', { name: 'read', arguments: { file_path: 'game.exe' }, agent })).toBeNull()
+    expect(developmentToolViolation('/project', { name: 'bash', arguments: { command: 'find .' }, agent })).toBeNull()
+    expect(developmentToolViolation('/project', { name: 'pwsh', arguments: { command: 'Get-ChildItem' }, agent })).toBeNull()
+    const candidates = [
+      { path: 'main.lua', kind: 'file' as const },
+      { path: 'game.exe', kind: 'file' as const },
+    ]
+    expect(filterDevelopmentReferences('/project', agent, candidates)).toEqual(candidates)
   })
 })
 

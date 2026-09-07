@@ -8,7 +8,7 @@
 
 <p align="center"><samp><a href="./README.en.md">English</a> · <strong>中文</strong></samp></p>
 
-> 当前版本为 `0.9.31`。MIR3 Studio 通过统一系统开发内核、33 个领域包、归档系统会话和安全工作副本开发由 996 项目管理器创建的项目。
+> 当前版本为 `0.9.32`。MIR3 Studio 通过统一系统开发内核、33 个领域包、归档系统会话和安全工作副本开发由 996 项目管理器创建的项目。
 
 MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。在其插件化架构基础上，我们独立开发了面向 996 传奇3的项目模型、知识体系、开发工具链和 AI 工作流。
 
@@ -19,12 +19,13 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 - 多版本核心下载、切换、健康检查和进程生命周期管理。
 - 隔离的 Profile、插件安装/升级/卸载及异常恢复。
 - 996项目识别、外置索引、真实文件与领域资源映射、知识治理、工作副本与保存节点。
+- 项目导入只确认根目录中的`客户端`和`引擎`身份；索引与受管 Harness 会话只处理二开文件，跳过 EXE、DLL、加密资源包、运行目录和未知格式。
 - 统一三栏系统工作区：左侧真实文件/资源/依赖，中间领域视图，右侧归档 AI 会话；顶部统一提供保存、撤回上次保存与按需查看修改。
 - 一个系统内核和 33 个独立版本化领域包；领域包可单独审计、升级、禁用和回滚，不争用 Harness UI 生命周期。
 - 十六项固定 MCP 工具包括十二项领域工具与四项 GUI 工具：领域工具向系统 AI 和全局 Harness 暴露资源、依赖、工作副本检查、校验和能力目录，GUI 工具只操作 Studio 私有 Working Workspace。
 - 成功任务生成 Task Receipt，并可经预览和校验提升为项目、个人或团队的版本化安全能力。
 - 33 个领域系统与 GUI Designer 使用同一套用户流程：人工和 AI 共用应用私有 Working Copy，只有“保存”通过校验、SHA 冲突检查和原子事务写入项目并创建保存节点；“撤回上次保存”追加 restore 节点。普通保存不强制打开 Diff，高风险和跨系统修改仍要求确认。
-- 领域工作副本保留 GB18030/BOM/换行的 TXT、Lua 修改和 BIFF XLS 数据；Harness AI 写入只走带任务作用域、固定领域包版本的通用 MCP，不直接写游戏文件。
+- 领域工作副本保留 GB18030/BOM/换行的 TXT、Lua 修改和 BIFF XLS 数据；`.xls` 以表格编辑器打开，读取全部工作表和有效单元格，并在保存时维持原 BIFF8 文件格式。Harness AI 写入只走带任务作用域、固定领域包版本的通用 MCP，不直接写游戏文件。
 - 应用自更新仅连接 MIR3 Studio AI 的 GitHub Releases。
 
 ## 产品接口
@@ -33,7 +34,7 @@ MIR3 Studio AI 使用 DeepSeek Harness 作为开源 Agent 基础设施之一。�
 | --- | --- |
 | 应用名 | MIR3 Studio AI |
 | 核心显示名 | MIR3 AI Core |
-| 版本 | 0.9.31 |
+| 版本 | 0.9.32 |
 | Tauri identifier | `ai.mir3.studio` |
 | 数据目录 | `~/.mir3-studio-ai` |
 | 开发数据目录 | `~/.mir3-studio-ai.dev` |

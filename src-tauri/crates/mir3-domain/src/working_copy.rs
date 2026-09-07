@@ -97,6 +97,14 @@ pub struct DomainWorkingRestoreResult {
     pub restored_snapshot: Snapshot,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainWorkingXlsOpen {
+    pub workbook: crate::SafeXlsWorkbook,
+    pub sheets: Vec<crate::SafeXlsSheet>,
+    pub revision: i64,
+}
+
 impl DomainStore {
     /// Apply 和治理 Receipt 已落盘但保存节点尚未写入时，从权威 Draft/Snapshot 恢复节点。
     /// 这覆盖进程在原子 Apply 完成后、节点提交前退出的窄窗口。
@@ -253,6 +261,36 @@ impl DomainStore {
             self.domain_working_copy_by_id(project_id, id)?;
         }
         self.safe_text_open(project_id, relative_path, working_copy_id)
+    }
+
+    /// 从一个确定的 Working Copy revision 一次读取完整 XLS，保证所有 sheet 同步刷新。
+    pub fn domain_working_xls_open(
+        &self,
+        project_id: &str,
+        relative_path: &str,
+        working_copy_id: Option<&str>,
+    ) -> Result<DomainWorkingXlsOpen, String> {
+        crate::safe_files::validate_xls_path(relative_path)?;
+        let working_copy = working_copy_id
+            .map(|id| self.domain_working_copy_by_id(project_id, id))
+            .transpose()?;
+        let target = self.safe_file_target(project_id, relative_path)?;
+        let source = fs::read(&target)
+            .map_err(|error| format!("SAFE_XLS_READ_FAILED: {}: {error}", target.display()))?;
+        let base_sha256 = hash_bytes(&source);
+        let bytes = match working_copy.as_ref() {
+            Some(copy) => self
+                .draft_change_bytes(project_id, &copy.id, relative_path)?
+                .unwrap_or(source),
+            None => source,
+        };
+        let (workbook, sheets) =
+            crate::safe_files::parse_xls_snapshot(relative_path, &bytes, &base_sha256)?;
+        Ok(DomainWorkingXlsOpen {
+            workbook,
+            sheets,
+            revision: working_copy.map_or(0, |copy| copy.revision),
+        })
     }
 
     /// 人工文本编辑与 AI 共享内部 Draft revision，不允许调用方替换目标 Draft。
@@ -897,6 +935,7 @@ fn join_compensation_error(error: String, compensation: Option<String>) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use easyexcel_xls::biff8::{Biff8Book, Biff8Cell, Biff8Sheet, Biff8Value};
 
     fn shop_record(price: usize) -> String {
         format!(
@@ -1023,6 +1062,110 @@ mod tests {
                 .len(),
             2
         );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn xls_working_open_reads_the_current_overlay_without_touching_disk() {
+        let (base, project, store, project_id) = fixture("xls-overlay-open");
+        let relative_path = "引擎/Mir200/Envir/Shop/cfg_store.xls";
+        let target = project.join(relative_path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let mut sheet = Biff8Sheet::new("商品");
+        sheet
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("旧价格".to_string())),
+            )
+            .unwrap();
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        let original = book.to_cfb_bytes().unwrap();
+        fs::write(&target, &original).unwrap();
+
+        let version = store
+            .describe_domain_system(&project_id, "shop")
+            .unwrap()
+            .manifest
+            .version;
+        let working_copy = store
+            .get_or_create_domain_working_copy(&project_id, "shop", &version, Some("表格修改"))
+            .unwrap();
+        let disk = store
+            .domain_working_xls_open(&project_id, relative_path, None)
+            .unwrap();
+        assert_eq!(disk.revision, 0);
+        assert_eq!(disk.workbook.sha256, disk.workbook.content_sha256);
+
+        let patched = store
+            .domain_working_xls_patch(
+                &project_id,
+                &working_copy.id,
+                SafeXlsDraftPatch {
+                    relative_path: relative_path.to_string(),
+                    draft_id: "调用方不能替换工作副本".to_string(),
+                    expected_revision: working_copy.revision,
+                    expected_sha256: disk.workbook.sha256.clone(),
+                    updates: vec![crate::SafeXlsCellUpdate {
+                        sheet: "商品".to_string(),
+                        row: 0,
+                        column: 0,
+                        expected_value: Some("旧价格".to_string()),
+                        value: serde_json::json!("新价格"),
+                    }],
+                },
+            )
+            .unwrap();
+        let overlay = store
+            .domain_working_xls_open(&project_id, relative_path, Some(&working_copy.id))
+            .unwrap();
+        assert_eq!(overlay.revision, patched.revision);
+        assert_eq!(overlay.workbook.sha256, disk.workbook.sha256);
+        assert_ne!(
+            overlay.workbook.content_sha256,
+            disk.workbook.content_sha256
+        );
+        assert_eq!(overlay.sheets.len(), 1);
+        assert_eq!(overlay.sheets[0].rows[0][0], "新价格");
+        assert_eq!(fs::read(&target).unwrap(), original);
+
+        let mut external_sheet = Biff8Sheet::new("商品");
+        external_sheet
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("游戏外部保存".to_string())),
+            )
+            .unwrap();
+        let mut external_book = Biff8Book::default();
+        external_book.sheets.push(external_sheet);
+        let external = external_book.to_cfb_bytes().unwrap();
+        fs::write(&target, &external).unwrap();
+        let reopened = store
+            .domain_working_xls_open(&project_id, relative_path, Some(&working_copy.id))
+            .unwrap();
+        let conflict = store
+            .domain_working_xls_patch(
+                &project_id,
+                &working_copy.id,
+                SafeXlsDraftPatch {
+                    relative_path: relative_path.to_string(),
+                    draft_id: working_copy.id.clone(),
+                    expected_revision: patched.revision,
+                    expected_sha256: reopened.workbook.sha256,
+                    updates: vec![crate::SafeXlsCellUpdate {
+                        sheet: "商品".to_string(),
+                        row: 0,
+                        column: 0,
+                        expected_value: Some("新价格".to_string()),
+                        value: serde_json::json!("再次修改"),
+                    }],
+                },
+            )
+            .unwrap_err();
+        assert!(conflict.starts_with("DRAFT_BASE_CONFLICT:"));
+        assert_eq!(fs::read(&target).unwrap(), external);
         fs::remove_dir_all(base).ok();
     }
 

@@ -306,6 +306,7 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::domain_working_copy_open,
         crate::bridge::domain_working_file_open,
         crate::bridge::domain_working_text_patch,
+        crate::bridge::domain_working_xls_open,
         crate::bridge::domain_working_xls_patch,
         crate::bridge::domain_working_copy_preview,
         crate::bridge::domain_working_save,

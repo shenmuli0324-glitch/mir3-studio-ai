@@ -812,7 +812,7 @@ mod tests {
             .query_domain_resources(&second.id, "shop", &query)
             .unwrap();
 
-        assert_eq!(first_records.len(), 5);
+        assert_eq!(first_records.len(), 4);
         assert!(first_records.iter().all(|record| record.files.len() == 1));
         let known_records = first_records
             .iter()
@@ -865,15 +865,9 @@ mod tests {
         assert!(first_records
             .iter()
             .all(|record| record.files[0].path != "引擎/Mir200/Envir/Shop/opaque.bin"));
-        let unknown = first_records
+        assert!(first_records
             .iter()
-            .find(|record| record.files[0].path.ends_with("unknown.xls"))
-            .unwrap();
-        assert!(!unknown.writable);
-        assert!(unknown
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.starts_with("DOMAIN_RESOURCE_XLS_READ_FAILED:")));
+            .all(|record| !record.files[0].path.ends_with("unknown.xls")));
 
         let page = store
             .query_domain_resources(

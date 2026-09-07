@@ -183,7 +183,7 @@ impl DomainStore {
         let mut statement = connection
             .prepare(
                 "SELECT id,name,root,client_root,engine_root,active_workspace_root,engine_version,client_version,status,warnings,last_scan_at,created_at,updated_at
-                 FROM projects ORDER BY updated_at DESC, name COLLATE NOCASE",
+                 FROM projects ORDER BY created_at DESC, id ASC",
             )
             .map_err(db_error)?;
         let rows = statement.query_map([], row_to_project).map_err(db_error)?;
@@ -1059,6 +1059,59 @@ mod tests {
         assert_eq!(store.list_projects().unwrap().len(), 1);
         assert!(!project.join(".mir3-ai").exists());
         assert!(data.join(&first.id).join("project.sqlite").is_file());
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn project_order_uses_immutable_import_time() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-project-order-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let data = base.join("data");
+        let store = DomainStore::new(&data).unwrap();
+        let mut imported = Vec::new();
+        for name in ["最早", "中间", "最新"] {
+            let root = base.join("项目").join(name);
+            fs::create_dir_all(root.join("客户端")).unwrap();
+            fs::create_dir_all(root.join("引擎")).unwrap();
+            imported.push(store.import_project(&root).unwrap());
+        }
+        let connection = store.registry().unwrap();
+        for (index, project) in imported.iter().enumerate() {
+            connection
+                .execute(
+                    "UPDATE projects SET created_at=?2, updated_at=?3 WHERE id=?1",
+                    params![project.id, index as i64 + 1, 100 - index as i64],
+                )
+                .unwrap();
+        }
+
+        assert_eq!(
+            store
+                .list_projects()
+                .unwrap()
+                .into_iter()
+                .map(|project| project.name)
+                .collect::<Vec<_>>(),
+            vec!["最新", "中间", "最早"]
+        );
+
+        store.activate_project(&imported[0].id).unwrap();
+        store
+            .select_workspace(&imported[1].id, Path::new(&imported[1].client_root))
+            .unwrap();
+        store.update_last_scan(&imported[0].id, 1_000).unwrap();
+        assert_eq!(
+            store
+                .list_projects()
+                .unwrap()
+                .into_iter()
+                .map(|project| project.name)
+                .collect::<Vec<_>>(),
+            vec!["最新", "中间", "最早"]
+        );
         fs::remove_dir_all(base).ok();
     }
 

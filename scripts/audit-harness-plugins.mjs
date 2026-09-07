@@ -98,12 +98,16 @@ for (const pluginRoot of pluginRoots) {
       const policyPath = join(pluginRoot, 'lib', 'policy.js')
       const serverPolicy = `${server}\n${existsSync(policyPath) ? readFileSync(policyPath, 'utf8') : ''}`
       for (const contract of [
-        'inject: [\'sessions\', \'sandboxPolicy\']',
+        'inject: [\'sessions\', \'sandboxPolicy\', \'fileReferences\']',
         'isMir3ManagedSession',
         'ctx.on(\'session/created\'',
         'ctx.on(\'fs/write-intent\'',
         'ctx.on(\'fs/edit-intent\'',
+        'ctx.on(\'tools/pre-execute\'',
+        'ctx.fileReferences.list',
         'exec?.agent?.session',
+        'MIR3_DEVELOPMENT_SEARCH_REQUIRED',
+        'MIR3_GENERIC_SHELL_DISABLED',
         'MIR3_SYSTEM_SESSION_SCOPE_UNAVAILABLE',
         'MIR3_SYSTEM_SESSION_DRAFT_REQUIRED',
         'isWithin(projectRoot, path)',
@@ -111,7 +115,7 @@ for (const pluginRoot of pluginRoots) {
         if (!serverPolicy.includes(contract))
           failures.push(`${manifest.name}: scoped system-session policy is missing ${contract}`)
       }
-      for (const peer of ['@deepseek-ai/cordis', '@deepseek-ai/dsh-client-runtime', '@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-session']) {
+      for (const peer of ['@deepseek-ai/cordis', '@deepseek-ai/dsh-client-runtime', '@deepseek-ai/dsh-file-reference', '@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-session']) {
         if (manifest.peerDependencies?.[peer] !== '*')
           failures.push(`${manifest.name}: required Harness peer dependency is missing ${peer}`)
       }
@@ -124,8 +128,8 @@ for (const pluginRoot of pluginRoots) {
         failures.push(`${manifest.name}: client entry is missing ${contract}`)
     }
     if (manifest.name === '@mir3-studio/dsh-mir3-core') {
-      if (manifest.version !== '1.3.4')
-        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.4`)
+      if (manifest.version !== '1.3.5')
+        failures.push(`${manifest.name}: compatibility adapter must be version 1.3.5`)
       for (const contract of [
         'const PROTOCOL_VERSION = 2',
         'const SYSTEM_SESSION_PREFIX = \'mir3-system-\'',

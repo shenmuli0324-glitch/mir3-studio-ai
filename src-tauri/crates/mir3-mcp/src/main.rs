@@ -321,9 +321,46 @@ fn call_tool(store: &DomainStore, project_id: &str, name: &str, args: Value) -> 
                 .and_then(|system_id| resource_id.map(|resource_id| (system_id, resource_id)))
                 .and_then(|(system_id, resource_id)| {
                     authorize_project_read(store, project_id, scope_token, Some(&system_id))?;
-                    store.get_domain_resource(project_id, &system_id, &resource_id)
+                    let working_copy_id = optional_working_copy_id(&args)?;
+                    if let Some(working_copy_id) = working_copy_id.as_deref() {
+                        store.authorize_task_scope(
+                            project_id,
+                            scope_token,
+                            Some(&system_id),
+                            None,
+                            Some(working_copy_id),
+                        )?;
+                    }
+                    let resource =
+                        store.get_domain_resource(project_id, &system_id, &resource_id)?;
+                    let include_xls = args
+                        .get("includeXls")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    if !include_xls
+                        && ["xlsSheet", "rowOffset", "rowLimit"]
+                            .iter()
+                            .any(|key| args.get(*key).is_some())
+                    {
+                        return Err(
+                            "MCP_XLS_INCLUDE_REQUIRED: set includeXls=true before requesting an XLS page"
+                                .to_string(),
+                        );
+                    }
+                    let xls = include_xls
+                        .then(|| {
+                            xls_resource_page(
+                                store,
+                                project_id,
+                                &resource,
+                                working_copy_id.as_deref(),
+                                &args,
+                            )
+                        })
+                        .transpose()?;
+                    Ok((resource, xls))
                 })
-                .map(|resource| json!({"resource": resource}))
+                .map(|(resource, xls)| json!({"resource": resource, "xls": xls}))
         }
         "mir3_dependency_resolve" => required_string(&args, "systemId")
             .and_then(|system_id| {
@@ -1235,9 +1272,9 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "mir3_resource_get",
-            "通过稳定资源 ID 读取领域资源及安全解码后的文件内容；996 的 GBK/GB18030 脚本应使用此工具，不要使用仅支持 UTF-8 的通用 read。",
+            "通过稳定资源 ID 读取领域资源及安全解码后的文件内容；BIFF .xls 可用 includeXls 读取工作簿元数据，并用 xlsSheet/rowOffset/rowLimit 遍历全部有效单元格，附带 workingCopyId 时读取任务作用域内的当前修改。996 的 GBK/GB18030 脚本也应使用此工具，不要使用仅支持 UTF-8 的通用 read。",
             with_project_read(
-                json!({"type":"object","properties":{"systemId":{"type":"string"},"resourceId":{"type":"string"}},"required":["systemId","resourceId"],"additionalProperties":false}),
+                json!({"type":"object","properties":{"systemId":{"type":"string"},"resourceId":{"type":"string"},"workingCopyId":{"type":"string","minLength":1},"draftId":{"type":"string","minLength":1},"includeXls":{"type":"boolean"},"xlsSheet":{"type":"string","minLength":1},"rowOffset":{"type":"integer","minimum":0},"rowLimit":{"type":"integer","minimum":1,"maximum":MCP_MAX_QUERY_ITEMS}},"required":["systemId","resourceId"],"additionalProperties":false}),
             ),
         ),
         tool(
@@ -1375,6 +1412,88 @@ fn authorize_project_read(
 
 fn tool(name: &str, description: &str, input_schema: Value) -> Value {
     json!({"name": name, "description": description, "inputSchema": input_schema})
+}
+
+fn xls_resource_page(
+    store: &DomainStore,
+    project_id: &str,
+    resource: &DomainResourceRecord,
+    working_copy_id: Option<&str>,
+    args: &Value,
+) -> Result<Value, String> {
+    let source_path = resource.source.path.replace('\\', "/");
+    let declared = resource.files.iter().any(|file| {
+        file.path.replace('\\', "/") == source_path
+            && file
+                .extension
+                .as_deref()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("xls"))
+    });
+    if !declared || !source_path.to_ascii_lowercase().ends_with(".xls") {
+        return Err(
+            "MCP_XLS_RESOURCE_REQUIRED: selected resource is not backed by a declared BIFF .xls file"
+                .to_string(),
+        );
+    }
+    let classification = store
+        .classify_development_file(project_id, &source_path)?
+        .filter(|decision| {
+            decision.access == mir3_domain::DevelopmentFileAccess::Editable
+                && decision
+                    .owner_systems
+                    .iter()
+                    .any(|system_id| system_id == &resource.system_id)
+        })
+        .ok_or_else(|| {
+            "MCP_XLS_RESOURCE_OUTSIDE_DEVELOPMENT_SCOPE: XLS is not owned by the requested domain system"
+                .to_string()
+        })?;
+    debug_assert_eq!(classification.path, source_path);
+    let opened = store.domain_working_xls_open(project_id, &source_path, working_copy_id)?;
+    let workbook = opened.workbook;
+    let revision = opened.revision;
+    let Some(sheet_name) = args.get("xlsSheet").and_then(Value::as_str) else {
+        return Ok(json!({
+            "workbook": workbook,
+            "workingCopyId": working_copy_id,
+            "revision": revision,
+            "sheet": Value::Null,
+            "rows": [],
+            "rowOffset": 0,
+            "rowLimit": 0,
+            "totalRows": Value::Null,
+            "totalColumns": Value::Null,
+            "nextRowOffset": Value::Null,
+            "hasMore": false,
+        }));
+    };
+    let row_offset = args.get("rowOffset").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let row_limit = args
+        .get("rowLimit")
+        .and_then(Value::as_u64)
+        .unwrap_or(MCP_MAX_QUERY_ITEMS as u64) as usize;
+    let sheet = opened
+        .sheets
+        .into_iter()
+        .find(|sheet| sheet.sheet == sheet_name)
+        .ok_or_else(|| format!("SAFE_XLS_SHEET_NOT_FOUND: {sheet_name}"))?;
+    let end = row_offset.saturating_add(row_limit).min(sheet.row_count);
+    let rows = sheet.rows.get(row_offset..end).unwrap_or(&[]).to_vec();
+    let has_more = end < sheet.row_count;
+    Ok(json!({
+        "workbook": workbook,
+        "workingCopyId": working_copy_id,
+        "revision": revision,
+        "sheet": sheet.sheet,
+        "rows": rows,
+        "rowOffset": row_offset,
+        "rowLimit": row_limit,
+        "totalRows": sheet.row_count,
+        "totalColumns": sheet.column_count,
+        "nextRowOffset": has_more.then_some(end),
+        "hasMore": has_more,
+        "sourceSha256": sheet.source_sha256,
+    }))
 }
 
 fn required_string(args: &Value, key: &str) -> Result<String, String> {
@@ -3667,6 +3786,212 @@ mod tests {
         assert_eq!(primitive["updates"][0]["row"], 2);
         assert_eq!(primitive["updates"][0]["column"], 3);
         assert_eq!(primitive["updates"][0]["expectedValue"], "20");
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn resource_get_pages_every_row_across_biff_xls_sheets() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-mcp-xls-pages-{}-{}",
+            std::process::id(),
+            mir3_domain::now_millis()
+        ));
+        let root = base.join("项目/XLS全量读取");
+        let path = root.join("引擎/Mir200/Envir/Shop/cfg_store.xls");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::create_dir_all(root.join("客户端/dev")).unwrap();
+        fs::write(root.join("引擎/mir_version.txt"), "1.2.0\n").unwrap();
+        let mut book = Biff8Book::default();
+        for (name, rows) in [
+            (
+                "商品",
+                vec![
+                    ["offerId", "itemId", "currencyItemId", "price"],
+                    ["OFFER_A", "ITEM_A", "ITEM_A", "10"],
+                    ["OFFER_B", "ITEM_B", "ITEM_B", "20"],
+                    ["OFFER_C", "ITEM_C", "ITEM_C", "30"],
+                ],
+            ),
+            (
+                "限时商品",
+                vec![
+                    ["offerId", "itemId", "currencyItemId", "price"],
+                    ["OFFER_D", "ITEM_D", "ITEM_D", "40"],
+                    ["OFFER_E", "ITEM_E", "ITEM_E", "50"],
+                ],
+            ),
+        ] {
+            let mut sheet = Biff8Sheet::new(name);
+            for (row_index, row) in rows.iter().enumerate() {
+                for (column_index, value) in row.iter().enumerate() {
+                    sheet
+                        .set(
+                            row_index as u32,
+                            column_index,
+                            Biff8Cell::general(Biff8Value::Text((*value).to_string())),
+                        )
+                        .unwrap();
+                }
+            }
+            book.sheets.push(sheet);
+        }
+        fs::write(&path, book.to_cfb_bytes().unwrap()).unwrap();
+        let store = DomainStore::new(base.join("data")).unwrap();
+        let project = store.import_project(&root).unwrap();
+        store.scan_project(&project.id, || false).unwrap();
+        let resource = store
+            .query_domain_resources(
+                &project.id,
+                "shop",
+                &DomainResourceQuery {
+                    text: "OFFER_A".to_string(),
+                    resource_type: None,
+                    limit: Some(10),
+                    offset: None,
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+
+        let metadata = call_tool(
+            &store,
+            &project.id,
+            "mir3_resource_get",
+            json!({"systemId":"shop","resourceId":resource.id.clone(),"includeXls":true}),
+        );
+        assert_eq!(metadata["isError"], false);
+        assert_eq!(
+            metadata["structuredContent"]["xls"]["workbook"]["sheets"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+
+        let mut all_rows = Vec::new();
+        let mut offset = 0;
+        loop {
+            let page = call_tool(
+                &store,
+                &project.id,
+                "mir3_resource_get",
+                json!({
+                    "systemId":"shop",
+                    "resourceId":resource.id.clone(),
+                    "includeXls":true,
+                    "xlsSheet":"商品",
+                    "rowOffset":offset,
+                    "rowLimit":2
+                }),
+            );
+            assert_eq!(page["isError"], false);
+            let xls = &page["structuredContent"]["xls"];
+            assert_eq!(xls["totalRows"], 4);
+            assert_eq!(xls["totalColumns"], 4);
+            all_rows.extend(xls["rows"].as_array().unwrap().iter().cloned());
+            if !xls["hasMore"].as_bool().unwrap() {
+                assert!(xls["nextRowOffset"].is_null());
+                break;
+            }
+            offset = xls["nextRowOffset"].as_u64().unwrap();
+        }
+        assert_eq!(all_rows.len(), 4);
+        assert_eq!(all_rows[0][0], "offerId");
+        assert_eq!(all_rows[3][0], "OFFER_C");
+
+        let working_copy = store
+            .get_or_create_domain_working_copy(
+                &project.id,
+                "shop",
+                "1.3.1",
+                Some("验证 XLS 工作副本读取"),
+            )
+            .unwrap();
+        let workbook = store
+            .safe_xls_open(&project.id, "引擎/Mir200/Envir/Shop/cfg_store.xls")
+            .unwrap();
+        let patched = store
+            .domain_working_xls_patch(
+                &project.id,
+                &working_copy.id,
+                SafeXlsDraftPatch {
+                    relative_path: "引擎/Mir200/Envir/Shop/cfg_store.xls".to_string(),
+                    draft_id: working_copy.id.clone(),
+                    expected_revision: working_copy.revision,
+                    expected_sha256: workbook.sha256,
+                    updates: vec![mir3_domain::SafeXlsCellUpdate {
+                        sheet: "商品".to_string(),
+                        row: 1,
+                        column: 3,
+                        expected_value: Some("10".to_string()),
+                        value: json!(15),
+                    }],
+                },
+            )
+            .unwrap();
+        let lease = store
+            .issue_task_scope(
+                &project.id,
+                "xls-page-working-copy",
+                &["shop".to_string()],
+                &["shop".to_string()],
+                &[working_copy.id.clone()],
+                json!({"shop":"1.3.1"}),
+                mir3_domain::now_millis() + 60_000,
+            )
+            .unwrap();
+        let working_page = call_tool(
+            &store,
+            &project.id,
+            "mir3_resource_get",
+            json!({
+                "scopeToken":lease.token,
+                "systemId":"shop",
+                "resourceId":resource.id.clone(),
+                "workingCopyId":working_copy.id,
+                "includeXls":true,
+                "xlsSheet":"商品",
+                "rowOffset":1,
+                "rowLimit":1
+            }),
+        );
+        assert_eq!(working_page["isError"], false);
+        assert_eq!(working_page["structuredContent"]["xls"]["rows"][0][3], "15");
+        assert_eq!(
+            working_page["structuredContent"]["xls"]["revision"],
+            patched.revision
+        );
+
+        let second_sheet = call_tool(
+            &store,
+            &project.id,
+            "mir3_resource_get",
+            json!({
+                "systemId":"shop",
+                "resourceId":resource.id,
+                "includeXls":true,
+                "xlsSheet":"限时商品",
+                "rowOffset":0,
+                "rowLimit":10
+            }),
+        );
+        assert_eq!(second_sheet["structuredContent"]["xls"]["totalRows"], 3);
+        assert_eq!(second_sheet["structuredContent"]["xls"]["totalColumns"], 4);
+        assert_eq!(
+            second_sheet["structuredContent"]["xls"]["rows"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            second_sheet["structuredContent"]["xls"]["rows"][2][0],
+            "OFFER_E"
+        );
+        assert!(second_sheet["structuredContent"]["xls"]["nextRowOffset"].is_null());
+        assert_eq!(second_sheet["structuredContent"]["xls"]["hasMore"], false);
         fs::remove_dir_all(base).ok();
     }
 

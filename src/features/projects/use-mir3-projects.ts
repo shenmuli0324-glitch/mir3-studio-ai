@@ -113,7 +113,7 @@ export function useMir3Projects() {
   })
 
   return {
-    projects: projects.data ?? [],
+    projects: sortProjectsByImportTime(projects.data ?? []),
     activeProject: active.data ?? null,
     scan: scan.data ?? null,
     loading: projects.isLoading || active.isLoading,
@@ -134,6 +134,13 @@ export function useMir3Projects() {
     removeProject: removeProject.mutateAsync,
     relinkProject: relinkProject.mutateAsync,
   }
+}
+
+export function sortProjectsByImportTime(projects: Mir3Project[]) {
+  return [...projects].sort((left, right) => {
+    const imported = right.createdAt - left.createdAt
+    return imported === 0 ? left.id.localeCompare(right.id) : imported
+  })
 }
 
 async function restartHarnessAfterProjectChange() {

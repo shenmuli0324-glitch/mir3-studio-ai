@@ -211,6 +211,7 @@ export interface SafeXlsSheetMeta {
 export interface SafeXlsWorkbook {
   relativePath: string
   sha256: string
+  contentSha256: string
   sheets: SafeXlsSheetMeta[]
   readOnly: boolean
 }
@@ -221,6 +222,27 @@ export interface SafeXlsSheet {
   columnCount: number
   rows: string[][]
   sourceSha256: string
+}
+
+export interface SafeXlsCellUpdate {
+  sheet: string
+  row: number
+  column: number
+  expectedValue?: string | null
+  value: string | number | boolean | null
+}
+
+export interface SafeXlsPatchResult {
+  draftId: string
+  revision: number
+  sha256: string
+  preview: DomainDraftPreview
+}
+
+export interface DomainWorkbookData {
+  workbook: SafeXlsWorkbook
+  sheets: SafeXlsSheet[]
+  revision: number
 }
 
 export interface DomainDraft {
@@ -256,6 +278,7 @@ export interface DomainWorkingCopy {
   id: string
   systemId: string
   pluginVersion: string
+  compositeId?: string | null
   revision: number
   dirty: boolean
   createdAt: number

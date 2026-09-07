@@ -2804,7 +2804,7 @@ dependencies = [
 
 [[package]]
 name = "mir3-studio-ai"
-version = "0.9.31"
+version = "0.9.32"
 dependencies = [
  "arboard",
  "base64 0.22.1",

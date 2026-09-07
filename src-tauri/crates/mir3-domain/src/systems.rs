@@ -693,7 +693,7 @@ impl DomainStore {
         ))
     }
 
-    fn runtime_domain_registry(&self) -> Result<DomainRegistry, String> {
+    pub(crate) fn runtime_domain_registry(&self) -> Result<DomainRegistry, String> {
         let packs_root = self.domain_pack_root();
         if !packs_root.is_dir() {
             return Ok(bundled_domain_registry()?.clone());
@@ -2146,13 +2146,12 @@ impl DomainStore {
                 ),
             };
         }
-        if extension.eq_ignore_ascii_case("xls") {
+        if crate::is_editable_xls_extension(Some(extension)) {
             return match self.safe_xls_open(project_id, &file.path) {
                 Ok(workbook) => {
                     let sheets = workbook
                         .sheets
                         .iter()
-                        .take(4)
                         .filter_map(|sheet| {
                             self.safe_xls_sheet_read(
                                 project_id,
@@ -2166,7 +2165,7 @@ impl DomainStore {
                                     "name":data.sheet,
                                     "rowCount":data.row_count,
                                     "columnCount":data.column_count,
-                                    "rows":data.rows.into_iter().take(100).map(|row| row.into_iter().take(32).collect::<Vec<_>>()).collect::<Vec<_>>()
+                                    "rows":data.rows
                                 })
                             })
                         })
@@ -2176,7 +2175,7 @@ impl DomainStore {
                             "kind":"xls",
                             "sha256":workbook.sha256,
                             "sheets":sheets,
-                            "truncated":workbook.sheets.len() > 4 || workbook.sheets.iter().any(|sheet| sheet.row_count > 100 || sheet.column_count > 32)
+                            "truncated":false
                         }),
                         Vec::new(),
                     )
@@ -2844,7 +2843,7 @@ fn matches_projection(
 
 /// 全局归属先比较真实路径；只有没有任何路径所有者时才允许内容指纹推断。
 /// 这样依赖字段名不会把一个已经明确归属的文件错误标成被引用领域的共享文件。
-fn projection_system_ids(
+pub(crate) fn projection_system_ids(
     registry: &DomainRegistry,
     path: &str,
     extension: Option<&str>,
@@ -3538,7 +3537,7 @@ fn scalar_value_string(value: &Value) -> Option<String> {
     }
 }
 
-fn access_for(manifest: &DomainManifest, extension: Option<&str>) -> &'static str {
+pub(crate) fn access_for(manifest: &DomainManifest, extension: Option<&str>) -> &'static str {
     let extension = extension.unwrap_or_default();
     if manifest.system_id == "map" && extension.eq_ignore_ascii_case("map") {
         return "structured";
@@ -3962,11 +3961,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let file = files
-            .iter()
-            .find(|file| file.path == relative)
-            .expect("indexed XLS should remain visible without parsing its payload");
-        assert_eq!(file.access, "structured");
+        assert!(files.iter().all(|file| file.path != relative));
 
         let manifest = store.runtime_manifest("map").unwrap();
         assert_eq!(
@@ -4063,7 +4058,7 @@ mod tests {
     }
 
     #[test]
-    fn unclaimed_files_remain_visible_and_readonly() {
+    fn unsupported_unclaimed_files_do_not_enter_the_development_index() {
         let base = std::env::temp_dir().join(format!("mir3-unclaimed-{}", std::process::id()));
         let root = base.join("木立");
         std::fs::create_dir_all(root.join("客户端/dev/misc")).unwrap();
@@ -4082,9 +4077,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].ownership, "unknown");
-        assert_eq!(files[0].access, "readonly");
+        assert!(files.is_empty());
         std::fs::remove_dir_all(base).ok();
     }
 

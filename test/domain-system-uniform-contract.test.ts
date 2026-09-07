@@ -43,16 +43,21 @@ describe('33-system simplified workspace contract', () => {
     expect(view).toContain('file.ownership === \'shared\'')
   })
 
-  it('does not evaluate XLS rows before a sheet has loaded', () => {
+  it('loads the complete XLS working copy before rendering editable cells', () => {
     const view = source('src/features/devtools/domain/domain-system-view.tsx')
-    const loadingGuard = view.indexOf('if (sheetLoading)')
-    const missingGuard = view.indexOf('if (sheetError || !sheet)')
-    const preview = view.indexOf('xlsTsvPreview(sheet)')
+    const editor = source('src/features/devtools/domain/domain-workbook-editor.tsx')
+    const loadingGuard = editor.indexOf('if (loading)')
+    const missingGuard = editor.indexOf('if (error || !data)')
+    const viewport = editor.indexOf('domainWorkbookViewport(sheet, rowPage, columnPage)')
 
     expect(loadingGuard).toBeGreaterThan(-1)
     expect(missingGuard).toBeGreaterThan(loadingGuard)
-    expect(preview).toBeGreaterThan(missingGuard)
-    expect(view).not.toContain('xlsTsvPreview(sheet!)')
+    expect(viewport).toBeGreaterThan(missingGuard)
+    expect(view).toContain('loadDomainWorkingWorkbook(project!.id, selectedFile!.path, activeWorkingCopyId)')
+    expect(view).toContain('workingCopy?.revision ?? 0')
+    expect(editor).toContain('readOnly={!editable || busy}')
+    expect(view).toContain('updateXlsEdits(unsyncedXlsEdits(xlsEditsRef.current))')
+    expect(view).toContain('savingFlowRef.current = true')
   })
 
   it('keeps owned-selector evidence in every domain package', () => {

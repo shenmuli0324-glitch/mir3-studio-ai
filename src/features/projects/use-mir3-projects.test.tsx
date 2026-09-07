@@ -4,7 +4,7 @@ import type { PropsWithChildren } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useMir3Projects } from './use-mir3-projects'
+import { sortProjectsByImportTime, useMir3Projects } from './use-mir3-projects'
 
 const mocks = vi.hoisted(() => {
   function project(id: string, activeWorkspaceRoot = `/fixture/${id}`) {
@@ -112,6 +112,25 @@ describe('useMir3Projects Workspace switching', () => {
     })
 
     expect(mocks.restart).toHaveBeenCalledOnce()
+  })
+})
+
+describe('project import ordering', () => {
+  it('keeps newest imports first regardless of later update timestamps', () => {
+    const oldest = { ...fixtureProject('oldest'), createdAt: 1, updatedAt: 300 }
+    const newest = { ...fixtureProject('newest'), createdAt: 3, updatedAt: 100 }
+    const middle = { ...fixtureProject('middle'), createdAt: 2, updatedAt: 900 }
+
+    expect(sortProjectsByImportTime([oldest, newest, middle]).map(project => project.id))
+      .toEqual(['newest', 'middle', 'oldest'])
+  })
+
+  it('uses the stable project id only as a same-time tie breaker', () => {
+    const beta = { ...fixtureProject('beta'), createdAt: 10 }
+    const alpha = { ...fixtureProject('alpha'), createdAt: 10 }
+
+    expect(sortProjectsByImportTime([beta, alpha]).map(project => project.id))
+      .toEqual(['alpha', 'beta'])
   })
 })
 

@@ -65,30 +65,15 @@ pub fn validate_project_root(path: &Path) -> Result<ProjectValidation, String> {
         );
     }
 
-    let mut warnings = Vec::new();
-    if !engine.join("Mir200").is_dir() {
-        warnings.push("未检测到 引擎/Mir200".to_string());
-    }
-    if !engine.join("GameCenter.exe").is_file() {
-        warnings.push("未检测到 引擎/GameCenter.exe".to_string());
-    }
-    if !engine.join("Config.json").is_file() && !engine.join("Config.ini").is_file() {
-        warnings.push("未检测到引擎 Config.json 或 Config.ini".to_string());
-    }
-    if !client.join("996M3_Client.exe").is_file() && !client.join("game.exe").is_file() {
-        warnings.push("未检测到客户端启动程序".to_string());
-    }
-    if !client.join("dev").is_dir() {
-        warnings.push("未检测到 客户端/dev，Lua 开发索引可能为空".to_string());
-    }
-
     Ok(ProjectValidation {
         root: path_string(&root),
         valid: true,
         client_root: Some(path_string(&client)),
         engine_root: Some(path_string(&engine)),
         engine_version: detect_engine_version(&engine),
-        warnings,
+        // 导入阶段只确认项目身份。运行程序、配置和二开目录是否存在由各能力
+        // 在真正使用时诊断，避免把加密包与部署产物误判为项目结构缺陷。
+        warnings: Vec::new(),
     })
 }
 
@@ -230,6 +215,21 @@ mod tests {
         let root = fixture("invalid");
         fs::create_dir_all(&root).unwrap();
         assert!(validate_project_root(&root).is_err());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn accepts_project_identity_without_runtime_or_development_files() {
+        let root = fixture("identity-only");
+        fs::create_dir_all(root.join("客户端")).unwrap();
+        fs::create_dir_all(root.join("引擎")).unwrap();
+
+        let validation = validate_project_root(&root).unwrap();
+        assert!(validation.valid);
+        assert!(validation.warnings.is_empty());
+
+        let project = project_from_validation(validation).unwrap();
+        assert_eq!(project.status, ProjectStatus::Valid);
         fs::remove_dir_all(root).ok();
     }
 }

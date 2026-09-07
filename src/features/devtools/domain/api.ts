@@ -19,6 +19,7 @@ import type {
   DomainSnapshot,
   DomainSystemDescription,
   DomainValidationReport,
+  DomainWorkbookData,
   DomainWorkingCopy,
   DomainWorkingRestoreResult,
   DomainWorkingSaveResult,
@@ -26,8 +27,8 @@ import type {
   LegacyDraftCloneRequest,
   SafeTextOpen,
   SafeTextPatchResult,
-  SafeXlsSheet,
-  SafeXlsWorkbook,
+  SafeXlsCellUpdate,
+  SafeXlsPatchResult,
   SystemSessionBinding,
   TaskReceipt,
   TaskScopeLease,
@@ -154,21 +155,26 @@ export function restoreDomainSaveNode(projectId: string, nodeId: string) {
   return invoke<DomainWorkingRestoreResult>('domain_save_node_restore', { projectId, nodeId })
 }
 
+export function patchDomainWorkingXls(projectId: string, workingCopyId: string, relativePath: string, expectedRevision: number, expectedSha256: string, updates: SafeXlsCellUpdate[]) {
+  return invoke<SafeXlsPatchResult>('domain_working_xls_patch', {
+    projectId,
+    workingCopyId,
+    operation: {
+      relativePath,
+      draftId: workingCopyId,
+      expectedRevision,
+      expectedSha256,
+      updates,
+    },
+  })
+}
+
 export function saveDomainWorkingCopies(projectId: string, compositeId: string, workingCopies: Array<{ workingCopyId: string, expectedRevision: number }>, confirmed: boolean) {
   return invoke<DomainCompositeWorkingSaveResult>('domain_working_composite_save', { projectId, compositeId, workingCopies, confirmed })
 }
 
-export function openDomainXls(projectId: string, relativePath: string) {
-  return invoke<SafeXlsWorkbook>('safe_xls_open', { projectId, relativePath })
-}
-
-export function readDomainXlsSheet(projectId: string, relativePath: string, sheet: string, expectedSha256: string) {
-  return invoke<SafeXlsSheet>('safe_xls_sheet_read', {
-    projectId,
-    relativePath,
-    sheet,
-    expectedSha256,
-  })
+export function loadDomainWorkingWorkbook(projectId: string, relativePath: string, workingCopyId?: string | null): Promise<DomainWorkbookData> {
+  return invoke<DomainWorkbookData>('domain_working_xls_open', { projectId, relativePath, workingCopyId })
 }
 
 export function listDomainDrafts(projectId: string) {

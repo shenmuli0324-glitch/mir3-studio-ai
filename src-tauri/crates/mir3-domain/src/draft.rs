@@ -216,13 +216,14 @@ impl DomainStore {
                     change.path
                 ));
             }
+            assert_existing_change_base(&transaction, draft_id, &change.path, &base_hash)?;
             if !change.deleted && change.content.is_none() {
                 return Err(format!("DRAFT_CONTENT_MISSING: {}", change.path));
             }
             transaction
                 .execute(
                     "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted) VALUES(?1,?2,?3,?4,?5)
-                     ON CONFLICT(draft_id,path) DO UPDATE SET base_sha256=excluded.base_sha256,content=excluded.content,deleted=excluded.deleted",
+                     ON CONFLICT(draft_id,path) DO UPDATE SET content=excluded.content,deleted=excluded.deleted",
                     params![
                         draft_id,
                         change.path.replace('\\', "/"),
@@ -293,10 +294,11 @@ impl DomainStore {
                     change.path
                 ));
             }
+            assert_existing_change_base(&transaction, draft_id, &change.path, &base_hash)?;
             transaction
                 .execute(
                     "INSERT INTO draft_changes(draft_id,path,base_sha256,content,deleted) VALUES(?1,?2,?3,?4,0)
-                     ON CONFLICT(draft_id,path) DO UPDATE SET base_sha256=excluded.base_sha256,content=excluded.content,deleted=0",
+                     ON CONFLICT(draft_id,path) DO UPDATE SET content=excluded.content,deleted=0",
                     params![
                         draft_id,
                         change.path.replace('\\', "/"),
@@ -1596,6 +1598,31 @@ impl DomainStore {
     }
 }
 
+/// 已存在的 Working Copy 变更必须永久保留第一次读取到的磁盘基线。
+/// 否则外部修改后再次编辑会把旧覆盖内容悄悄“重基线”，最终覆盖游戏文件。
+fn assert_existing_change_base(
+    transaction: &rusqlite::Transaction<'_>,
+    draft_id: &str,
+    path: &str,
+    current_base: &Option<String>,
+) -> Result<(), String> {
+    let normalized = path.replace('\\', "/");
+    let stored_base = transaction
+        .query_row(
+            "SELECT base_sha256 FROM draft_changes WHERE draft_id=?1 AND path=?2",
+            params![draft_id, normalized],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|error| format!("DRAFT_BASE_READ_FAILED: {error}"))?;
+    if stored_base.is_some_and(|stored| stored != *current_base) {
+        return Err(format!(
+            "DRAFT_BASE_CONFLICT: {path} changed after the Working Copy was created"
+        ));
+    }
+    Ok(())
+}
+
 fn write_file_synced(path: &Path, bytes: &[u8], prefix: &str) -> Result<(), String> {
     let mut file = OpenOptions::new()
         .create(true)
@@ -1854,6 +1881,65 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), "return 2\n");
         store.restore_snapshot(&imported.id, &snapshot.id).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "return 1\n");
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn later_patch_cannot_rebase_a_working_copy_over_external_changes() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-draft-base-conflict-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let project = base.join("木立");
+        let relative = "客户端/dev/Quest/Main.lua";
+        let target = project.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::create_dir_all(project.join("引擎")).unwrap();
+        fs::write(&target, "return 1\n").unwrap();
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let imported = store.import_project(&project).unwrap();
+        let draft = store.open_draft(&imported.id, "修改入口").unwrap();
+        store
+            .bind_draft_domain(&imported.id, &draft.id, "quest", "1.3.1", None)
+            .unwrap();
+        let first = store
+            .patch_draft(
+                &imported.id,
+                &draft.id,
+                0,
+                &[DraftChangeInput {
+                    path: relative.to_string(),
+                    content: Some("return 2\n".to_string()),
+                    deleted: false,
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap();
+
+        fs::write(&target, "return 99\n").unwrap();
+        let error = store
+            .patch_draft(
+                &imported.id,
+                &draft.id,
+                first.draft.revision,
+                &[DraftChangeInput {
+                    path: relative.to_string(),
+                    content: Some("return 3\n".to_string()),
+                    deleted: false,
+                    // 即使调用方没有提供或误用了新磁盘 SHA，已有工作副本也不能重基线。
+                    expected_sha256: None,
+                }],
+            )
+            .unwrap_err();
+        assert!(error.starts_with("DRAFT_BASE_CONFLICT:"));
+        let unchanged = store.preview_draft(&imported.id, &draft.id).unwrap();
+        assert_eq!(unchanged.draft.revision, first.draft.revision);
+        assert_eq!(
+            unchanged.changes[0].base_sha256,
+            Some(hash_bytes(b"return 1\n"))
+        );
+        assert_eq!(fs::read_to_string(&target).unwrap(), "return 99\n");
         fs::remove_dir_all(base).ok();
     }
 

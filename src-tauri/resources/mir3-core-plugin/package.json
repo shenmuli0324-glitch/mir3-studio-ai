@@ -1,7 +1,7 @@
 {
   "name": "@mir3-studio/dsh-mir3-core",
   "type": "module",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "MIR3 Studio Harness compatibility adapter and managed AI session bridge",
   "exports": {
     ".": {
@@ -23,12 +23,14 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/dsh-client-runtime": "*",
+    "@deepseek-ai/dsh-file-reference": "*",
     "@deepseek-ai/dsh-sandbox-policy": "*",
     "@deepseek-ai/dsh-session": "*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": { "optional": true },
     "@deepseek-ai/dsh-client-runtime": { "optional": true },
+    "@deepseek-ai/dsh-file-reference": { "optional": true },
     "@deepseek-ai/dsh-sandbox-policy": { "optional": true },
     "@deepseek-ai/dsh-session": { "optional": true }
   }

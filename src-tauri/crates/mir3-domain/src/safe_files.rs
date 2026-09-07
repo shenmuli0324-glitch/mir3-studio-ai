@@ -14,10 +14,13 @@ use std::time::UNIX_EPOCH;
 
 const OLE2_MAGIC: &[u8; 8] = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1";
 const MAX_XLS_FILE_BYTES: u64 = 20 * 1024 * 1024;
-const MAX_XLS_ROWS: usize = 20_000;
+// BIFF8 的合法工作表上限是 65,536 行和 256 列。表格工具必须能读取
+// 合法范围内的全部有效单元格，不能再把普通预览阈值当作文件格式上限。
+const MAX_XLS_ROWS: usize = 65_536;
 const MAX_XLS_COLUMNS: usize = 256;
-const MAX_XLS_CELLS: usize = 500_000;
-const MAX_XLS_CACHE_ENTRIES: usize = 4;
+// 完整工作簿不再截断后，缓存必须限制为单工作簿，避免多个 65,536×256
+// 的稠密表同时常驻。切换文件时重新解析，换取可预测的内存上界。
+const MAX_XLS_CACHE_ENTRIES: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TextEncoding {
@@ -89,7 +92,10 @@ pub struct SafeXlsSheetMeta {
 #[serde(rename_all = "camelCase")]
 pub struct SafeXlsWorkbook {
     pub relative_path: String,
+    /// 磁盘基线哈希；所有 Patch 冲突检查继续使用该值。
     pub sha256: String,
+    /// 当前返回内容的哈希；读取 Working Copy 时可能与磁盘基线不同。
+    pub content_sha256: String,
     pub sheets: Vec<SafeXlsSheetMeta>,
     pub read_only: bool,
 }
@@ -247,46 +253,7 @@ impl DomainStore {
         if let Some(cached) = self.cached_xls(&cache_key, &metadata, Some(&sha256))? {
             return Ok(cached.workbook.clone());
         }
-        let mut source =
-            Xls::new(Cursor::new(bytes)).map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
-        let sheet_names = source.sheet_names().to_vec();
-        let mut sheets = Vec::with_capacity(sheet_names.len());
-        let mut sheet_meta = Vec::with_capacity(sheet_names.len());
-        for name in sheet_names {
-            let range = source
-                .worksheet_range(&name)
-                .map_err(|e| format!("SAFE_XLS_SHEET_FAILED: {e}"))?;
-            let rows = crop_effective_rows(
-                range
-                    .rows()
-                    .map(|row| row.iter().map(ToString::to_string).collect()),
-            );
-            let row_count = rows.len();
-            let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
-            validate_xls_dimensions(&name, row_count, column_count)?;
-            let mut rows = rows;
-            for row in &mut rows {
-                row.resize(column_count, String::new());
-            }
-            sheet_meta.push(SafeXlsSheetMeta {
-                name: name.clone(),
-                row_count,
-                column_count,
-            });
-            sheets.push(SafeXlsSheet {
-                sheet: name,
-                row_count,
-                column_count,
-                rows,
-                source_sha256: sha256.clone(),
-            });
-        }
-        let workbook = SafeXlsWorkbook {
-            relative_path: relative_path.replace('\\', "/"),
-            sha256,
-            sheets: sheet_meta,
-            read_only: false,
-        };
+        let (workbook, sheets) = parse_xls_snapshot(relative_path, &bytes, &sha256)?;
         let cached = CachedXlsWorkbook {
             file_len: metadata.file_len,
             modified_nanos: metadata.modified_nanos,
@@ -461,7 +428,11 @@ impl DomainStore {
         }
     }
 
-    fn safe_file_target(&self, project_id: &str, relative_path: &str) -> Result<PathBuf, String> {
+    pub(crate) fn safe_file_target(
+        &self,
+        project_id: &str,
+        relative_path: &str,
+    ) -> Result<PathBuf, String> {
         validate_relative(relative_path)?;
         let project = self.get_project(project_id)?;
         let root =
@@ -566,11 +537,6 @@ fn validate_xls_dimensions(
             "SAFE_XLS_SHEET_TOO_WIDE: {sheet} has {column_count} columns; maximum is {MAX_XLS_COLUMNS}"
         ));
     }
-    if row_count.saturating_mul(column_count) > MAX_XLS_CELLS {
-        return Err(format!(
-            "SAFE_XLS_SHEET_TOO_LARGE: {sheet} exceeds {MAX_XLS_CELLS} cells"
-        ));
-    }
     Ok(())
 }
 
@@ -600,17 +566,79 @@ fn validate_safe_text_path(value: &str) -> Result<(), String> {
     }
 }
 
-fn validate_xls_path(value: &str) -> Result<(), String> {
+pub(crate) fn validate_xls_path(value: &str) -> Result<(), String> {
     validate_relative(value)?;
-    if Path::new(value)
-        .extension()
-        .and_then(|value| value.to_str())
-        .is_some_and(|value| value.eq_ignore_ascii_case("xls"))
-    {
+    if is_editable_xls_extension(
+        Path::new(value)
+            .extension()
+            .and_then(|value| value.to_str()),
+    ) {
         Ok(())
     } else {
         Err("SAFE_XLS_TYPE_UNSUPPORTED: only BIFF .xls is supported".to_string())
     }
+}
+
+/// `.xls` 是 Studio 支持结构化修改并按 BIFF8 原格式写回的二开文件。
+pub fn is_editable_xls_extension(extension: Option<&str>) -> bool {
+    extension.is_some_and(|value| value.eq_ignore_ascii_case("xls"))
+}
+
+/// 从同一份字节快照解析工作簿和全部工作表，避免 UI 分次读取时混入不同 revision。
+pub(crate) fn parse_xls_snapshot(
+    relative_path: &str,
+    bytes: &[u8],
+    base_sha256: &str,
+) -> Result<(SafeXlsWorkbook, Vec<SafeXlsSheet>), String> {
+    validate_xls_path(relative_path)?;
+    if bytes.len() as u64 > MAX_XLS_FILE_BYTES {
+        return Err("SAFE_XLS_TOO_LARGE: XLS exceeds 20 MiB".to_string());
+    }
+    ensure_ole2(bytes)?;
+    let content_sha256 = hash_bytes(bytes);
+    let mut source =
+        Xls::new(Cursor::new(bytes.to_vec())).map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
+    let sheet_names = source.sheet_names().to_vec();
+    let mut sheets = Vec::with_capacity(sheet_names.len());
+    let mut sheet_meta = Vec::with_capacity(sheet_names.len());
+    for name in sheet_names {
+        let range = source
+            .worksheet_range(&name)
+            .map_err(|e| format!("SAFE_XLS_SHEET_FAILED: {e}"))?;
+        let mut rows = crop_effective_rows(
+            range
+                .rows()
+                .map(|row| row.iter().map(ToString::to_string).collect()),
+        );
+        let row_count = rows.len();
+        let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
+        validate_xls_dimensions(&name, row_count, column_count)?;
+        for row in &mut rows {
+            row.resize(column_count, String::new());
+        }
+        sheet_meta.push(SafeXlsSheetMeta {
+            name: name.clone(),
+            row_count,
+            column_count,
+        });
+        sheets.push(SafeXlsSheet {
+            sheet: name,
+            row_count,
+            column_count,
+            rows,
+            source_sha256: base_sha256.to_string(),
+        });
+    }
+    Ok((
+        SafeXlsWorkbook {
+            relative_path: relative_path.replace('\\', "/"),
+            sha256: base_sha256.to_string(),
+            content_sha256,
+            sheets: sheet_meta,
+            read_only: false,
+        },
+        sheets,
+    ))
 }
 
 fn ensure_ole2(bytes: &[u8]) -> Result<(), String> {
@@ -738,6 +766,57 @@ pub(crate) fn project_xls_validation_content(bytes: &[u8]) -> Result<String, Str
         }
     }
     Ok(projection)
+}
+
+/// 将完整 BIFF8 工作簿投影成可搜索文本；保留全部 sheet、有效行、空单元格位置和内容。
+/// 该投影只存入 Studio 私有索引，实际修改仍使用原始 BIFF8 字节工作副本。
+pub(crate) fn project_xls_index_content(bytes: &[u8]) -> Result<String, String> {
+    if bytes.len() as u64 > MAX_XLS_FILE_BYTES {
+        return Err("SAFE_XLS_TOO_LARGE: XLS exceeds 20 MiB".to_string());
+    }
+    ensure_ole2(bytes)?;
+    let mut source =
+        Xls::new(Cursor::new(bytes.to_vec())).map_err(|e| format!("SAFE_XLS_PARSE_FAILED: {e}"))?;
+    let sheet_names = source.sheet_names().to_vec();
+    if sheet_names.is_empty() {
+        return Err("SAFE_XLS_SHEET_MISSING: workbook contains no sheets".to_string());
+    }
+    let mut projection = String::new();
+    for name in sheet_names {
+        let range = source
+            .worksheet_range(&name)
+            .map_err(|e| format!("SAFE_XLS_SHEET_FAILED: {e}"))?;
+        let rows = crop_effective_rows(
+            range
+                .rows()
+                .map(|row| row.iter().map(ToString::to_string).collect()),
+        );
+        let row_count = rows.len();
+        let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
+        validate_xls_dimensions(&name, row_count, column_count)?;
+        projection.push_str("sheet\t");
+        push_index_cell(&mut projection, &name)?;
+        projection.push('\n');
+        for row in rows {
+            projection.push_str("row");
+            for column in 0..column_count {
+                projection.push('\t');
+                push_index_cell(
+                    &mut projection,
+                    row.get(column).map(String::as_str).unwrap_or_default(),
+                )?;
+            }
+            projection.push('\n');
+        }
+    }
+    Ok(projection)
+}
+
+fn push_index_cell(output: &mut String, value: &str) -> Result<(), String> {
+    let encoded = serde_json::to_string(value)
+        .map_err(|error| format!("SAFE_XLS_INDEX_ENCODE_FAILED: {error}"))?;
+    output.push_str(&encoded);
+    Ok(())
 }
 
 /// 旧 996 表格可能先放编号和中文说明；机器字段行通常拥有最多 ASCII 字段标识符。
@@ -1150,9 +1229,42 @@ mod tests {
         assert!(validate_xls_dimensions("宽表", 1, MAX_XLS_COLUMNS + 1)
             .unwrap_err()
             .contains("TOO_WIDE"));
-        assert!(validate_xls_dimensions("密集表", 2_000, 251)
-            .unwrap_err()
-            .contains("500000"));
+        assert!(validate_xls_dimensions("合法密集表", MAX_XLS_ROWS, MAX_XLS_COLUMNS).is_ok());
+    }
+
+    #[test]
+    fn xls_index_projection_keeps_all_sheets_rows_columns_and_cell_text() {
+        let mut first = Biff8Sheet::new("商品");
+        first
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("名称".to_string())),
+            )
+            .unwrap();
+        first
+            .set(
+                2,
+                2,
+                Biff8Cell::general(Biff8Value::Text("末列\n完整内容".to_string())),
+            )
+            .unwrap();
+        let mut second = Biff8Sheet::new("活动");
+        second
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("第二张表唯一值".to_string())),
+            )
+            .unwrap();
+        let mut book = Biff8Book::default();
+        book.sheets.extend([first, second]);
+
+        let projection = project_xls_index_content(&book.to_cfb_bytes().unwrap()).unwrap();
+        assert!(projection.contains("sheet\t\"商品\""));
+        assert!(projection.contains("sheet\t\"活动\""));
+        assert!(projection.contains("\"\"\t\"\"\t\"末列\\n完整内容\""));
+        assert!(projection.contains("第二张表唯一值"));
     }
 
     #[test]
@@ -1200,6 +1312,45 @@ mod tests {
             started.elapsed() < std::time::Duration::from_secs(60),
             "10k-row XLS fixture exceeded the 60 second G4 gate"
         );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn complete_xls_cache_keeps_only_the_most_recent_workbook() {
+        let base = std::env::temp_dir().join(format!(
+            "mir3-xls-cache-budget-{}-{}",
+            std::process::id(),
+            crate::now_millis()
+        ));
+        let project_root = base.join("项目/缓存");
+        fs::create_dir_all(project_root.join("客户端/dev")).unwrap();
+        fs::create_dir_all(project_root.join("引擎/Mir200/Envir/Data")).unwrap();
+        for name in ["cfg_item.xls", "cfg_store.xls"] {
+            let mut sheet = Biff8Sheet::new("数据");
+            sheet
+                .set(0, 0, Biff8Cell::general(Biff8Value::Text(name.to_string())))
+                .unwrap();
+            let mut book = Biff8Book::default();
+            book.sheets.push(sheet);
+            fs::write(
+                project_root.join("引擎/Mir200/Envir/Data").join(name),
+                book.to_cfb_bytes().unwrap(),
+            )
+            .unwrap();
+        }
+
+        let store = DomainStore::new_trusted_fixture(base.join("data")).unwrap();
+        let project = store.import_project(&project_root).unwrap();
+        let first = "引擎/Mir200/Envir/Data/cfg_item.xls";
+        let second = "引擎/Mir200/Envir/Data/cfg_store.xls";
+        store.safe_xls_open(&project.id, first).unwrap();
+        assert_eq!(store.xls_cache.lock().unwrap().len(), 1);
+        store.safe_xls_open(&project.id, second).unwrap();
+        let cache = store.xls_cache.lock().unwrap();
+        assert_eq!(cache.len(), MAX_XLS_CACHE_ENTRIES);
+        assert!(!cache.contains_key(&xls_cache_key(&project.id, first)));
+        assert!(cache.contains_key(&xls_cache_key(&project.id, second)));
+        drop(cache);
         fs::remove_dir_all(base).ok();
     }
 
@@ -1298,7 +1449,7 @@ mod tests {
     }
 
     #[test]
-    fn xls_cell_update_writes_only_the_scoped_draft() {
+    fn xls_cell_update_saves_to_the_original_path_and_biff8_format() {
         let base = std::env::temp_dir().join(format!("mir3-safe-xls-{}", std::process::id()));
         let project_root = base.join("项目/木立");
         let target = project_root.join("引擎/Mir200/Envir/Shop/商品表.xls");
@@ -1350,9 +1501,32 @@ mod tests {
             .draft_change_bytes(&project.id, &draft.id, "引擎/Mir200/Envir/Shop/商品表.xls")
             .unwrap()
             .unwrap();
-        let mut parsed = Xls::new(Cursor::new(draft_bytes)).unwrap();
+        let mut parsed = Xls::new(Cursor::new(draft_bytes.clone())).unwrap();
         let range = parsed.worksheet_range("商品").unwrap();
         assert_eq!(range.get_value((0, 0)).unwrap().to_string(), "新价格");
+
+        store
+            .apply_draft(
+                &project.id,
+                &draft.id,
+                result.preview.draft.revision,
+                &result.preview.diff_hash,
+            )
+            .unwrap();
+        let saved = fs::read(&target).unwrap();
+        assert!(saved.starts_with(OLE2_MAGIC));
+        assert_eq!(saved, draft_bytes);
+        assert!(!target.with_extension("xlsx").exists());
+        let mut parsed = Xls::new(Cursor::new(saved)).unwrap();
+        assert_eq!(
+            parsed
+                .worksheet_range("商品")
+                .unwrap()
+                .get_value((0, 0))
+                .unwrap()
+                .to_string(),
+            "新价格"
+        );
         fs::remove_dir_all(base).ok();
     }
 }

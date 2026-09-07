@@ -16,6 +16,7 @@
 - 系统任务升级为全局任务时创建正常可见的新 Session，并接收 Studio 签发的短期多系统作用域、固定插件版本、组合工作副本和结构化摘要上下文。
 - 通过 Harness 已有 MCP Client 连接 MIR3 MCP，不实现第二套文件、编辑器、终端或会话系统。
 - 普通 Harness 工作台可在当前活动项目内调用系统、资源和依赖只读工具；GBK/CP936 脚本由 MIR3 内核安全解码。任何工作副本创建或写入仍要求 Studio 签发的短期任务作用域。
+- 受管系统、GUI 与全局会话的文件候选只显示导航目录以及 `.lua/.map/.txt/.xls` 二开文件；通用搜索和 shell 在这些会话中关闭，`.xls` 由 `mir3_resource_get` 按工作表与行分页完整读取，修改继续进入共享 Working Copy。`.xlsx` 不属于当前安全能力范围。
 - 不向 iframe 暴露无任务作用域的文件写入命令；AI 写入统一使用作用域凭证和应用私有工作副本，Studio 人工编辑与 AI 共用同一领域工作副本。
 - 服务端为所有 Session 校验当前项目 cwd，并拒绝普通 Harness 会话写入项目根之外；`mir3-system-`、`mir3-gui-` 和 `global-` 会话额外切换为只读，项目真实文件只能通过受作用域约束的 MIR3 MCP 或 Studio 保存流程修改。
 - 无法确认系统会话的项目根目录时，系统 AI 写入失败关闭；MCP 只写项目外 Working Copy，用户保存后的项目写入与保存节点仍由 Studio/Tauri 完成。
