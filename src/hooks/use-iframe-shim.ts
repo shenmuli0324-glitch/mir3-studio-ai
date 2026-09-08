@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import type { Mir3Project } from '@/features/projects/types'
+import type { Mir3BridgeEnvelope } from '@/features/projects/workspace-bridge'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -7,7 +8,7 @@ import { useEffect } from 'react'
 import { useEvent, useInterval, useMountedState } from 'react-use'
 import { queryClient } from '@/config/client'
 import { runCoreCandidateCanary } from '@/features/projects/core-candidate-canary'
-import { bootstrapHarnessBridge, bridgeRequestId, ensureHarnessProjectActive, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, bridgeRequestId, ensureHarnessProjectActive, MIR3_BRIDGE_PROTOCOL_VERSION, postHarnessBridge, subscribeHarnessBridge, waitForHarnessBridge } from '@/features/projects/workspace-bridge'
 import { store } from '@/store'
 import { getIframeOrigin } from '@/utils/iframe-origin'
 
@@ -171,10 +172,6 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
     const iframeOrigin = getIframeOrigin(iframeRef)
     if (!iframeOrigin || event.origin !== iframeOrigin)
       return
-    if (data.type === 'mir3/bridge.error') {
-      console.error('[MIR3 Core Plugin] bridge request failed:', data.payload?.code, data.payload?.message)
-      return
-    }
     if (data.type === 'mir3/plugin.ready') {
       // Windows 上客户端插件可能晚于 iframe load 才完成 apply，首次发送的
       // MessagePort 因此会丢失。fallback ready 证明监听器已就绪，此时重建专用
@@ -196,41 +193,16 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
           }
         })
         .catch(error => console.error('[MIR3 Core Plugin] failed to read active project:', error))
-      return
     }
-    if (data.type !== 'mir3/bridge.description' || coreReadyCommitted || coreCanaryRunning)
-      return
-    if (!passesCoreCanary(data.payload)) {
-      console.error('[MIR3 Core Plugin] bridge v2 capability canary failed:', data.payload)
-      return
-    }
-    coreCanaryRunning = true
-    void runCoreCandidateCanary({
-      runCanary: runCoreCanary,
-      markReady: async () => void await invoke<boolean>('mark_core_ready'),
-      rollback: () => invoke<boolean>('rollback_core_update'),
-      relaunch: async () => void await invoke('launch_harness'),
-      refresh: () => store.harness.refreshIframe(),
-    })
-      .then((outcome) => {
-        if (outcome.status === 'rejected') {
-          console.error('[MIR3 Core Plugin] LKG canary failed; candidate rollback result:', outcome.error, outcome.rolledBack)
-          return
-        }
-        coreReadyCommitted = true
-        store.harness.markCorePluginReady()
-      })
-      .catch(error => console.error('[MIR3 Core Plugin] LKG rollback failed:', error))
-      .finally(() => {
-        coreCanaryRunning = false
-      })
   }
+
+  // 验收只消费已校验的统一消息流；专用端口不会再触发 window.message。
+  useEffect(() => subscribeHarnessBridge(handleCoreBridgeMessage), [])
 
   useEvent('message', handleMessage)
   useEvent('message', handlePluginError)
   useEvent('message', handleClipboardImage)
   useEvent('message', handleMir3Plugin)
-
   // 系统通知点击 → 通知 iframe 聚焦对应会话
   useEffect(() => {
     let unlisten: (() => void) | undefined
@@ -351,6 +323,42 @@ function passesCoreCanary(payload: Mir3PluginMessage['payload']): boolean {
     && capabilities.globalSession === true
     && capabilities.ordinarySessionCanary === true
     && capabilities.projectScope === true
+}
+
+function handleCoreBridgeMessage(message: Mir3BridgeEnvelope) {
+  const data = message as Mir3PluginMessage
+  if (data.type === 'mir3/bridge.error') {
+    console.error('[MIR3 Core Plugin] bridge request failed:', data.payload?.code, data.payload?.message)
+    return
+  }
+  if (data.type !== 'mir3/bridge.description' || coreReadyCommitted || coreCanaryRunning)
+    return
+  if (!passesCoreCanary(data.payload)) {
+    console.error('[MIR3 Core Plugin] bridge v2 capability canary failed:', data.payload)
+    return
+  }
+  coreCanaryRunning = true
+  void invoke<Mir3Project | null>('project_get_active')
+    .then(async (project) => {
+      // 首次启动尚未导入项目不代表 Core 损坏；项目激活后再执行完整验收。
+      if (!project)
+        return
+      const outcome = await runCoreCandidateCanary({
+        runCanary: runCoreCanary,
+        markReady: async () => void await invoke<boolean>('mark_core_ready'),
+        rollback: () => invoke<boolean>('rollback_core_update'),
+        relaunch: async () => void await invoke('launch_harness'),
+        refresh: () => store.harness.refreshIframe(),
+      })
+      if (outcome.status === 'rejected') {
+        console.error('[MIR3 Core Plugin] LKG canary failed; candidate rollback result:', outcome.error, outcome.rolledBack)
+        return
+      }
+      coreReadyCommitted = true
+      store.harness.markCorePluginReady()
+    })
+    .catch(error => console.error('[MIR3 Core Plugin] LKG rollback failed:', error))
+    .finally(() => { coreCanaryRunning = false })
 }
 
 async function runCoreCanary() {
