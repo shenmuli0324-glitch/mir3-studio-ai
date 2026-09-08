@@ -501,7 +501,7 @@ function loadCoreClientHarness() {
       },
       open() {},
     },
-    betterSidebar: { registerFileViewer: () => () => {} },
+    inject() { return { dispose() {} } },
     workspaces: {
       list: {
         getSnapshot() {

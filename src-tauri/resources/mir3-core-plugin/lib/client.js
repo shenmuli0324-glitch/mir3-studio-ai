@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
     const React = module('react')
 
     const name = 'mir3-core-plugin'
-    const inject = ['workspaces', 'sessions', 'betterSidebar']
+    const inject = ['workspaces', 'sessions']
     const PROTOCOL_VERSION = 2
     const SOURCE = 'mir3-core-plugin'
     const SYSTEM_SESSION_PREFIX = 'mir3-system-'
@@ -883,19 +883,21 @@ window.__ModuleLoader__.load({
         return React.createElement('button', { type: 'button', onClick: () => void openWorkbook(props.path) }, 'MIR3 XLS')
       }
 
-      const disposeWorkbookViewer = ctx.betterSidebar.registerFileViewer({
-        id: 'mir3-workbook',
-        title: 'MIR3 XLS',
-        exts: ['xls'],
-        priority: 200,
-        fetchStrategy: 'custom',
-        load: openWorkbook,
-        component: WorkbookLauncher,
+      const workbookViewer = ctx.inject(['betterSidebar'], (sidebarContext) => {
+        return sidebarContext.betterSidebar.registerFileViewer({
+          id: 'mir3-workbook',
+          title: 'MIR3 XLS',
+          exts: ['xls'],
+          priority: 200,
+          fetchStrategy: 'custom',
+          load: openWorkbook,
+          component: WorkbookLauncher,
+        })
       })
       postReady()
 
       return () => {
-        disposeWorkbookViewer()
+        workbookViewer.dispose()
         window.removeEventListener('message', handleMessage)
         bridgePort?.close()
         bridgePort = null

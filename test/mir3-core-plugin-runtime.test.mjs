@@ -9,6 +9,15 @@ const clientSource = readFileSync(
 )
 
 describe('mir3 Core Plugin public runtime contract', () => {
+  it('keeps the Core bridge ready when the optional sidebar is absent', () => {
+    const runtime = loadAdapter()
+    const context = createHarnessContext({ calls: [], sessions: new Map() })
+    delete context.betterSidebar
+    const dispose = runtime.plugin.apply(context)
+    expect(runtime.messages[0].type).toBe('mir3/plugin.ready')
+    expect(runtime.plugin.inject).not.toContain('betterSidebar')
+    dispose()
+  })
   it('routes XLS clicks and repeated opens through the active-project bridge and disposes its viewer', async () => {
     const runtime = loadAdapter()
     const context = createHarnessContext({ calls: [], sessions: new Map() })
@@ -588,6 +597,10 @@ function createHarnessContext({ calls, sessions }) {
   let workspaceSequence = 0
   const workspaces = []
   return {
+    inject(dependencies, callback) {
+      const cleanup = this.betterSidebar ? callback(this) : () => {}
+      return { dispose: cleanup }
+    },
     betterSidebar: {
       registerFileViewer(viewer) {
         this.viewer = viewer

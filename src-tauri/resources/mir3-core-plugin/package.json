@@ -16,7 +16,7 @@
   "files": ["CHANGELOG.md", "README.md", "lib"],
   "dsh": {
     "client": {
-      "inject": ["@deepseek-ai/dsh-client-runtime", "dsh-better-sidebar"],
+      "inject": ["@deepseek-ai/dsh-client-runtime"],
       "platform": "web"
     }
   },
