@@ -481,12 +481,30 @@ pub(crate) fn validate_workbook_change_scope(
     {
         return Err("DOMAIN_BINDING_XLS_STRUCTURE_DENIED: partial bindings cannot change workbook structure".into());
     }
+    let mut reader = Xls::new(Cursor::new(original.to_vec()))
+        .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+    let mut changed_reader = Xls::new(Cursor::new(changed.to_vec()))
+        .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
     let mut updates = Vec::new();
-    for (left, right) in before.iter().zip(&after) {
+    for left in &before {
+        let old_cells = reader
+            .worksheet_range(&left.sheet)
+            .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+        let new_cells = changed_reader
+            .worksheet_range(&left.sheet)
+            .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+        let old_formulas = reader
+            .worksheet_formula(&left.sheet)
+            .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+        let new_formulas = changed_reader
+            .worksheet_formula(&left.sheet)
+            .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
         for row in 0..left.row_count {
             for column in 0..left.column_count {
-                if left.rows.get(row).and_then(|row| row.get(column))
-                    != right.rows.get(row).and_then(|row| row.get(column))
+                let coordinate = (row as u32, column as u32);
+                // 显示文字相同不代表单元格相同，类型或公式变化也必须校验权限。
+                if old_cells.get_value(coordinate) != new_cells.get_value(coordinate)
+                    || old_formulas.get_value(coordinate) != new_formulas.get_value(coordinate)
                 {
                     updates.push(SafeXlsCellUpdate {
                         sheet: left.sheet.clone(),
@@ -499,8 +517,6 @@ pub(crate) fn validate_workbook_change_scope(
             }
         }
     }
-    let mut reader = Xls::new(Cursor::new(original.to_vec()))
-        .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
     assert_xls_updates_in_scope(scope, &updates, &mut reader)
 }
 
@@ -1659,6 +1675,35 @@ mod tests {
             "新价格"
         );
         fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn xls_save_scope_checks_types_even_when_display_text_is_unchanged() {
+        let mut sheet = Biff8Sheet::new("商品");
+        sheet
+            .set(0, 0, Biff8Cell::general(Biff8Value::Text("商品ID".into())))
+            .unwrap();
+        sheet
+            .set(0, 1, Biff8Cell::general(Biff8Value::Text("价格".into())))
+            .unwrap();
+        sheet
+            .set(1, 0, Biff8Cell::general(Biff8Value::Number(10.0)))
+            .unwrap();
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        let original = book.to_cfb_bytes().unwrap();
+        book.sheets[0]
+            .set(1, 0, Biff8Cell::general(Biff8Value::Text("10".into())))
+            .unwrap();
+        let changed = book.to_cfb_bytes().unwrap();
+        let scope = serde_json::json!({"type":"xls", "sheets":["商品"], "columns":["价格"]});
+        assert!(
+            validate_workbook_change_scope("test.xls", &original, &changed, &scope)
+                .unwrap_err()
+                .starts_with("DOMAIN_BINDING_XLS_COLUMN_DENIED:")
+        );
+        let allowed = serde_json::json!({"type":"xls", "sheets":["商品"], "columns":["商品ID"]});
+        validate_workbook_change_scope("test.xls", &original, &changed, &allowed).unwrap();
     }
 
     #[test]
