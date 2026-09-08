@@ -225,6 +225,10 @@ function dispatchBridgeMessage(value: unknown, channel: 'port' | 'window') {
   }
   if (!incomingSequences.accept(value, value.sequence))
     return
+  // 只有插件确认专用端口就绪后才探测能力，避免首次 load 的消息被迟加载插件丢弃。
+  if (value.type === 'mir3/plugin.ready' && channel === 'port') {
+    postHarnessBridge({ type: 'mir3/bridge.describe', projectId: '', systemId: '', taskId: '', sessionId: '', payload: {} })
+  }
   bridgeListeners.forEach(listener => listener(value))
 }
 

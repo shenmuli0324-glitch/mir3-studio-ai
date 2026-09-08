@@ -177,14 +177,6 @@ export function useIframeShim(iframeRef: RefObject<HTMLIFrameElement | null>) {
       // MessagePort 因此会丢失。fallback ready 证明监听器已就绪，此时重建专用
       // 通道；端口消息不会再次进入此 window handler，不会形成握手循环。
       bootstrapHarnessBridge(iframeRef)
-      postHarnessBridge({
-        type: 'mir3/bridge.describe',
-        projectId: '',
-        systemId: '',
-        taskId: '',
-        sessionId: '',
-        payload: {},
-      })
       void invoke<Mir3Project | null>('project_get_active')
         .then((project) => {
           if (project) {

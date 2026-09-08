@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { useStore } from 'valtio-define'
 import { queryClient } from '@/config/client'
-import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, postHarnessBridge, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
+import { bootstrapHarnessBridge, connectHarnessBridge, ensureHarnessProjectActive, subscribeHarnessBridge } from '@/features/projects/workspace-bridge'
 import { useIframeShim } from '@/hooks/use-iframe-shim'
 import { Loadable } from '@/layout/components/loadable'
 import { store } from '@/store'
@@ -61,14 +61,6 @@ export function HarnessWorkbench({ active, iframeRef, surface, project }: {
       return
     if (!bootstrapHarnessBridge(iframeRef))
       return
-    postHarnessBridge({
-      type: 'mir3/bridge.describe',
-      projectId: projectId ?? '',
-      systemId: '',
-      taskId: '',
-      sessionId: '',
-      payload: {},
-    })
     if (projectId && projectRoot && projectWorkspaceRoot) {
       void ensureHarnessProjectActive({ id: projectId, root: projectRoot, activeWorkspaceRoot: projectWorkspaceRoot })
         .catch(error => console.error('[MIR3 Core Plugin] project activation failed:', error))

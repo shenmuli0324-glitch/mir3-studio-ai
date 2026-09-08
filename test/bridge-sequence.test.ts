@@ -65,9 +65,10 @@ describe('bridge protocol v2 sequence contract', () => {
     vi.unstubAllGlobals()
   })
 
-  it('acknowledges the active project over the MessagePort before system AI starts', async () => {
+  it('retries a lost startup port and probes capabilities after readiness before system AI starts', async () => {
     const requests: any[] = []
     let pluginPort: MessagePort | null = null
+    let transferredPorts = 0
     vi.stubGlobal('window', {
       addEventListener() {},
       removeEventListener() {},
@@ -76,6 +77,10 @@ describe('bridge protocol v2 sequence contract', () => {
     })
     const contentWindow = {
       postMessage(_message: unknown, _origin: string, ports: MessagePort[]) {
+        if (++transferredPorts === 1) {
+          ports[0].close()
+          return
+        }
         pluginPort = ports[0]
         pluginPort.addEventListener('message', (event) => {
           const request = event.data
@@ -131,6 +136,8 @@ describe('bridge protocol v2 sequence contract', () => {
     await ensureHarnessProjectActive(project)
     await ensureHarnessProjectActive(project)
 
+    expect(requests[0].type).toBe('mir3/bridge.describe')
+    expect(requests.filter(request => request.type === 'mir3/bridge.describe')).toHaveLength(1)
     expect(requests.filter(request => request.type === 'mir3/project.activate')).toHaveLength(1)
     expect(requests.find(request => request.type === 'mir3/project.activate')).toMatchObject({
       projectId: 'project-1',
