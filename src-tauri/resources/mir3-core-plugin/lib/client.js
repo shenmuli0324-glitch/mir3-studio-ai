@@ -867,7 +867,7 @@ window.__ModuleLoader__.load({
       async function openWorkbook(path) {
         await waitForActiveProject()
         requireProjectPath(path)
-        const normalized = normalizePath(path)
+        const normalized = normalizePath(path, true)
         const root = normalizePath(activeProject.projectRoot)
         post('mir3/workbook.open', {
           requestId: `workbook-${Date.now()}`,
@@ -922,7 +922,7 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function normalizePath(value) {
+    function normalizePath(value, preserveCase = false) {
       const source = String(value).replace(/\\/g, '/')
       const drive = source.match(/^([a-z]:)\//i)?.[1] ?? null
       const unc = !drive && source.startsWith('//')
@@ -943,7 +943,7 @@ window.__ModuleLoader__.load({
         parts.push(part)
       }
       const normalized = `${prefix}${parts.join('/')}`.replace(/\/$/, '') || prefix
-      return drive || unc ? normalized.toLowerCase() : normalized
+      return (drive || unc) && !preserveCase ? normalized.toLowerCase() : normalized
     }
 
     function isWithinPath(root, candidate) {

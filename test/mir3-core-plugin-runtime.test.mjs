@@ -9,6 +9,14 @@ const clientSource = readFileSync(
 )
 
 describe('mir3 Core Plugin public runtime contract', () => {
+  it('preserves Windows XLS path casing so Harness and domain tools address the same working file', async () => {
+    const runtime = loadAdapter()
+    const context = createHarnessContext({ calls: [], sessions: new Map() })
+    runtime.plugin.apply(context)
+    await runtime.send(request('mir3/project.activate', 1, { payload: { projectRoot: 'D:/996/木立', workspaceRoot: 'D:/996/木立', startSession: false } }))
+    await context.betterSidebar.viewer.load('D:\\996\\木立\\引擎\\Mir200\\Envir\\Data\\cfg_item.xls')
+    expect(runtime.messages.at(-1)).toMatchObject({ type: 'mir3/workbook.open', payload: { path: '引擎/Mir200/Envir/Data/cfg_item.xls' } })
+  })
   it('keeps the Core bridge ready when the optional sidebar is absent', () => {
     const runtime = loadAdapter()
     const context = createHarnessContext({ calls: [], sessions: new Map() })
