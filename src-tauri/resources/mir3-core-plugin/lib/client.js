@@ -3,8 +3,10 @@ window.__ModuleLoader__.load({
   factory(module) {
     'use strict'
 
+    const React = module('react')
+
     const name = 'mir3-core-plugin'
-    const inject = ['workspaces', 'sessions']
+    const inject = ['workspaces', 'sessions', 'betterSidebar']
     const PROTOCOL_VERSION = 2
     const SOURCE = 'mir3-core-plugin'
     const SYSTEM_SESSION_PREFIX = 'mir3-system-'
@@ -862,9 +864,38 @@ window.__ModuleLoader__.load({
       }
 
       window.addEventListener('message', handleMessage)
+      async function openWorkbook(path) {
+        await waitForActiveProject()
+        requireProjectPath(path)
+        const normalized = normalizePath(path)
+        const root = normalizePath(activeProject.projectRoot)
+        post('mir3/workbook.open', {
+          requestId: `workbook-${Date.now()}`,
+          projectId: activeProject.projectId,
+          systemId: '__project__',
+          taskId: 'workbook',
+          sessionId: '',
+        }, { path: normalized.slice(root.length + 1) })
+        return { path }
+      }
+
+      function WorkbookLauncher(props) {
+        return React.createElement('button', { type: 'button', onClick: () => void openWorkbook(props.path) }, 'MIR3 XLS')
+      }
+
+      const disposeWorkbookViewer = ctx.betterSidebar.registerFileViewer({
+        id: 'mir3-workbook',
+        title: 'MIR3 XLS',
+        exts: ['xls'],
+        priority: 200,
+        fetchStrategy: 'custom',
+        load: openWorkbook,
+        component: WorkbookLauncher,
+      })
       postReady()
 
       return () => {
+        disposeWorkbookViewer()
         window.removeEventListener('message', handleMessage)
         bridgePort?.close()
         bridgePort = null

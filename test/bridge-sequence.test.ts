@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
+import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { developmentReadViolation, developmentToolViolation, developmentWriteViolation, filterDevelopmentReferences, isDevelopmentFilePath, isGlobalSession, isGuiSession, isMir3ManagedSession, isProtectedTarget, isSystemSession, managedWriteViolation, sessionScopeViolation } from '../src-tauri/resources/mir3-core-plugin/lib/policy.js'
 import { BridgeSequenceRegistry } from '../src/features/projects/bridge-sequence'
@@ -466,7 +467,10 @@ function loadCoreClientHarness() {
     parent,
     __ModuleLoader__: {
       load(definition: { factory: (module: { exports: unknown }) => void }) {
-        const module = { exports: {} }
+        function requireModule() {
+          return React
+        }
+        const module = Object.assign(requireModule, { exports: {} })
         definition.factory(module)
         exported = module.exports as typeof exported
       },
@@ -497,6 +501,7 @@ function loadCoreClientHarness() {
       },
       open() {},
     },
+    betterSidebar: { registerFileViewer: () => () => {} },
     workspaces: {
       list: {
         getSnapshot() {

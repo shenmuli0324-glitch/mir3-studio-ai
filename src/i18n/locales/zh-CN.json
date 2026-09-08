@@ -1,4 +1,8 @@
 {
+  "studio.workbook.title": "表格编辑器",
+  "studio.workbook.restore": "撤回上次保存",
+  "studio.workbook.restore_confirm": "恢复到这次保存之前？该保存节点包含 {{count}} 个文件。存在未保存修改或磁盘冲突时将阻止撤回。",
+  "studio.workbook.discard": "放弃单元格修改",
   "app.title": "MIR3 Studio AI",
   "app.wordmark": "HARNESS",
   "app.retry": "重试",

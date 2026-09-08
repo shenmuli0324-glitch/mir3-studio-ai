@@ -269,7 +269,7 @@ pub struct DomainFixturesContract {
     pub expected_diagnostics: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FileProjection {
     /// 兼容首版领域包的简写选择器。
@@ -681,6 +681,42 @@ impl DomainStore {
         system_id: &str,
         version: Option<&str>,
     ) -> Result<DomainManifest, String> {
+        if system_id == "__studio_files__" {
+            if version.is_some_and(|value| value != "1.0.0") {
+                return Err("DOMAIN_PACK_VERSION_UNAVAILABLE: workbench document contract".into());
+            }
+            // 人工文件范围没有业务系统依赖，不从任一领域包借用或继承权限。
+            return Ok(DomainManifest {
+                kind: "studio-document-contract".into(),
+                system_id: system_id.into(),
+                version: "1.0.0".into(),
+                kernel_api_range: "*".into(),
+                supported_engine_range: "*".into(),
+                engine_compatibility: Default::default(),
+                manifest_schema_version: 2,
+                resource_schema_version: 1,
+                capability_schema_version: 1,
+                memory_schema_version: 1,
+                category: "workbench".into(),
+                complexity: 1,
+                renderer: "table-v1".into(),
+                documentation: Default::default(),
+                required_kernel_primitives: Vec::new(),
+                file_projection: FileProjection {
+                    editable_extensions: vec!["xls".into()],
+                    structured_extensions: vec!["xls".into()],
+                    unknown_format_policy: "readonly".into(),
+                    ..Default::default()
+                },
+                resources: Default::default(),
+                presentation: Default::default(),
+                operations: Vec::new(),
+                validators: Vec::new(),
+                fixtures: Default::default(),
+                dependencies: Vec::new(),
+                capabilities: Vec::new(),
+            });
+        }
         let packs_root = self.domain_pack_root();
         if !packs_root.is_dir() {
             let manifest = bundled_domain_registry()?
@@ -763,6 +799,9 @@ impl DomainStore {
 
     /// Schema 必须与当前任务固定的领域包版本来自同一份已验哈希发布目录。
     fn load_runtime_resource_schema(&self, manifest: &DomainManifest) -> Result<Value, String> {
+        if manifest.system_id == "__studio_files__" {
+            return Ok(serde_json::json!({"type":"object"}));
+        }
         let packs_root = self.domain_pack_root();
         if !packs_root.is_dir() {
             let content = BUNDLED_RESOURCE_SCHEMAS
@@ -1229,13 +1268,14 @@ impl DomainStore {
         system_id: &str,
         query: &DomainFileQuery,
     ) -> Result<Vec<DomainFileRecord>, String> {
-        let registry = self.runtime_domain_registry()?;
-        let manifest = registry
-            .packs
-            .iter()
-            .find(|manifest| manifest.system_id == system_id)
-            .ok_or_else(|| format!("DOMAIN_SYSTEM_NOT_FOUND: {system_id}"))?;
-        self.query_projected_domain_files(project_id, manifest, query, false)
+        let manifest = self.runtime_manifest(system_id)?;
+        if manifest.manifest_schema_version < 2 {
+            return Err(format!(
+                "DOMAIN_PACK_UPGRADE_REQUIRED: {system_id}@{} has no official file bindings",
+                manifest.version
+            ));
+        }
+        self.query_projected_domain_files(project_id, &manifest, query, false)
     }
 
     pub fn query_domain_references(
@@ -1623,6 +1663,34 @@ impl DomainStore {
             .map_err(|error| format!("DRAFT_VALIDATION_READ_FAILED: {error}"))?;
         drop(statement);
         drop(connection);
+        if !changes.is_empty()
+            && changes.iter().all(|(path, bytes)| {
+                bytes.is_some()
+                    && crate::safe_files::is_editable_xls_extension(
+                        Path::new(path).extension().and_then(|value| value.to_str()),
+                    )
+            })
+        {
+            self.assert_project_engine_compatible(project_id, &manifest)?;
+            for (path, bytes) in &changes {
+                let scope = self.draft_path_write_scope(project_id, draft_id, path)?;
+                let target = self.safe_file_target(project_id, path)?;
+                let original =
+                    fs::read(target).map_err(|error| format!("SAFE_XLS_READ_FAILED: {error}"))?;
+                crate::safe_files::validate_workbook_change_scope(
+                    path,
+                    &original,
+                    bytes.as_deref().unwrap_or_default(),
+                    &scope,
+                )?;
+            }
+            // 原表单元格编辑以 BIFF 与明确文件范围为契约；抽象领域字段不等于官方表结构。
+            return Ok(DomainValidationReport {
+                system_id, valid: true, owned_files: changes.len(), writable_files: changes.len(),
+                readonly_files: 0, missing_dependencies: Vec::new(), validators: Vec::new(),
+                diagnostics: vec!["DOMAIN_XLS_FORMAT_AND_SCOPE_VALIDATED: business-schema validation requires an official sheet contract".into()],
+            });
+        }
         self.validate_domain_manifest(
             project_id,
             &manifest,
@@ -2626,12 +2694,8 @@ impl DomainStore {
                 "DRAFT_DOMAIN_READONLY: {path} is a reference-only project binding"
             ));
         }
-        if manifest.manifest_schema_version < 2
-            && !matches_projection(&manifest, path, extension, None)
-        {
-            return Err(format!(
-                "DRAFT_DOMAIN_SCOPE_DENIED: {path} is not owned by {system_id}"
-            ));
+        if manifest.manifest_schema_version < 2 {
+            return Err(format!("DOMAIN_PACK_UPGRADE_REQUIRED: {system_id} working copy uses obsolete file permissions"));
         }
         if self.verified_access_for(project_id, &manifest, path, extension) == "readonly" {
             return Err(format!(
@@ -2655,6 +2719,11 @@ impl DomainStore {
         project_id: &str,
         manifest: &DomainManifest,
     ) -> Result<(), String> {
+        // 工作台仅使用已验证的 BIFF 格式写入，不执行领域或引擎语义变换。
+        if manifest.system_id == "__studio_files__" {
+            self.get_project(project_id)?;
+            return Ok(());
+        }
         #[cfg(test)]
         if self.trusted_fixture_engine_override {
             return Ok(());
@@ -3154,21 +3223,18 @@ pub fn normalize_engine_version(
     ))
 }
 
+#[cfg(test)]
 fn matches_projection(
     manifest: &DomainManifest,
     path: &str,
-    extension: Option<&str>,
-    content: Option<&str>,
+    _extension: Option<&str>,
+    _content: Option<&str>,
 ) -> bool {
-    if manifest.manifest_schema_version >= 2 {
-        return manifest
-            .file_projection
-            .bindings
-            .iter()
-            .any(|binding| binding_matches_path(binding, path));
-    }
-    matches_projection_path(manifest, path, extension)
-        || matches_projection_content(manifest, path, content)
+    manifest
+        .file_projection
+        .bindings
+        .iter()
+        .any(|binding| binding_matches_path(binding, path))
 }
 
 fn valid_file_binding(binding: &DomainFileBinding, system_id: &str) -> bool {
@@ -3205,39 +3271,16 @@ pub(crate) struct ProjectedFileBinding {
     pub rule_version: String,
 }
 
-/// v2 领域包只接受带证据的精确文件绑定；关键词仅保留给旧包兼容读取，不能继续
-/// 把说明文字或 GUI 源码中的普通领域词升级为正式所有权。
+/// 文件归属只有精确绑定这一条生产路径；旧包必须升级，不能回退到关键词认领。
 pub(crate) fn projection_system_ids(
     registry: &DomainRegistry,
     path: &str,
-    extension: Option<&str>,
-    content: Option<&str>,
+    _extension: Option<&str>,
+    _content: Option<&str>,
 ) -> Vec<String> {
-    let bound = projected_file_bindings(registry, path);
-    if !bound.is_empty() {
-        return bound.into_iter().map(|binding| binding.system_id).collect();
-    }
-    if registry
-        .packs
-        .iter()
-        .any(|manifest| manifest.manifest_schema_version >= 2)
-    {
-        return Vec::new();
-    }
-    let path_owners = registry
-        .packs
-        .iter()
-        .filter(|manifest| matches_projection_path(manifest, path, extension))
-        .map(|manifest| manifest.system_id.clone())
-        .collect::<Vec<_>>();
-    if !path_owners.is_empty() {
-        return path_owners;
-    }
-    registry
-        .packs
-        .iter()
-        .filter(|manifest| matches_projection_content(manifest, path, content))
-        .map(|manifest| manifest.system_id.clone())
+    projected_file_bindings(registry, path)
+        .into_iter()
+        .map(|binding| binding.system_id)
         .collect()
 }
 
@@ -3389,6 +3432,7 @@ fn wildcard_path_matches(value: &str, pattern: &str) -> bool {
     matched
 }
 
+#[cfg(test)]
 fn matches_projection_path(manifest: &DomainManifest, path: &str, extension: Option<&str>) -> bool {
     let normalized = path.replace('\\', "/").to_lowercase();
     if manifest
@@ -3421,41 +3465,10 @@ fn matches_projection_path(manifest: &DomainManifest, path: &str, extension: Opt
         })
 }
 
-fn matches_projection_content(
-    manifest: &DomainManifest,
-    path: &str,
-    content: Option<&str>,
-) -> bool {
-    let normalized = path.replace('\\', "/").to_lowercase();
-    if manifest
-        .file_projection
-        .excludes
-        .iter()
-        .any(|selector| globish_matches(&normalized, selector))
-    {
-        return false;
-    }
-    manifest
-        .file_projection
-        .content_fingerprints
-        .iter()
-        .any(|fingerprint| {
-            content.is_some_and(|content| {
-                if fingerprint.case_sensitive {
-                    selector_contains(content, &fingerprint.contains)
-                } else {
-                    selector_contains(
-                        &content.to_lowercase(),
-                        &fingerprint.contains.to_lowercase(),
-                    )
-                }
-            })
-        })
-}
-
 /// ASCII 领域词必须出现在路径/内容的词边界上，避免 `mall` 误命中
 /// `mimalloc.dll`、`map` 误命中普通单词。带目录分隔符或中文的选择器保留
 /// 精确子串语义，以兼容真实 996 中文目录和 `market_def` 等既有命名。
+#[cfg(test)]
 fn selector_contains(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return false;
@@ -3472,10 +3485,12 @@ fn selector_contains(haystack: &str, needle: &str) -> bool {
     })
 }
 
+#[cfg(test)]
 fn is_selector_word_character(value: char) -> bool {
     value.is_ascii_alphanumeric()
 }
 
+#[cfg(test)]
 fn globish_matches(path: &str, selector: &str) -> bool {
     let needle = selector
         .replace('\\', "/")

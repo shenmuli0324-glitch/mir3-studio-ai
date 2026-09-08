@@ -444,22 +444,29 @@ export function DomainSystemView({ tool, project, onBack, target }: {
         tool={tool}
         onBack={onBack}
         sidebar={(
-          <DomainFileSidebar
-            files={projectedFiles}
-            references={references.data ?? []}
-            bindings={bindings.data ?? []}
-            unclaimedFiles={unclaimedFiles.data ?? []}
-            bindingOpen={bindingOpen}
-            bindingLoading={unclaimedFiles.isLoading}
-            loading={files.isLoading || references.isLoading}
-            search={search}
-            selectedPath={selectedFile?.path}
-            onSearch={setSearch}
-            onSelect={selectFile}
-            onToggleBinding={() => setBindingOpen(value => !value)}
-            onBind={path => addBinding.mutate(path)}
-            onRemoveBinding={bindingId => removeBinding.mutate(bindingId)}
-          />
+          <If
+            cond={files.error != null || manifests.error != null}
+            else={(
+              <DomainFileSidebar
+                files={projectedFiles}
+                references={references.data ?? []}
+                bindings={bindings.data ?? []}
+                unclaimedFiles={unclaimedFiles.data ?? []}
+                bindingOpen={bindingOpen}
+                bindingLoading={unclaimedFiles.isLoading}
+                loading={files.isLoading || references.isLoading}
+                search={search}
+                selectedPath={selectedFile?.path}
+                onSearch={setSearch}
+                onSelect={selectFile}
+                onToggleBinding={() => setBindingOpen(value => !value)}
+                onBind={path => addBinding.mutate(path)}
+                onRemoveBinding={bindingId => removeBinding.mutate(bindingId)}
+              />
+            )}
+          >
+            <p role="alert" className="p-4 text-sm text-danger">{String(files.error ?? manifests.error)}</p>
+          </If>
         )}
         toolbar={(
           <DomainWorkingToolbar

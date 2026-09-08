@@ -1,5 +1,10 @@
 # MIR3 Core Plugin 更新记录
 
+## 1.3.7 - 2026-09-08
+
+- 恢复 Better Sidebar 公共 XLS 查看器注册，通过当前项目消息桥打开 Studio 共用表格编辑器；再次打开和插件卸载使用同一注册生命周期。
+- Harness 表格编辑复用领域 Working Copy、BIFF 写入、冲突检查和保存节点；未归属二开 XLS 使用人工工作台私有范围，不授予系统 AI 新权限。
+
 ## 1.3.6 - 2026-09-07
 
 - 受管系统、GUI 与全局会话不再接收缺少 `systemId/bindingId/scope` 的 Harness 原生文件候选，文件发现统一改由 MIR3 精确投影与 MCP 权限复核完成。

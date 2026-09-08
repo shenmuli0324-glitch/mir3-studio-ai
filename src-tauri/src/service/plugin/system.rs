@@ -184,7 +184,7 @@ pub fn ensure(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 将随应用分发的领域包安装到版本化目录；首次安装直接建立 LKG，升级只暂存候选。
+/// 应用自带的新版契约必须随应用激活，避免新查询使用旧清单；保留禁用状态和回滚指针。
 pub fn ensure_bundled_domain_packs(app: &AppHandle) -> Result<(), String> {
     let source_root = resource_path(app, "mir3-domain-packs")?;
     let destination_root = config::get_dsh_data_path(app).join("domain-packs");
@@ -229,18 +229,26 @@ pub(crate) fn ensure_domain_pack_root(
                 state.system_id
             ));
         }
-        if state.current.is_none() {
+        let needs_upgrade = match (&state.current, &state.candidate) {
+            (None, Some(_)) => true,
+            (Some(current), Some(candidate)) => {
+                semver::Version::parse(&candidate.version).ok()
+                    > semver::Version::parse(&current.version).ok()
+            }
+            _ => false,
+        };
+        if needs_upgrade {
             let candidate = state
                 .candidate
                 .as_ref()
                 .ok_or_else(|| format!("DOMAIN_PACK_CANDIDATE_MISSING: {system_id}"))?;
-            activate_domain_pack_candidate(
+            activate_domain_pack_with_canary(
                 destination_root,
                 system_id,
                 &candidate.version,
                 &candidate.hash,
+                |_| Ok(()),
             )?;
-            mark_domain_pack_lkg(destination_root, system_id)?;
         }
     }
     Ok(())
@@ -325,6 +333,7 @@ fn stage_domain_pack_candidate_unlocked(
 }
 
 /// 原子切换到已校验候选；只有状态指针改变，运行中的旧版本目录始终保留。
+#[cfg(test)]
 pub fn activate_domain_pack_candidate(
     destination_root: &Path,
     system_id: &str,
@@ -365,7 +374,6 @@ fn activate_domain_pack_candidate_unlocked(
         state.previous = state.current.clone();
         state.current = Some(candidate.clone());
     }
-    state.enabled = true;
     state.candidate = None;
     persist_domain_pack_state(&system_root, &state)?;
     Ok(state)
@@ -486,6 +494,7 @@ where
 }
 
 /// 将当前版本标记为已通过 canary 的最后已知可用版本。
+#[cfg(test)]
 pub fn mark_domain_pack_lkg(
     destination_root: &Path,
     system_id: &str,
@@ -2164,6 +2173,44 @@ mod tests {
             assert!(state.candidate.is_none());
         }
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn bundled_upgrade_activates_all_existing_packs_and_preserves_disabled_state() {
+        let base = test_directory("bundled-existing-upgrade");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/mir3-domain-packs");
+        let old_source = base.join("old");
+        let installed = base.join("installed");
+        copy_directory(&source, &old_source).unwrap();
+        let registry: Value =
+            serde_json::from_str(&fs::read_to_string(source.join("registry.json")).unwrap())
+                .unwrap();
+        for pack in registry["packs"].as_array().unwrap() {
+            let id = pack["systemId"].as_str().unwrap();
+            set_test_pack_version(&old_source.join(id), "1.3.1");
+        }
+        ensure_domain_pack_root(&old_source, &installed).unwrap();
+        set_domain_pack_enabled(&installed, "equipment", false).unwrap();
+        ensure_domain_pack_root(&source, &installed).unwrap();
+        for pack in registry["packs"].as_array().unwrap() {
+            let id = pack["systemId"].as_str().unwrap();
+            let state = read_domain_pack_state(&installed.join(id), id).unwrap();
+            assert_eq!(
+                state.current.as_ref().unwrap().version,
+                pack["version"].as_str().unwrap()
+            );
+            assert_eq!(state.current, state.lkg);
+            assert!(state.candidate.is_none());
+            assert_eq!(state.previous.as_ref().unwrap().version, "1.3.1");
+            assert_eq!(state.enabled, id != "equipment");
+        }
+        ensure_domain_pack_root(&source, &installed).unwrap();
+        assert!(
+            !read_domain_pack_state(&installed.join("equipment"), "equipment")
+                .unwrap()
+                .enabled
+        );
+        fs::remove_dir_all(base).ok();
     }
 
     #[test]

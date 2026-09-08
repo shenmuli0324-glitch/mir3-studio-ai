@@ -710,6 +710,18 @@ pub fn domain_working_xls_patch(
 }
 
 #[tauri::command]
+pub fn workbench_xls_open(
+    service: State<'_, ProjectService>,
+    project_id: String,
+    relative_path: String,
+) -> Result<mir3_domain::WorkbenchXlsOpen, String> {
+    ensure_safe_project(&service, &project_id)?;
+    service
+        .store()
+        .workbench_xls_open(&project_id, &relative_path)
+}
+
+#[tauri::command]
 pub fn domain_working_xls_open(
     service: State<'_, ProjectService>,
     project_id: String,

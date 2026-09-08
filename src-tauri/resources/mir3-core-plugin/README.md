@@ -4,6 +4,7 @@
 
 ## 职责
 
+- 通过 Better Sidebar 的 `registerFileViewer` 打开 XLS；Studio 共用表格编辑器负责编辑和保存，Core 不维护第二套表格数据或写入接口。
 - 使用 Harness 公共 `workspaces` 和 `sessions` 服务创建工作区与会话。
 - 将 Studio 当前 996 项目同步到 Harness 工作台。
 - Harness 的工作区、Session、搜索结果与 Agent 运行记录使用当前 `projectId` 的独立数据槽；切换回来时恢复该项目自己的历史，不删除其他项目数据。

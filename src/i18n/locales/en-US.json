@@ -1,4 +1,8 @@
 {
+  "studio.workbook.title": "Workbook editor",
+  "studio.workbook.restore": "Undo last save",
+  "studio.workbook.restore_confirm": "Restore the state before this save? This save node includes {{count}} files. Unsaved changes or disk conflicts will block restoration.",
+  "studio.workbook.discard": "Discard cell edits",
   "app.title": "MIR3 Studio AI",
   "app.wordmark": "HARNESS",
   "app.retry": "Retry",

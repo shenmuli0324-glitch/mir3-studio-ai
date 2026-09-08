@@ -959,7 +959,10 @@ impl DomainStore {
         }
         let mut ids = BTreeSet::new();
         for receipt in receipts {
-            self.ensure_known_system(&receipt.system_id)?;
+            // 人工工作台使用同一原子保存回执，但不开放为可签发 AI 权限的领域。
+            if receipt.system_id != "__studio_files__" {
+                self.ensure_known_system(&receipt.system_id)?;
+            }
             self.validate_kernel_applied_receipt(project_id, receipt)?;
             if !ids.insert(receipt.id.as_str()) {
                 return Err(format!(
@@ -1007,7 +1010,7 @@ impl DomainStore {
                 )
                 .map_err(|error| format!("TASK_RECEIPT_WRITE_FAILED: {error}"))?;
             }
-            if receipt.status == "applied" {
+            if receipt.status == "applied" && receipt.system_id != "__studio_files__" {
                 let candidate = memory_candidate_for_receipt(receipt);
                 transaction
                     .execute(

@@ -17,6 +17,7 @@ import { GLOBAL_WORKBENCH_EVENT, isCompletedGlobalTask, isGlobalTerminalEvent, i
 import { deliverGlobalTaskScope, recoverAndManageGlobalTaskScope } from '@/features/system-ai/global-task-recovery'
 import { currentScopeLease, stopScopeLease } from '@/features/system-ai/scope-lease-manager'
 import { HarnessWorkbench } from '@/features/workbench/harness-workbench'
+import { WorkbenchWorkbookHost } from '@/features/workbench/workbook-dialog'
 import { useDshTheme } from '@/hooks/use-dsh-theme'
 import { store } from '@/store'
 import { toast } from '@/utils'
@@ -318,6 +319,7 @@ export function App() {
               <StudioSidebar activeView={activeView} collapsed={sidebarCollapsed} guiDirty={guiScope.dirty} onNavigate={navigate} />
               <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">
                 <HarnessWorkbench active={harnessVisible} iframeRef={iframeRef} surface={harnessSurface} project={shellState.project} />
+                <WorkbenchWorkbookHost project={activeProject} />
                 <PersistentDevTools mounted={devtoolsMounted} active={activeView === 'devtools'} target={devtoolsTarget} />
                 <div className={studioPageClass(activeView)}>{readyContent()}</div>
                 <If cond={visiblePendingCompositeReview != null && visibleCompositeReview == null}>

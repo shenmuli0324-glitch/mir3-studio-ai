@@ -441,6 +441,16 @@ impl DomainStore {
         let root =
             fs::canonicalize(&project.root).map_err(|e| format!("PROJECT_PATH_INVALID: {e}"))?;
         let candidate = root.join(relative_path);
+        let mut checked = root.clone();
+        for component in Path::new(relative_path).components() {
+            checked.push(component);
+            let metadata = fs::symlink_metadata(&checked).map_err(|error| {
+                format!("SAFE_FILE_PATH_INVALID: {}: {error}", checked.display())
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err("SAFE_FILE_SYMLINK_DENIED: symbolic links are not editable".into());
+            }
+        }
         let canonical = fs::canonicalize(&candidate)
             .map_err(|e| format!("SAFE_FILE_PATH_INVALID: {}: {e}", candidate.display()))?;
         if !canonical.starts_with(&root) || !canonical.is_file() {
@@ -451,6 +461,49 @@ impl DomainStore {
 }
 
 /// XLS 共享绑定按工作表和列名收窄写权限；无法从表头验证的列一律拒绝。
+pub(crate) fn validate_workbook_change_scope(
+    path: &str,
+    original: &[u8],
+    changed: &[u8],
+    scope: &serde_json::Value,
+) -> Result<(), String> {
+    let (_, before) = parse_xls_snapshot(path, original, "")?;
+    let (_, after) = parse_xls_snapshot(path, changed, "")?;
+    if scope.get("type").and_then(serde_json::Value::as_str) == Some("wholeFile") {
+        return Ok(());
+    }
+    if before.len() != after.len()
+        || before.iter().zip(&after).any(|(left, right)| {
+            left.sheet != right.sheet
+                || left.row_count != right.row_count
+                || left.column_count != right.column_count
+        })
+    {
+        return Err("DOMAIN_BINDING_XLS_STRUCTURE_DENIED: partial bindings cannot change workbook structure".into());
+    }
+    let mut updates = Vec::new();
+    for (left, right) in before.iter().zip(&after) {
+        for row in 0..left.row_count {
+            for column in 0..left.column_count {
+                if left.rows.get(row).and_then(|row| row.get(column))
+                    != right.rows.get(row).and_then(|row| row.get(column))
+                {
+                    updates.push(SafeXlsCellUpdate {
+                        sheet: left.sheet.clone(),
+                        row: row as u32,
+                        column,
+                        expected_value: None,
+                        value: serde_json::Value::Null,
+                    });
+                }
+            }
+        }
+    }
+    let mut reader = Xls::new(Cursor::new(original.to_vec()))
+        .map_err(|error| format!("SAFE_XLS_PARSE_FAILED: {error}"))?;
+    assert_xls_updates_in_scope(scope, &updates, &mut reader)
+}
+
 fn assert_xls_updates_in_scope(
     scope: &serde_json::Value,
     updates: &[SafeXlsCellUpdate],

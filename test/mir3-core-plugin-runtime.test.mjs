@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
+import * as React from 'react'
 import { describe, expect, it } from 'vitest'
 
 const clientSource = readFileSync(
@@ -8,6 +9,24 @@ const clientSource = readFileSync(
 )
 
 describe('mir3 Core Plugin public runtime contract', () => {
+  it('routes XLS clicks and repeated opens through the active-project bridge and disposes its viewer', async () => {
+    const runtime = loadAdapter()
+    const context = createHarnessContext({ calls: [], sessions: new Map() })
+    const dispose = runtime.plugin.apply(context)
+    await runtime.send(request('mir3/bridge.describe', 1))
+    const viewer = context.betterSidebar.viewer
+    expect(viewer.exts).toEqual(['xls'])
+    await viewer.load('/tmp/mir3-runtime/引擎/Mir200/Envir/Data/cfg_item.xls')
+    expect(runtime.messages.at(-1)).toMatchObject({ type: 'mir3/workbook.open', payload: { path: '引擎/Mir200/Envir/Data/cfg_item.xls' } })
+    const launcher = viewer.component({ path: '/tmp/mir3-runtime/引擎/Mir200/Envir/Data/cfg_item.xls' })
+    launcher.props.onClick()
+    await new Promise(resolve => setImmediate(resolve))
+    expect(runtime.messages.filter(message => message.type === 'mir3/workbook.open')).toHaveLength(2)
+    await expect(viewer.load('/tmp/foreign/cfg_item.xls')).rejects.toThrow('PROJECT_PATH_OUTSIDE_SCOPE')
+    dispose()
+    expect(context.betterSidebar.viewer).toBeNull()
+  })
+
   it('normalizes the packaged Tauri referrer without allowing opaque origins', () => {
     const runtime = loadAdapter('tauri://localhost/workbench')
     const opaque = loadAdapter('file:///tmp/mir3-studio.html')
@@ -524,7 +543,10 @@ function loadAdapter(referrer = 'https://studio.mir3.test/workbench') {
     document: { referrer },
     window,
   })
-  const module = { exports: {} }
+  function requireModule() {
+    return React
+  }
+  const module = Object.assign(requireModule, { exports: {} })
   const plugin = descriptor.factory(module)
   return {
     listenerRemoved: () => removed,
@@ -566,6 +588,14 @@ function createHarnessContext({ calls, sessions }) {
   let workspaceSequence = 0
   const workspaces = []
   return {
+    betterSidebar: {
+      registerFileViewer(viewer) {
+        this.viewer = viewer
+        return () => {
+          this.viewer = null
+        }
+      },
+    },
     sessions: {
       binding(sessionId) {
         const session = sessions.get(sessionId)

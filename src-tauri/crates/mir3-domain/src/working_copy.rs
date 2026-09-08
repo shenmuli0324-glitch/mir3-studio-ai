@@ -105,7 +105,59 @@ pub struct DomainWorkingXlsOpen {
     pub revision: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbenchXlsOpen {
+    pub data: DomainWorkingXlsOpen,
+    pub working_copy: Option<DomainWorkingCopy>,
+}
+
 impl DomainStore {
+    /// 人工打开表格优先复用所属系统副本；未归属文件只绑定工作台私有范围。
+    pub fn workbench_xls_open(
+        &self,
+        project_id: &str,
+        path: &str,
+    ) -> Result<WorkbenchXlsOpen, String> {
+        crate::safe_files::validate_xls_path(path)?;
+        if self.classify_development_file(project_id, path)?.is_none() {
+            return Err(
+                "WORKBENCH_FILE_SCOPE_DENIED: only indexed development XLS files can be edited"
+                    .into(),
+            );
+        }
+        self.safe_xls_open(project_id, path)?;
+        self.ensure_file_system_projection(project_id)?;
+        let binding: Option<(String, String)> = self.project_connection(project_id)?.query_row(
+            "SELECT system_id,access FROM file_system_projection WHERE lower(path)=lower(?1)
+             ORDER BY CASE WHEN system_id='__studio_files__' THEN 1 ELSE 0 END, CASE WHEN access='readwrite' THEN 0 ELSE 1 END, system_id LIMIT 1",
+            [path], |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional().map_err(|error| format!("WORKBENCH_BINDING_READ_FAILED: {error}"))?;
+        let working_copy = match binding {
+            Some((_, access)) if access == "readonly" => None,
+            binding => {
+                let system_id = binding
+                    .map(|(id, _)| id)
+                    .unwrap_or_else(|| "__studio_files__".into());
+                if system_id == "__studio_files__" {
+                    self.add_domain_project_binding(project_id, &system_id, path)?;
+                }
+                let manifest = self.runtime_manifest(&system_id)?;
+                Some(self.get_or_create_domain_working_copy(
+                    project_id,
+                    &system_id,
+                    &manifest.version,
+                    None,
+                )?)
+            }
+        };
+        let data = self.domain_working_xls_open(
+            project_id,
+            path,
+            working_copy.as_ref().map(|copy| copy.id.as_str()),
+        )?;
+        Ok(WorkbenchXlsOpen { data, working_copy })
+    }
     /// Apply 和治理 Receipt 已落盘但保存节点尚未写入时，从权威 Draft/Snapshot 恢复节点。
     /// 这覆盖进程在原子 Apply 完成后、节点提交前退出的窄窗口。
     pub(crate) fn recover_domain_save_nodes(&self) -> Result<(), String> {
@@ -1062,6 +1114,68 @@ mod tests {
                 .len(),
             2
         );
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn workbench_unassigned_xls_uses_shared_save_and_restore() {
+        let (base, project, store, project_id) = fixture("workbench-xls");
+        let path = "引擎/Mir200/Envir/Data/cfg_AntiRobotQuestion.xls";
+        let target = project.join(path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let mut sheet = Biff8Sheet::new("问题");
+        sheet
+            .set(
+                0,
+                0,
+                Biff8Cell::general(Biff8Value::Text("问题文本".into())),
+            )
+            .unwrap();
+        let mut book = Biff8Book::default();
+        book.sheets.push(sheet);
+        let original = book.to_cfb_bytes().unwrap();
+        fs::write(&target, &original).unwrap();
+        store.scan_project(&project_id, || false).unwrap();
+        let opened = store.workbench_xls_open(&project_id, path).unwrap();
+        let copy = opened.working_copy.unwrap();
+        assert_eq!(copy.system_id, "__studio_files__");
+        assert_eq!(
+            store
+                .workbench_xls_open(&project_id, path)
+                .unwrap()
+                .working_copy
+                .unwrap()
+                .id,
+            copy.id
+        );
+        let patched = store
+            .domain_working_xls_patch(
+                &project_id,
+                &copy.id,
+                SafeXlsDraftPatch {
+                    relative_path: path.into(),
+                    draft_id: copy.id.clone(),
+                    expected_revision: copy.revision,
+                    expected_sha256: opened.data.workbook.sha256,
+                    updates: vec![crate::SafeXlsCellUpdate {
+                        sheet: "问题".into(),
+                        row: 0,
+                        column: 0,
+                        expected_value: Some("问题文本".into()),
+                        value: serde_json::json!("新问题"),
+                    }],
+                },
+            )
+            .unwrap();
+        assert_eq!(fs::read(&target).unwrap(), original);
+        let saved = store
+            .save_domain_working_copy(&project_id, &copy.id, patched.revision, false)
+            .unwrap();
+        assert_ne!(fs::read(&target).unwrap(), original);
+        store
+            .restore_domain_save_node(&project_id, &saved.save_node.id)
+            .unwrap();
+        assert_eq!(fs::read(&target).unwrap(), original);
         fs::remove_dir_all(base).ok();
     }
 
